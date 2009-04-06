@@ -119,6 +119,8 @@ void argument_check(int argc, char *argv[]){
                       method = GRADIENT_WALK;
                     else if(!strcmp(argv[i], "DB-MFE"))
                       whatToDo = FIND_DISTANCE_BASED_MFE_PATH;
+                    else if(!strcmp(argv[i], "BLUBB"))
+                      whatToDo = KLKIN;
                     break;
 
         case 'D':   if(i==argc-1) usage();
@@ -191,6 +193,542 @@ int main(int argc, char *argv[]) {
   return(EXIT_SUCCESS);
 }
 
+typedef struct nb_t{
+  path_t *path_u;
+  path_t *path_d;
+  path_t *path_l;
+  path_t *path_r;
+  path_t *path_lu;
+  path_t *path_ld;
+  path_t *path_ru;
+  path_t *path_rd;
+
+  float barrier_u;
+  float barrier_d;
+  float barrier_r;
+  float barrier_l;
+  float barrier_lu;
+  float barrier_ld;
+  float barrier_ru;
+  float barrier_rd;
+
+  struct nb_t *prev;      
+  int dir;
+    
+  float en;
+  char *s;
+  double pf;
+} nb_t;
+
+#define DIR_U   0
+#define DIR_D   1
+#define DIR_R   2
+#define DIR_L   3
+#define DIR_LU  4
+#define DIR_RU  5
+#define DIR_LD  6
+#define DIR_RD  7
+
+static void backtrack(nb_t *final, int dir);
+void klkin(char *seq,char *s1, char *s2, int maxKeep);
+
+void klkin(char *seq,char *s1, char *s2, int maxkeep){
+  short *pt1, *pt2;
+  pt1 = make_pair_table(s1);
+  pt2 = make_pair_table(s2);
+  int i, j, k, n = pt1[0];
+  int length = strlen(seq);
+  /* compute symmetrical difference between both structures */
+  int a = 0;
+  int b = 0;
+  int c = 0;
+  for(i=1; i<=n; i++){
+    if(pt1[i] == pt2[i]){
+      if(pt1[i] != 0) c++;
+    }
+    else{
+      if(i < pt1[i]) a++;
+      if(i < pt2[i]) b++;
+    }  
+  }
+  int bp_dist = a+b;
+  printf("%d:%d ... %d:%d\n", a+c, a+maximum_distance1, b+c, b+maximum_distance2);
+  int maxD1 = (a+c < a+maximum_distance1) ? a+maximum_distance1 : a+c;
+  int maxD2 = (b+c < b+maximum_distance2) ? b+maximum_distance2 : a+c;
+  
+  
+  TwoDfold_vars *twoD_vars = get_TwoDfold_variables(seq, s1, s2, circ);
+  TwoDfold_solution **dfold_structs = (circ) ? TwoDfold_circ_bound(twoD_vars, maxD1, maxD2) : TwoDfold_bound(twoD_vars, maxD1, maxD2);
+  int d1,d2;
+  float mmfe = INF;
+  nb_t **neighbors = (nb_t **)space((maxD1+1) * sizeof(nb_t *));
+  int number_of_states = 0;
+  float mfe_s1 = dfold_structs[0][bp_dist].en;
+  float mfe_s2 = dfold_structs[bp_dist][0].en;
+  for(d1 = 0; d1 <= maxD1;d1++){
+    neighbors[d1] = (nb_t *)space((maxD2+1) * sizeof(nb_t));
+    for(d2 = 0; d2 <= maxD2;d2++){
+      neighbors[d1][d2].s = (dfold_structs[d1][d2].en != (float)INF/100.) ? strdup(dfold_structs[d1][d2].s) : NULL;
+      neighbors[d1][d2].en = dfold_structs[d1][d2].en;
+      neighbors[d1][d2].path_u = NULL;
+      neighbors[d1][d2].path_d = NULL;
+      neighbors[d1][d2].path_r = NULL;
+      neighbors[d1][d2].path_l = NULL;
+      neighbors[d1][d2].path_lu = NULL;
+      neighbors[d1][d2].path_ld = NULL;
+      neighbors[d1][d2].path_ru = NULL;
+      neighbors[d1][d2].path_rd = NULL;
+      neighbors[d1][d2].barrier_u = (float)INF/100.;
+      neighbors[d1][d2].barrier_d = (float)INF/100.;
+      neighbors[d1][d2].barrier_r = (float)INF/100.;
+      neighbors[d1][d2].barrier_l = (float)INF/100.;
+      neighbors[d1][d2].barrier_lu = (float)INF/100.;
+      neighbors[d1][d2].barrier_ld = (float)INF/100.;
+      neighbors[d1][d2].barrier_ru = (float)INF/100.;
+      neighbors[d1][d2].barrier_rd = (float)INF/100.;
+      neighbors[d1][d2].prev = NULL;
+      neighbors[d1][d2].dir = -1;
+      
+      
+      if(dfold_structs[d1][d2].en != (float)INF/100.){
+        number_of_states++;
+        mmfe = (mmfe < dfold_structs[d1][d2].en) ? mmfe : dfold_structs[d1][d2].en;
+      }
+    }
+  }
+  double kT, sfact=1.07;
+  kT = (temperature+K0)*GASCONST/1000.0; /* in Kcal */
+  pf_scale = exp(-(sfact*mmfe)/kT/length);
+  if (length>2000)
+    fprintf(stdout, "scaling factor %f\n", pf_scale);
+  TwoDpfold_vars *q_vars = get_TwoDpfold_variables(seq, s1, s2, circ);
+  FLT_OR_DBL **pf_s;
+  //if(circ)
+  //  pf_s = TwoDpfold_circ_bound(q_vars, maxD1, maxD2);
+  //else
+  //  pf_s = TwoDpfold_bound(q_vars, maxD1, maxD2);
+
+  //for(d1 = 0; d1 < maxD1;d1++){
+  //  for(d2 = 0; d2 < maxD2;d2++){
+  //    neighbors[d1][d2].pf = pf_s[d1][d2];
+  //  }
+  //}
+  
+  float **state = (float **)space(number_of_states * sizeof(float *));
+  for(i = 0; i<number_of_states; i++) state[i] = (float *)space(number_of_states * sizeof(float));
+  float **b_min = (float **)space((maxD1 + 1) * sizeof(float *));
+  for(i = 0; i<=maxD1; i++){
+    b_min[i] = (float *)space(sizeof(float) * (maxD2 + 1));
+    for(j = 0; j <= maxD2; j++){
+      b_min[i][j] = (float)INF/100.;
+    }
+  }
+  /* fix point is x_{0,bp_dist(s1,s2)} */
+  b_min[0][bp_dist] = 0.;
+
+  printf("k,l neighborhood created...\n");  
+  int it;
+  for(it = 0; it <= maxIterations; it++)
+  for(i=0;i<=maxD1;i++){
+    for(k = 0; k<= i+1; k++){
+      d2 = b + i + 1;
+      if(d2 > maxD2) break;
+      if(k > maxD1) break;
+      if(!neighbors[k][d2].s) continue;
+      /*
+      * for all neighbors of x[k, d2]
+      * if there is a non-infinite barrier between the fixpoint and our neighbor,
+      * we calculate the direct path between the neighbor and our current position
+      * to obtain the barrier from the fixpoint to the current position ...
+      */
+      
+      /* is the r neighbor inside definition space */
+      if(k + 2 <= maxD1 && d2 <= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[k+2][d2].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[k+2][d2] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            /* as we investigate our right neighbor, the current state is its left neighbor */
+            if(!neighbors[k+2][d2].path_l){
+              neighbors[k+2][d2].path_l = get_path(seq, neighbors[k+2][d2].s, neighbors[k][d2].s, maxKeep);
+              neighbors[k+2][d2].barrier_l = getSaddlePoint(neighbors[k+2][d2].path_l)->en - neighbors[k+2][d2].en;
+            }
+            /* if it seems to be that we have a better barrier if the path is along our right neighbor, */
+            /* we just set the pointer prev to it */
+            float b_n = MAX2(b_min[k+2][d2], neighbors[k+2][d2].en - mfe_s1 + neighbors[k+2][d2].barrier_l);
+            if(b_min[k][d2] > b_n){
+              b_min[k][d2] = b_n;
+              neighbors[k][d2].prev = &neighbors[k+2][d2];
+              neighbors[k][d2].dir = DIR_R;
+            }
+          }
+        }
+      }
+      /* is the l neighbor inside definition space */
+      if(k - 2 >= 0 && d2 <= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[k-2][d2].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[k-2][d2] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[k-2][d2].path_r){
+              neighbors[k-2][d2].path_r = get_path(seq, neighbors[k-2][d2].s, neighbors[k][d2].s, maxKeep);
+              neighbors[k-2][d2].barrier_r = getSaddlePoint(neighbors[k-2][d2].path_r)->en - neighbors[k-2][d2].en;
+            }
+            float b_n = MAX2(b_min[k-2][d2], neighbors[k-2][d2].en - mfe_s1 + neighbors[k-2][d2].barrier_r);
+            if(b_min[k][d2] > b_n){
+              b_min[k][d2] = b_n;
+              neighbors[k][d2].prev = &neighbors[k-2][d2];
+              neighbors[k][d2].dir = DIR_L;
+            }
+          }
+        }
+      }
+      /* is the u neighbor inside definition space */
+      if(k <= maxD1 && d2 + 2<= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[k][d2+2].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[k][d2+2] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[k][d2+2].path_d){
+              neighbors[k][d2+2].path_d = get_path(seq, neighbors[k][d2+2].s, neighbors[k][d2].s, maxKeep);
+              neighbors[k][d2+2].barrier_d = getSaddlePoint(neighbors[k][d2+2].path_d)->en - neighbors[k][d2+2].en;
+            }
+            float b_n = MAX2(b_min[k][d2+2], neighbors[k][d2+2].en - mfe_s1 + neighbors[k][d2+2].barrier_d);
+            if(b_min[k][d2] > b_n){
+              b_min[k][d2] = b_n;
+              neighbors[k][d2].prev = &neighbors[k][d2+2];
+              neighbors[k][d2].dir = DIR_U;
+            }
+          }
+        }
+      }
+      /* is the d neighbor inside definition space */
+      if(k <= maxD1 && d2 -2 >= 0){
+        /* is this neighbor really existent */
+        if(neighbors[k][d2-2].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[k][d2-2] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[k][d2-2].path_u){
+              neighbors[k][d2-2].path_u = get_path(seq, neighbors[k][d2-2].s, neighbors[k][d2].s, maxKeep);
+              neighbors[k][d2-2].barrier_u = getSaddlePoint(neighbors[k][d2-2].path_u)->en - neighbors[k][d2-2].en;
+            }
+            float b_n = MAX2(b_min[k][d2-2], neighbors[k][d2-2].en - mfe_s1 + neighbors[k][d2-2].barrier_u);
+            if(b_min[k][d2] > b_n){
+              b_min[k][d2] = b_n;
+              neighbors[k][d2].prev = &neighbors[k][d2-2];
+              neighbors[k][d2].dir = DIR_D;
+            }
+          }
+        }
+      }
+      /* is the ru neighbor inside definition space */
+      if(k + 1 <= maxD1 && d2 + 1 <= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[k+1][d2+1].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[k+1][d2+1] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[k+1][d2+1].path_ld){
+              neighbors[k+1][d2+1].path_ld = get_path(seq, neighbors[k+1][d2+1].s, neighbors[k][d2].s, maxKeep);
+              neighbors[k+1][d2+1].barrier_ld = getSaddlePoint(neighbors[k+1][d2+1].path_ld)->en - neighbors[k+1][d2+1].en;
+            }
+            float b_n = MAX2(b_min[k+1][d2+1], neighbors[k+1][d2+1].en - mfe_s1 + neighbors[k+1][d2+1].barrier_ld);
+            if(b_min[k][d2] > b_n){
+              b_min[k][d2] = b_n;
+              neighbors[k][d2].prev = &neighbors[k+1][d2+1];
+              neighbors[k][d2].dir = DIR_RU;
+            }
+          }
+        }
+      }
+      /* is the rd neighbor inside definition space */
+      if(k + 1 <= maxD1 && d2 - 1 >= 0){
+        /* is this neighbor really existent */
+        if(neighbors[k+1][d2-1].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[k+1][d2-1] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[k+1][d2-1].path_lu){
+              neighbors[k+1][d2-1].path_lu = get_path(seq, neighbors[k+1][d2-1].s, neighbors[k][d2].s, maxKeep);
+              neighbors[k+1][d2-1].barrier_lu = getSaddlePoint(neighbors[k+1][d2-1].path_lu)->en - neighbors[k+1][d2-1].en;
+            }
+            float b_n = MAX2(b_min[k+1][d2-1], neighbors[k+1][d2-1].en - mfe_s1 + neighbors[k+1][d2-1].barrier_lu);
+            if(b_min[k][d2] > b_n){
+              b_min[k][d2] = b_n;
+              neighbors[k][d2].prev = &neighbors[k+1][d2-1];
+              neighbors[k][d2].dir = DIR_RD;
+            }
+          }
+        }
+      }
+      /* is the ld neighbor inside definition space */
+      if(k - 1 >= 0 && d2 - 1 >= 0){
+        /* is this neighbor really existent */
+        if(neighbors[k-1][d2-1].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[k-1][d2-1] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[k-1][d2-1].path_ru){
+              neighbors[k-1][d2-1].path_ru = get_path(seq, neighbors[k-1][d2-1].s, neighbors[k][d2].s, maxKeep);
+              neighbors[k-1][d2-1].barrier_ru = getSaddlePoint(neighbors[k-1][d2-1].path_ru)->en - neighbors[k-1][d2-1].en;
+            }
+            float b_n = MAX2(b_min[k-1][d2-1], neighbors[k-1][d2-1].en - mfe_s1 + neighbors[k-1][d2-1].barrier_ru);
+            if(b_min[k][d2] > b_n){
+              b_min[k][d2] = b_n;
+              neighbors[k][d2].prev = &neighbors[k-1][d2-1];
+              neighbors[k][d2].dir = DIR_LD;
+            }
+          }
+        }
+      }
+      /* is the lu neighbor inside definition space */
+      if(k - 1 >= 0 && d2 + 1 <= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[k-1][d2+1].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[k-1][d2+1] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[k-1][d2+1].path_rd){
+              neighbors[k-1][d2+1].path_rd = get_path(seq, neighbors[k-1][d2+1].s, neighbors[k][d2].s, maxKeep);
+              neighbors[k-1][d2+1].barrier_rd = getSaddlePoint(neighbors[k-1][d2+1].path_rd)->en - neighbors[k-1][d2+1].en;
+            }
+            float b_n = MAX2(b_min[k-1][d2+1], neighbors[k-1][d2+1].en - mfe_s1 + neighbors[k-1][d2+1].barrier_rd);
+            if(b_min[k][d2] > b_n){
+              b_min[k][d2] = b_n;
+              neighbors[k][d2].prev = &neighbors[k-1][d2+1];
+              neighbors[k][d2].dir = DIR_LU;
+            }
+          }
+        }
+      }
+    }
+    for(j = bp_dist+i; j>=a-i-1; j--){
+      d1 = i+1;
+      if(j < 0) break;
+      if(j > maxD2) continue;
+      if(d1 > maxD1) break;
+      if(!neighbors[d1][j].s) continue;
+
+      /*
+      * for all neighbors of x[d1,j]
+      * if there is a non-infinite barrier between the fixpoint and our neighbor,
+      * we calculate the direct path between the neighbor and our current position
+      * to obtain the barrier from the fixpoint to the current position ...
+      */
+      
+      /* is the r neighbor inside definition space */
+      if(d1 + 2 <= maxD1 && j <= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[d1+2][j].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[d1+2][j] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            /* as we investigate our right neighbor, the current state is its left neighbor */
+            if(!neighbors[d1+2][j].path_l){
+              neighbors[d1+2][j].path_l = get_path(seq, neighbors[d1+2][j].s, neighbors[d1][j].s, maxKeep);
+              neighbors[d1+2][j].barrier_l = getSaddlePoint(neighbors[d1+2][j].path_l)->en - neighbors[d1+2][j].en;
+            }
+            /* if it seems to be that we have a better barrier if the path is along our right neighbor, */
+            /* we just set the pointer prev to it */
+            float b_n = MAX2(b_min[d1+2][j], neighbors[d1+2][j].en - mfe_s1 + neighbors[d1+2][j].barrier_l);
+            if(b_min[d1][j] > b_n){
+              b_min[d1][j] = b_n;
+              neighbors[d1][j].prev = &neighbors[d1+2][j];
+              neighbors[d1][j].dir = DIR_R;
+            }
+          }
+        }
+      }
+      /* is the l neighbor inside definition space */
+      if(d1 - 2 >= 0 && j <= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[d1-2][j].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[d1-2][j] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[d1-2][j].path_r){
+              neighbors[d1-2][j].path_r = get_path(seq, neighbors[d1-2][j].s, neighbors[d1][j].s, maxKeep);
+              neighbors[d1-2][j].barrier_r = getSaddlePoint(neighbors[d1-2][j].path_r)->en - neighbors[d1-2][j].en;
+            }
+            float b_n = MAX2(b_min[d1-2][j], neighbors[d1-2][j].en - mfe_s1 + neighbors[d1-2][j].barrier_r);
+            if(b_min[d1][j] > b_n){
+              b_min[d1][j] = b_n;
+              neighbors[d1][j].prev = &neighbors[d1-2][j];
+              neighbors[d1][j].dir = DIR_L;
+            }
+          }
+        }
+      }
+      /* is the u neighbor inside definition space */
+      if(d1 <= maxD1 && j + 2<= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[d1][j+2].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[d1][j+2] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[d1][j+2].path_d){
+              neighbors[d1][j+2].path_d = get_path(seq, neighbors[d1][j+2].s, neighbors[d1][j].s, maxKeep);
+              neighbors[d1][j+2].barrier_d = getSaddlePoint(neighbors[d1][j+2].path_d)->en - neighbors[d1][j+2].en;
+            }
+            float b_n = MAX2(b_min[d1][j+2], neighbors[d1][j+2].en - mfe_s1 + neighbors[d1][j+2].barrier_d);
+            if(b_min[d1][j] > b_n){
+              b_min[d1][j] = b_n;
+              neighbors[d1][j].prev = &neighbors[d1][j+2];
+              neighbors[d1][j].dir = DIR_U;
+            }
+          }
+        }
+      }
+      /* is the d neighbor inside definition space */
+      if(d1 <= maxD1 && j -2 >= 0){
+        /* is this neighbor really existent */
+        if(neighbors[d1][j-2].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[d1][j-2] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[d1][j-2].path_u){
+              neighbors[d1][j-2].path_u = get_path(seq, neighbors[d1][j-2].s, neighbors[d1][j].s, maxKeep);
+              neighbors[d1][j-2].barrier_u = getSaddlePoint(neighbors[d1][j-2].path_u)->en - neighbors[d1][j-2].en;
+            }
+            float b_n = MAX2(b_min[d1][j-2], neighbors[d1][j-2].en - mfe_s1 + neighbors[d1][j-2].barrier_u);
+            if(b_min[d1][j] > b_n){
+              b_min[d1][j] = b_n;
+              neighbors[d1][j].prev = &neighbors[d1][j-2];
+              neighbors[d1][j].dir = DIR_D;
+            }
+          }
+        }
+      }
+      /* is the ru neighbor inside definition space */
+      if(d1 + 1 <= maxD1 && j + 1 <= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[d1+1][j+1].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[d1+1][j+1] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[d1+1][j+1].path_ld){
+              neighbors[d1+1][j+1].path_ld = get_path(seq, neighbors[d1+1][j+1].s, neighbors[d1][j].s, maxKeep);
+              neighbors[d1+1][j+1].barrier_ld = getSaddlePoint(neighbors[d1+1][j+1].path_ld)->en - neighbors[d1+1][j+1].en;
+            }
+            float b_n = MAX2(b_min[d1+1][j+1], neighbors[d1+1][j+1].en - mfe_s1 + neighbors[d1+1][j+1].barrier_ld);
+            if(b_min[d1][j] > b_n){
+              b_min[d1][j] = b_n;
+              neighbors[d1][j].prev = &neighbors[d1+1][j+1];
+              neighbors[d1][j].dir = DIR_RU;
+            }
+          }
+        }
+      }
+      /* is the rd neighbor inside definition space */
+      if(d1 + 1 <= maxD1 && j - 1 >= 0){
+        /* is this neighbor really existent */
+        if(neighbors[d1+1][j-1].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[d1+1][j-1] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[d1+1][j-1].path_lu){
+              neighbors[d1+1][j-1].path_lu = get_path(seq, neighbors[d1+1][j-1].s, neighbors[d1][j].s, maxKeep);
+              neighbors[d1+1][j-1].barrier_lu = getSaddlePoint(neighbors[d1+1][j-1].path_lu)->en - neighbors[d1+1][j-1].en;
+            }
+            float b_n = MAX2(b_min[d1+1][j-1], neighbors[d1+1][j-1].en - mfe_s1 + neighbors[d1+1][j-1].barrier_lu);
+            if(b_min[d1][j] > b_n){
+              b_min[d1][j] = b_n;
+              neighbors[d1][j].prev = &neighbors[d1+1][j-1];
+              neighbors[d1][j].dir = DIR_RD;
+            }
+          }
+        }
+      }
+      /* is the ld neighbor inside definition space */
+      if(d1 - 1 >= 0 && j - 1 >= 0){
+        /* is this neighbor really existent */
+        if(neighbors[d1-1][j-1].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[d1-1][j-1] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[d1-1][j-1].path_ru){
+              neighbors[d1-1][j-1].path_ru = get_path(seq, neighbors[d1-1][j-1].s, neighbors[d1][j].s, maxKeep);
+              neighbors[d1-1][j-1].barrier_ru = getSaddlePoint(neighbors[d1-1][j-1].path_ru)->en - neighbors[d1-1][j-1].en;
+            }
+            float b_n = MAX2(b_min[d1-1][j-1], neighbors[d1-1][j-1].en - mfe_s1 + neighbors[d1-1][j-1].barrier_ru);
+            if(b_min[d1][j] > b_n){
+              b_min[d1][j] = b_n;
+              neighbors[d1][j].prev = &neighbors[d1-1][j-1];
+              neighbors[d1][j].dir = DIR_LD;
+            }
+          }
+        }
+      }
+      /* is the lu neighbor inside definition space */
+      if(d1 - 1 >= 0 && j + 1 <= maxD2){
+        /* is this neighbor really existent */
+        if(neighbors[d1-1][j+1].s){
+          /* do we already know the barrier between this neighbor and the fixpoint ? */
+          if(b_min[d1-1][j+1] != (float)INF/100.){
+            /* so we calculate the path and the barrier between this neighbor */
+            if(!neighbors[d1-1][j+1].path_rd){
+              neighbors[d1-1][j+1].path_rd = get_path(seq, neighbors[d1-1][j+1].s, neighbors[d1][j].s, maxKeep);
+              neighbors[d1-1][j+1].barrier_rd = getSaddlePoint(neighbors[d1-1][j+1].path_rd)->en - neighbors[d1-1][j+1].en;
+            }
+            float b_n = MAX2(b_min[d1-1][j+1], neighbors[d1-1][j+1].en - mfe_s1 + neighbors[d1-1][j+1].barrier_rd);
+            if(b_min[d1][j] > b_n){
+              b_min[d1][j] = b_n;
+              neighbors[d1][j].prev = &neighbors[d1-1][j+1];
+              neighbors[d1][j].dir = DIR_LU;
+            }
+          }
+        }
+      }
+
+
+
+
+
+    }
+  }
+  
+  printf("best barrier along all investigated paths might be: %6.2f (%6.2f)\n", b_min[bp_dist][0], mfe_s1 + b_min[bp_dist][0]); 
+  backtrack(&neighbors[bp_dist][0], -1);
+  
+  destroy_TwoDfold_variables(twoD_vars);
+  destroy_TwoDpfold_variables(q_vars);
+
+
+}
+
+static void backtrack(nb_t *final, int direction){
+  if(!final) return;
+  if(final->prev)
+    backtrack(final->prev, final->dir);
+
+  path_t *r = NULL;
+  switch (direction){
+    case DIR_R:   r = final->path_l;
+                  break;
+    case DIR_L:   r = final->path_r;
+                  break;
+    case DIR_D:   r = final->path_u;
+                  break;
+    case DIR_U:   r = final->path_d;
+                  break;
+    case DIR_RU:  r = final->path_ld;
+                  break;
+    case DIR_RD:  r = final->path_lu;
+                  break;
+    case DIR_LU:  r = final->path_rd;
+                  break;
+    case DIR_LD:  r = final->path_ru;
+                  break;
+  }
+  if(r)
+    for(;r->s;r++)
+      printf("\t%s %6.2f\n", r->s, r->en);
+
+}
 
 void testParallelFold(void){
   temperature = 24.0;
@@ -302,6 +840,11 @@ void PathFinder(){
     path_t *foldingPath, *Saddle, *r;
     curr_iteration = 0;
     switch(whatToDo){
+      case KLKIN:                         {
+                                            klkin(seq, s1, s2, maxKeep);
+                                          }
+                                          break;
+
       case FIND_DISTANCE_BASED_MFE_PATH:  {
                                             int steps, i, j;
                                             foldingPath = get_path(seq, s1, s2, maxKeep/*, &numSteps, circ*/);
@@ -542,12 +1085,13 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
   return newPath;
 }
 
-path_t *getSaddlePoint(path_t *foldingPath/* , int steps*/){
-  int d, SaddlePos = 0;
-  path_t *r, *saddle = NULL;
-  for(saddle = r = foldingPath; r->s; r++)
+path_t *getSaddlePoint(path_t *foldingPath){
+  path_t *r, *saddle;
+  saddle = foldingPath;
+  for(r = foldingPath; r->s; r++)
     if(saddle->en < r->en)
       saddle = r;
+  //if(saddle->en == foldingPath->en) return --r;
   return saddle;
 }
 

@@ -18,7 +18,7 @@ debug_parallel:			CFLAGS := $(CFLAGS) -g3 -DUSE_OPENMP -fopenmp
 
 debug_parallel:			all
 
-profile:			CFLAGS := $(CFLAGS) -pg
+profile:			CFLAGS := $(CFLAGS) -pg -g3
 
 profile:			all
 
