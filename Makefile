@@ -1,14 +1,29 @@
 CC = gcc
-VRNADIR = ${HOME}/WORK/VRNA-git
+VRNADIR = ../ViennaRNA.work
 INCLUDES = -I$(VRNADIR)/H -I$(VRNADIR)/lib -DLOOP_EN
 LIBS    = -L$(VRNADIR)/lib -lRNA -lm
 CFLAGS = -O3 -Wall
+OMPFLAG = -fopenmp
+
 # rules
 
 OFILES =        PathFinder.o RNAwalk.o meshpoint.o
 EXEFILE =       PathFinder
 
+
+
+
 all:                            $(EXEFILE)
+
+intel:				
+				sh intel.sh
+
+intel:				OMPFLAG := -openmp
+
+intel:				CC := icc
+
+intel:				all
+
 
 debug:				CFLAGS := $(CFLAGS) -g3
 
