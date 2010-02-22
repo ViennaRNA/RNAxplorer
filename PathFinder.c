@@ -18,6 +18,11 @@
 #include "2Dpfold.h"
 #include "PathFinder.h"
 
+/**
+*** \file PathFinder.c
+**/
+
+
 int         whatToDo = FIND_BEST_FOLDINGPATH;
 
 static char *seq;
@@ -43,7 +48,6 @@ static char  scale1[] = "....,....1....,....2....,....3....,....4";
 static char  scale2[] = "....,....5....,....6....,....7....,....8";
 
 void testParallelFold(void);
-void transition_rates(const char *seq, const char *s1, const char *s2);
 void fake_barriers_output(TwoDpfold_vars *vars);
 
 
@@ -1350,6 +1354,27 @@ int sort_neighborhood_by_energy_asc(const void *p1, const void *p2){
 
 #define KLINDX(a,b,maxa)   (((b) * (maxa+1)) + a)
 
+/**
+*** Calculate the transition rates between k,l-macrostates
+*** This function creates a transition rate matrix and a fake
+*** barrier output to use with treekin
+***
+*** rates are calculated as follows
+*** /f[
+*** k_{\alpha \rightarrow \beta} = \frac{1}{N}\sum_{i \in \alpha}^{N} \sum_{j \in \beta \cap \mathcal{N}(i)}\\
+*** /f]
+*** as we only sample the microstates we have to take care about the detailed balanced condition:
+*** /f[
+*** k_{\alpha \rightarrow \beta} \cdot \pi_{\alpha} = k_{\beta \rightarrow \alpha} \cdot \pi_{\beta}
+*** /f]
+*** we do this by updating k_{\beta \rightarrow \alpha} in each step we generate the neighboring structure
+*** /f$j \in \beta /f$ with /f$ j \in \mathcal{N}(i) /f$
+*** then for each microrate /f$k_{i \rightarrow j} /f$ the reverse microrate /f$k_{j \rightarrow i} \cdot \frac{\pi_{j | \beta}{i | \alpha} /f$
+*** is added to /f$k_{j \rightarrow i} /f$
+*** at the end of all rate calculations, the rate /f$q_{i,i} = -\sum_{i \neq j} q_{i,j} /f$ is calculated
+***
+***
+**/
 void transition_rates(const char *s, const char *s1, const char *s2){
   TwoDfold_vars *twoD_vars    = get_TwoDfold_variables(s, s1, s2, 0);
   TwoDfold_solution **kl_mfes = TwoDfold_bound(twoD_vars, -1, -1);
@@ -1488,8 +1513,21 @@ void transition_rates(const char *s, const char *s1, const char *s2){
           /* find out which neighbor we've just generated */
           delta1 = (pt_ref1[i] != 0 && (pt_ref1[i] == pt_kl[i])) ? 1 : -1;
           delta2 = (pt_ref2[i] != 0 && (pt_ref2[i] == pt_kl[i])) ? 1 : -1;
+          double p_transition, p_rev_transition;
+          if(en_neighbor < en_kl){
+            p_transition = 1.;
+            p_rev_transition = exp(-(en_kl-en_neighbor)/kT);
+          }
+          else{
+            p_transition = exp(-(en_neighbor-en_kl)/kT);
+            p_rev_transition = 1.;
+          }
+          //printf("%10.10g %10.10g\n", p_transition, p_rev_transition);
+          
+/* 
           double p_transition     = MIN2(1., exp(-(en_neighbor-en_kl)/kT));
           double p_rev_transition = MIN2(1., exp(-(en_kl-en_neighbor)/kT));
+ */
           if((delta1 > 0) && (delta2 > 0))      { p_ne += p_transition; n_ne++; pr_ne += p_rev_transition * exp((dG_ne-en_neighbor)/kT) / pr_alpha;}
           else if((delta1 > 0) && (delta2 < 0)) { p_se += p_transition; n_se++; pr_se += p_rev_transition * exp((dG_se-en_neighbor)/kT) / pr_alpha;}
           else if((delta1 < 0) && (delta2 > 0)) { p_nw += p_transition; n_nw++; pr_nw += p_rev_transition * exp((dG_nw-en_neighbor)/kT) / pr_alpha;}
@@ -1514,8 +1552,19 @@ void transition_rates(const char *s, const char *s1, const char *s2){
               /* find out which neighbor we've just generated */
               delta1 = (pt_ref1[i] == j) ? -1 : 1;
               delta2 = (pt_ref2[i] == j) ? -1 : 1;
-              double p_transition = MIN2(1., exp(-(en_neighbor-en_kl)/kT));
+              double p_transition, p_rev_transition;
+              if(en_neighbor < en_kl){
+                p_transition = 1.;
+                p_rev_transition = exp(-(en_kl-en_neighbor)/kT);
+              }
+              else{
+                p_transition = exp(-(en_neighbor-en_kl)/kT);
+                p_rev_transition = 1.;
+              }
+/* 
+              double p_transition     = MIN2(1., exp(-(en_neighbor-en_kl)/kT));
               double p_rev_transition = MIN2(1., exp(-(en_kl-en_neighbor)/kT));
+*/
               if((delta1 > 0) && (delta2 > 0))      { p_ne += p_transition; n_ne++; pr_ne += p_rev_transition * exp((dG_ne-en_neighbor)/kT) / pr_alpha;}
               else if((delta1 > 0) && (delta2 < 0)) { p_se += p_transition; n_se++; pr_se += p_rev_transition * exp((dG_se-en_neighbor)/kT) / pr_alpha;}
               else if((delta1 < 0) && (delta2 > 0)) { p_nw += p_transition; n_nw++; pr_nw += p_rev_transition * exp((dG_nw-en_neighbor)/kT) / pr_alpha;}
