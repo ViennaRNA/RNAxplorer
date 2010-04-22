@@ -18,6 +18,10 @@
 #include "2Dpfold.h"
 #include "PathFinder.h"
 
+#ifdef WITH_DMALLOC
+#include "dmalloc.h"
+#endif
+
 /**
 *** \file PathFinder.c
 **/
@@ -41,7 +45,11 @@ int maximum_distance1 = 5;
 int maximum_distance2 = 5;
   
 int curr_iteration = 0;  
-  
+
+int cotranscriptionSteps = 0;
+int saveMSD = 0;
+int save2DD = 0;
+
 int method;
 extern  int circ;
 static char  scale1[] = "....,....1....,....2....,....3....,....4";
@@ -155,24 +163,36 @@ void argument_check(int argc, char *argv[]){
 
         case '-':   if(!strcmp(argv[i], "--cooling-rate")){
                       r = sscanf(argv[++i], "%f", &treduction);
+                      if(!r) usage();
                     }
                     else if(!strcmp(argv[i], "--tstart")){
                       r = sscanf(argv[++i], "%lf", &tstart);
                       tstart += K0;
+                      if(!r) usage();
                     }
                     else if(!strcmp(argv[i], "--tstop")){
                       r = sscanf(argv[++i], "%lf", &tstop);
                       tstop += K0;
+                      if(!r) usage();
                     }
-                    if(!r) usage();
-                    
-                    if(!strcmp(argv[i], "--penalizeBackWalks")){
+                    else if(!strcmp(argv[i], "--penalizeBackWalks")){
                       backWalkPenalty = 1;r=1;
                     }
                     else if(!strcmp(argv[i], "--basinStructure")){
                       whatToDo = FIND_BASIN_STRUCTURE;r=1;
                     }
-                    if(!r) usage();
+                    else if(!strcmp(argv[i], "--coSteps")){
+                      r = sscanf(argv[++i], "%d", &cotranscriptionSteps);
+                      if(cotranscriptionSteps <= 0) cotranscriptionSteps = 0;
+                      if(!r) usage();
+                    }
+                    else if(!strcmp(argv[i], "--saveMSD")){
+                      saveMSD = 1;
+                    }
+                    else if(!strcmp(argv[i], "--save2DD")){
+                      save2DD = 1;
+                    }
+                   
                     break;
 
         case 'T':   if (argv[i][2]!='\0') usage();
@@ -1354,6 +1374,30 @@ int sort_neighborhood_by_energy_asc(const void *p1, const void *p2){
 
 #define KLINDX(a,b,maxa)   (((b) * (maxa+1)) + a)
 
+PRIVATE int extractMacroStateData(kl_basin *msd, unsigned int t, TwoDfold_vars *twoD_vars, TwoDpfold_vars  *kl_pf_vars);
+
+PRIVATE int extractMacroStateData(kl_basin *basin_data, unsigned int t, TwoDfold_vars *twoD_vars, TwoDpfold_vars  *kl_pf_vars){
+  int           cnt1, cnt2, macro_states = 0;
+  unsigned int  *my_iindx     = twoD_vars->my_iindx;
+
+  for(cnt1 = twoD_vars->k_min_values_f[t]; cnt1 <= MIN2(twoD_vars->k_max_values_f[t], twoD_vars->maxD1); cnt1++){
+    for(cnt2 = twoD_vars->l_min_values_f[t][cnt1]; cnt2 <= MIN2(twoD_vars->l_max_values_f[t][cnt1], twoD_vars->maxD2); cnt2+=2){
+      if(twoD_vars->E_F5[t]){
+        if(twoD_vars->E_F5[t][cnt1][cnt2/2] != INF){
+          basin_data[macro_states].k  = cnt1;
+          basin_data[macro_states].l  = cnt2;
+          basin_data[macro_states].s  = TwoDfold_backtrack_f5(t, cnt1, cnt2, twoD_vars);
+          basin_data[macro_states].en = (float) twoD_vars->E_F5[t][cnt1][cnt2/2]/(float)100.;
+          basin_data[macro_states].pf = (double)kl_pf_vars->Q[my_iindx[1]-t][cnt1][cnt2/2];
+//          printf("[1, %d] %d,%d %6.2f %s %1.16g\n", t, cnt1, cnt2, basin_data[macro_states].en, basin_data[macro_states].s, basin_data[macro_states].pf);
+          macro_states++;
+        }
+      }
+    }
+  }
+  return macro_states;
+}
+
 /**
 *** Calculate the transition rates between k,l-macrostates
 *** This function creates a transition rate matrix and a fake
@@ -1376,13 +1420,14 @@ int sort_neighborhood_by_energy_asc(const void *p1, const void *p2){
 ***
 **/
 void transition_rates(const char *s, const char *s1, const char *s2){
+  dangles = 2;
   TwoDfold_vars *twoD_vars    = get_TwoDfold_variables(s, s1, s2, 0);
   TwoDfold_solution **kl_mfes = TwoDfold_bound(twoD_vars, -1, -1);
   TwoDpfold_vars  *kl_pf_vars = get_TwoDpfold_variables_from_MFE(twoD_vars);
   FLT_OR_DBL      **kl_pfs    = TwoDpfold_bound(kl_pf_vars, -1, -1);
   init_rand();
   
-  int k, l, i, j, iteration;
+  int k, l, i, j, iteration, t, cnt1, cnt2;
   short         *pt_ref1      = twoD_vars->reference_pt1;
   short         *pt_ref2      = twoD_vars->reference_pt2;
   int           *loopidx_ref1 = pair_table_to_loop_index(pt_ref1);
@@ -1399,232 +1444,318 @@ void transition_rates(const char *s, const char *s1, const char *s2){
   int           **l_min_values  = kl_pf_vars->l_min_values;
   int           **l_max_values  = kl_pf_vars->l_max_values;
   int           idx_1n          = my_iindx[1] - length;
-  
-  /* convert mfe and partition function output to a datastructure that we may easily use for all further analysis */
-  kl_basin *basin_data = (kl_basin *)space(sizeof(kl_basin) * ((twoD_vars->maxD1 + 1)*(twoD_vars->maxD2 + 1)));
-  double Q = 0;
-  for(k = 0; k<=twoD_vars->maxD1; k++){
-    for(l = 0; l<=twoD_vars->maxD2; l++){
-      if(kl_mfes[k][l].s){
-        basin_data[macro_states].k  = k;
-        basin_data[macro_states].l  = l;
-        basin_data[macro_states].s  = strdup(kl_mfes[k][l].s);
-        basin_data[macro_states].en = kl_mfes[k][l].en;
-        basin_data[macro_states].pf = (double)kl_pfs[k][l];
-        Q                           += (double)kl_pfs[k][l];
-        macro_states++;
+  double        Q;
+  char          *sequence;
+
+
+  if(cotranscriptionSteps <= 0) cotranscriptionSteps = length;
+
+  for(t = MAX2(TURN+2, cotranscriptionSteps); t <= length; t += cotranscriptionSteps){
+    idx_1n        = my_iindx[1] - t;
+    macro_states  = 0;
+    Q             = 0;
+    sequence = (char *) space(sizeof(char) * (length + 1));
+    strncpy(sequence, s, t);
+
+    /* convert mfe and partition function output to a datastructure that we may easily use for all further analysis */
+    kl_basin *basin_data  = (kl_basin *)space(sizeof(kl_basin) * ((twoD_vars->maxD1 + 1)*(twoD_vars->maxD2 + 1)));
+    macro_states          = extractMacroStateData(basin_data, t, twoD_vars, kl_pf_vars);
+    /* end preparation of datastructe */ 
+
+    /* shorten allocated memory to fit actual data */
+    basin_data = (kl_basin *)realloc(basin_data, macro_states*sizeof(kl_basin));
+    /* sort neighborhoods according their mfe */
+    qsort(basin_data, macro_states, sizeof(kl_basin), sort_neighborhood_by_energy_asc);
+
+    /* go through the macrostate list and extract 'k,l to index' information */
+    for(k = 0; k<macro_states;k++){
+      Q += basin_data[k].pf;
+      assignment[KLINDX(basin_data[k].k, basin_data[k].l, twoD_vars->maxD1)] = k;
+    }
+
+    /* get memory for rate matrix */
+    double **rate_matrix2 = (double **)space(sizeof(double *) * macro_states);
+    for(i = 0; i < macro_states; i++){
+      rate_matrix2[i] = (double *)space(sizeof(double) * macro_states);
+    }
+
+    for(k = 0; k<macro_states;k++){
+
+      int idx_self, idx_ne, idx_se, idx_sw, idx_nw;
+      int avail_ne, avail_se, avail_sw, avail_nw;
+      avail_ne = avail_se = avail_sw = avail_nw = 0;
+
+      /* check which neighbors are available */
+      if((basin_data[k].k+1 >= k_min_values[idx_1n]) && (basin_data[k].k+1 <= k_max_values[idx_1n])){
+        if((basin_data[k].l+1 >= l_min_values[idx_1n][basin_data[k].k+1]) && (basin_data[k].l+1 <= l_max_values[idx_1n][basin_data[k].k+1]))
+          avail_ne = 1;
+        if((basin_data[k].l-1 >= l_min_values[idx_1n][basin_data[k].k+1]) && (basin_data[k].l-1 <= l_max_values[idx_1n][basin_data[k].k+1]))
+          avail_se = 1;
       }
+      if((basin_data[k].k-1 >= k_min_values[idx_1n]) && (basin_data[k].k-1 <= k_max_values[idx_1n])){
+        if((basin_data[k].l+1 >= l_min_values[idx_1n][basin_data[k].k-1]) && (basin_data[k].l+1 <= l_max_values[idx_1n][basin_data[k].k-1]))
+          avail_nw = 1;
+        if((basin_data[k].l-1 >= l_min_values[idx_1n][basin_data[k].k-1]) && (basin_data[k].l-1 <= l_max_values[idx_1n][basin_data[k].k-1]))
+          avail_sw = 1;
+      }
+
+      idx_self  = k;
+      idx_ne    = (avail_ne) ? assignment[KLINDX(basin_data[k].k+1, basin_data[k].l+1, twoD_vars->maxD1)] : -1;
+      idx_se    = (avail_se) ? assignment[KLINDX(basin_data[k].k+1, basin_data[k].l-1, twoD_vars->maxD1)] : -1;
+      idx_sw    = (avail_sw) ? assignment[KLINDX(basin_data[k].k-1, basin_data[k].l-1, twoD_vars->maxD1)] : -1;
+      idx_nw    = (avail_nw) ? assignment[KLINDX(basin_data[k].k-1, basin_data[k].l+1, twoD_vars->maxD1)] : -1;
+
+      /* get Gibbs free energy of neighboring macrostates */ 
+      double    dG_alpha, dG_ne, dG_se, dG_sw, dG_nw;
+      dG_alpha  = (-log(basin_data[k].pf)-length*log(pf_scale))*kT;
+      dG_ne     = (avail_ne) ? (-log(basin_data[idx_ne].pf)-t*log(pf_scale))*kT : (double)INF/100.;
+      dG_se     = (avail_se) ? (-log(basin_data[idx_se].pf)-t*log(pf_scale))*kT : (double)INF/100.;
+      dG_sw     = (avail_sw) ? (-log(basin_data[idx_sw].pf)-t*log(pf_scale))*kT : (double)INF/100.;
+      dG_nw     = (avail_nw) ? (-log(basin_data[idx_nw].pf)-t*log(pf_scale))*kT : (double)INF/100.;
+      /**
+      *** rates are calculated as follows
+      *** /f[
+      *** k_{\alpha \rightarrow \beta} = \frac{1}{N}\sum_{i \in \alpha}^{N} \sum_{j \in \beta \cap \mathcal{N}(i)}\\
+      *** /f]
+      *** as we only sample the microstates we have to take care about the detailed balanced condition:
+      *** /f[
+      *** k_{\alpha \rightarrow \beta} \cdot \pi_{\alpha} = k_{\beta \rightarrow \alpha} \cdot \pi_{\beta}
+      *** /f]
+      *** we do this by updating k_{\beta \rightarrow \alpha} in each step we generate the neighboring structure
+      *** /f$j \in \beta /f$ with /f$ j \in \mathcal{N}(i) /f$
+      *** then for each microrate /f$k_{i \rightarrow j} /f$ the reverse microrate /f$k_{j \rightarrow i} \cdot \frac{\pi_{j | \beta}{i | \alpha} /f$
+      *** is added to /f$k_{j \rightarrow i} /f$
+      *** at the end of all rate calculations, the rate /f$q_{i,i} = -\sum_{i \neq j} q_{i,j} /f$ is calculated
+      **/
+      for(iteration = 1; iteration <= maxIterations; iteration++){
+        unsigned int  n_nw, n_ne, n_se, n_sw;
+        double        p_nw, p_ne, p_se, p_sw;
+        double        pr_nw, pr_se, pr_sw, pr_ne;
+        p_nw = p_ne = p_se = p_sw = pr_nw = pr_ne = pr_se = pr_sw = 0.;
+        n_nw = n_ne = n_se = n_sw = 0;
+
+        /* sample a structure */
+        char  *s_kl       = TwoDpfold_pbacktrack_f5(kl_pf_vars, basin_data[k].k, basin_data[k].l, t);
+        short *pt_kl      = make_pair_table(s_kl);
+        int   *loopidx_kl = pair_table_to_loop_index(pt_kl);
+        float en_kl       = energy_of_struct(sequence, s_kl);
+
+        double pr_alpha   = exp((dG_alpha-en_kl)/kT);
+
+        /* generate 'k +- 1', 'l +- 1' - neighbors */
+        for(i = 1; i<t; i++){
+          /**
+          **********************************
+          **  remove base pair
+          **********************************
+          **/
+          if(i<pt_kl[i]){
+            int delta1, delta2;
+            delta1 = delta2 = 0;
+            char  *s_neighbor = strdup(s_kl);
+            s_neighbor[i-1]   = s_neighbor[pt_kl[i]-1] = '.';
+            float en_neighbor = energy_of_struct(sequence, s_neighbor);
+            /* find out which neighbor we've just generated */
+            delta1 = (pt_ref1[i] != 0 && (pt_ref1[i] == pt_kl[i])) ? 1 : -1;
+            delta2 = (pt_ref2[i] != 0 && (pt_ref2[i] == pt_kl[i])) ? 1 : -1;
+            double p_transition, p_rev_transition;
+            if(en_neighbor < en_kl){
+              p_transition = 1.;
+              p_rev_transition = exp(-(en_kl-en_neighbor)/kT);
+            }
+            else{
+              p_transition = exp(-(en_neighbor-en_kl)/kT);
+              p_rev_transition = 1.;
+            }
+
+            if((delta1 > 0) && (delta2 > 0))      { p_ne += p_transition; n_ne++; pr_ne += p_rev_transition * exp((dG_ne-en_neighbor)/kT) / pr_alpha;}
+            else if((delta1 > 0) && (delta2 < 0)) { p_se += p_transition; n_se++; pr_se += p_rev_transition * exp((dG_se-en_neighbor)/kT) / pr_alpha;}
+            else if((delta1 < 0) && (delta2 > 0)) { p_nw += p_transition; n_nw++; pr_nw += p_rev_transition * exp((dG_nw-en_neighbor)/kT) / pr_alpha;}
+            else                                  { p_sw += p_transition; n_sw++; pr_sw += p_rev_transition * exp((dG_sw-en_neighbor)/kT) / pr_alpha;}
+            free(s_neighbor);
+          }
+          /**
+          **********************************
+          **  insert base pair
+          **********************************
+          **/
+          else if(pt_kl[i] == 0){
+            for(j = i+TURN+1; j<=t; j++){
+              if(pt_kl[j] != 0) continue;
+              if(loopidx_kl[i] != loopidx_kl[j]) continue;
+              if(ptype[my_iindx[i]-j]){
+                int delta1, delta2;
+                char *s_neighbor = strdup(s_kl);
+                s_neighbor[i-1] = '(';
+                s_neighbor[j-1] = ')';
+                float en_neighbor = energy_of_struct(sequence, s_neighbor);
+                /* find out which neighbor we've just generated */
+                delta1 = (pt_ref1[i] == j) ? -1 : 1;
+                delta2 = (pt_ref2[i] == j) ? -1 : 1;
+                double p_transition, p_rev_transition;
+                if(en_neighbor < en_kl){
+                  p_transition = 1.;
+                  p_rev_transition = exp(-(en_kl-en_neighbor)/kT);
+                }
+                else{
+                  p_transition = exp(-(en_neighbor-en_kl)/kT);
+                  p_rev_transition = 1.;
+                }
+
+                if((delta1 > 0) && (delta2 > 0))      { p_ne += p_transition; n_ne++; pr_ne += p_rev_transition * exp((dG_ne-en_neighbor)/kT) / pr_alpha;}
+                else if((delta1 > 0) && (delta2 < 0)) { p_se += p_transition; n_se++; pr_se += p_rev_transition * exp((dG_se-en_neighbor)/kT) / pr_alpha;}
+                else if((delta1 < 0) && (delta2 > 0)) { p_nw += p_transition; n_nw++; pr_nw += p_rev_transition * exp((dG_nw-en_neighbor)/kT) / pr_alpha;}
+                else                                  { p_sw += p_transition; n_sw++; pr_sw += p_rev_transition * exp((dG_sw-en_neighbor)/kT) / pr_alpha;}
+                free(s_neighbor);
+              }
+            }
+          }
+        } /* end generating neighbors */
+
+        if(avail_ne) rate_matrix2[idx_self][idx_ne] += p_ne/maxIterations;
+        if(avail_se) rate_matrix2[idx_self][idx_se] += p_se/maxIterations;
+        if(avail_nw) rate_matrix2[idx_self][idx_nw] += p_nw/maxIterations;
+        if(avail_sw) rate_matrix2[idx_self][idx_sw] += p_sw/maxIterations;
+
+        /* add rates for reverse fluxes from neighbors */
+        if(avail_ne) rate_matrix2[idx_ne][idx_self] += pr_ne/maxIterations;
+        if(avail_se) rate_matrix2[idx_se][idx_self] += pr_se/maxIterations;
+        if(avail_nw) rate_matrix2[idx_nw][idx_self] += pr_nw/maxIterations;
+        if(avail_sw) rate_matrix2[idx_sw][idx_self] += pr_sw/maxIterations;
+
+        /* free allocated memory */
+        free(s_kl);
+        free(pt_kl);
+        free(loopidx_kl);
+      }/* end of iteration */
+    } /* end of macrostates */
+
+
+    /* calculate the rate /f$q_{i,i} = -\sum_{i \neq j} q_{i,j} /f$ */
+    for(i = 0; i < macro_states; i++){
+      double qii = 0;
+      for(j = 0; j < macro_states; j++){
+        qii -= rate_matrix2[i][j];
+      }
+      rate_matrix2[i][i] = qii;
     }
-  }
-  /* shorten allocated memory to fit actual data */
-  basin_data = (kl_basin *)realloc(basin_data, macro_states*sizeof(kl_basin));
-  /* sort neighborhoods according their mfe */
-  qsort(basin_data, macro_states, sizeof(kl_basin), sort_neighborhood_by_energy_asc);
 
-  /* go through the macrostate list and extract 'k,l to index' information */
-  for(k = 0; k<macro_states;k++){
-    assignment[KLINDX(basin_data[k].k, basin_data[k].l, twoD_vars->maxD1)] = k;
-  }
 
-  /* get memory for rate matrix */
-  double **rate_matrix2 = (double **)space(sizeof(double *) * macro_states);
-  for(i = 0; i < macro_states; i++){
-    rate_matrix2[i] = (double *)space(sizeof(double) * macro_states);
-  }
-  
-  
-  
-  for(k = 0; k<macro_states;k++){
-    //printf("macrostate %d [%d,%d] %d\n", k, basin_data[k].k, basin_data[k].l, assignment[KLINDX(basin_data[k].k, basin_data[k].l, twoD_vars->maxD1)]);
-    
-    int idx_self, idx_ne, idx_se, idx_sw, idx_nw;
-    int avail_ne, avail_se, avail_sw, avail_nw;
-    avail_ne = avail_se = avail_sw = avail_nw = 0;
-    
-    if((basin_data[k].k+1 >= k_min_values[idx_1n]) && (basin_data[k].k+1 <= k_max_values[idx_1n])){
-      if((basin_data[k].l+1 >= l_min_values[idx_1n][basin_data[k].k+1]) && (basin_data[k].l+1 <= l_max_values[idx_1n][basin_data[k].k+1]))
-        avail_ne = 1;
-      if((basin_data[k].l-1 >= l_min_values[idx_1n][basin_data[k].k+1]) && (basin_data[k].l-1 <= l_max_values[idx_1n][basin_data[k].k+1]))
-        avail_se = 1;
+    /* create output file(s) */
+    int k_correction = kl_pf_vars->referenceBPs1[my_iindx[1]-length] - kl_pf_vars->referenceBPs1[my_iindx[1]-t];
+    int l_correction = kl_pf_vars->referenceBPs2[my_iindx[1]-length] - kl_pf_vars->referenceBPs2[my_iindx[1]-t];
+
+    char fname[50], fname2[50], fname3[50];
+    if(t < length){
+      sprintf(fname, "rates_%04d.out", t);
+      sprintf(fname2, "msd_%04d.out", t);
+      sprintf(fname3, "2D_%04d.out", t);
     }
-    if((basin_data[k].k-1 >= k_min_values[idx_1n]) && (basin_data[k].k-1 <= k_max_values[idx_1n])){
-      if((basin_data[k].l+1 >= l_min_values[idx_1n][basin_data[k].k-1]) && (basin_data[k].l+1 <= l_max_values[idx_1n][basin_data[k].k-1]))
-        avail_nw = 1;
-      if((basin_data[k].l-1 >= l_min_values[idx_1n][basin_data[k].k-1]) && (basin_data[k].l-1 <= l_max_values[idx_1n][basin_data[k].k-1]))
-        avail_sw = 1;
+    else{
+      sprintf(fname, "rates.out");
+      sprintf(fname2, "msd.out");
+      sprintf(fname3, "2D.out");
     }
+    FILE *outfp = fopen(fname, "w");
+    if (!outfp){
+      fprintf(stderr, "can't open file %s\n", fname);
+      exit(1);
+    }
+    FILE *outfp2 = NULL;
+    if(saveMSD) outfp2 = fopen(fname2, "w");
+    else outfp2 = stdout;
     
-    idx_self  = k;
-    idx_ne    = (avail_ne) ? assignment[KLINDX(basin_data[k].k+1, basin_data[k].l+1, twoD_vars->maxD1)] : -1;
-    idx_se    = (avail_se) ? assignment[KLINDX(basin_data[k].k+1, basin_data[k].l-1, twoD_vars->maxD1)] : -1;
-    idx_sw    = (avail_sw) ? assignment[KLINDX(basin_data[k].k-1, basin_data[k].l-1, twoD_vars->maxD1)] : -1;
-    idx_nw    = (avail_nw) ? assignment[KLINDX(basin_data[k].k-1, basin_data[k].l+1, twoD_vars->maxD1)] : -1;
-
-    double    dG_alpha, dG_ne, dG_se, dG_sw, dG_nw;
-    dG_alpha  = (-log(basin_data[k].pf)-length*log(pf_scale))*kT;
-    dG_ne     = (avail_ne) ? (-log(basin_data[idx_ne].pf)-length*log(pf_scale))*kT : (double)INF/100.;
-    dG_se     = (avail_se) ? (-log(basin_data[idx_se].pf)-length*log(pf_scale))*kT : (double)INF/100.;
-    dG_sw     = (avail_sw) ? (-log(basin_data[idx_sw].pf)-length*log(pf_scale))*kT : (double)INF/100.;
-    dG_nw     = (avail_nw) ? (-log(basin_data[idx_nw].pf)-length*log(pf_scale))*kT : (double)INF/100.;
-    /**
-    *** rates are calculated as follows
-    *** /f[
-    *** k_{\alpha \rightarrow \beta} = \frac{1}{N}\sum_{i \in \alpha}^{N} \sum_{j \in \beta \cap \mathcal{N}(i)}\\
-    *** /f]
-    *** as we only sample the microstates we have to take care about the detailed balanced condition:
-    *** /f[
-    *** k_{\alpha \rightarrow \beta} \cdot \pi_{\alpha} = k_{\beta \rightarrow \alpha} \cdot \pi_{\beta}
-    *** /f]
-    *** we do this by updating k_{\beta \rightarrow \alpha} in each step we generate the neighboring structure
-    *** /f$j \in \beta /f$ with /f$ j \in \mathcal{N}(i) /f$
-    *** then for each microrate /f$k_{i \rightarrow j} /f$ the reverse microrate /f$k_{j \rightarrow i} \cdot \frac{\pi_{j | \beta}{i | \alpha} /f$
-    *** is added to /f$k_{j \rightarrow i} /f$
-    *** at the end of all rate calculations, the rate /f$q_{i,i} = -\sum_{i \neq j} q_{i,j} /f$ is calculated
-    **/
-    for(iteration = 1; iteration <= maxIterations; iteration++){
-      //printf("iteration %d\n", iteration);
-      unsigned int  n_nw, n_ne, n_se, n_sw;
-      double        p_nw, p_ne, p_se, p_sw;
-      double        pr_nw, pr_se, pr_sw, pr_ne;
-      p_nw = p_ne = p_se = p_sw = pr_nw = pr_ne = pr_se = pr_sw = 0.;
-      n_nw = n_ne = n_se = n_sw = 0;
-
-      /* sample a structure */
-      char  *s_kl       = TwoDpfold_pbacktrack(kl_pf_vars, basin_data[k].k, basin_data[k].l);
-      short *pt_kl      = make_pair_table(s_kl);
-      int   *loopidx_kl = pair_table_to_loop_index(pt_kl);
-      float en_kl       = energy_of_struct(s, s_kl);
+    fprintf(outfp2, "%s\n", sequence);
+    for(i = 0; i < macro_states; i++){
       
-      double pr_alpha   = exp((dG_alpha-en_kl)/kT);
+      fprintf(outfp2, "%8d %s %6.2f 0 0 0 0 %6.2f 0 %6.2f [%4d,%4d]\n",
+              i+1,
+              basin_data[i].s,
+              basin_data[i].en,
+              (-log(basin_data[i].pf)-t*log(kl_pf_vars->pf_scale)) * kT,
+              (-log(basin_data[i].pf)-t*log(kl_pf_vars->pf_scale)) * kT,
+              basin_data[i].k + k_correction,
+              basin_data[i].l + l_correction
+            );
+      for(j = 0; j < macro_states; j++){
+        fprintf(outfp, " %10.4g ", rate_matrix2[i][j]);
+      }
+      fprintf(outfp, "\n");
+    }
+    if(outfp2 != stdout) fclose(outfp2);
+    fclose(outfp);
+    
+    if(save2DD){
+      char *mfe_structure = (char *)space((t + 1) * sizeof(char));
+      float bla = fold(sequence, mfe_structure);
 
-      /* generate 'k +- 1', 'l +- 1' - neighbors */
-      for(i = 1; i<length; i++){
-        /**
-        **********************************
-        **  remove base pair
-        **********************************
-        **/
-        if(i<pt_kl[i]){
-          int delta1, delta2;
-          delta1 = delta2 = 0;
-          char  *s_neighbor = strdup(s_kl);
-          s_neighbor[i-1]   = s_neighbor[pt_kl[i]-1] = '.';
-          float en_neighbor = energy_of_struct(s, s_neighbor);
-          /* find out which neighbor we've just generated */
-          delta1 = (pt_ref1[i] != 0 && (pt_ref1[i] == pt_kl[i])) ? 1 : -1;
-          delta2 = (pt_ref2[i] != 0 && (pt_ref2[i] == pt_kl[i])) ? 1 : -1;
-          double p_transition, p_rev_transition;
-          if(en_neighbor < en_kl){
-            p_transition = 1.;
-            p_rev_transition = exp(-(en_kl-en_neighbor)/kT);
-          }
-          else{
-            p_transition = exp(-(en_neighbor-en_kl)/kT);
-            p_rev_transition = 1.;
-          }
-          //printf("%10.10g %10.10g\n", p_transition, p_rev_transition);
-          
-/* 
-          double p_transition     = MIN2(1., exp(-(en_neighbor-en_kl)/kT));
-          double p_rev_transition = MIN2(1., exp(-(en_kl-en_neighbor)/kT));
- */
-          if((delta1 > 0) && (delta2 > 0))      { p_ne += p_transition; n_ne++; pr_ne += p_rev_transition * exp((dG_ne-en_neighbor)/kT) / pr_alpha;}
-          else if((delta1 > 0) && (delta2 < 0)) { p_se += p_transition; n_se++; pr_se += p_rev_transition * exp((dG_se-en_neighbor)/kT) / pr_alpha;}
-          else if((delta1 < 0) && (delta2 > 0)) { p_nw += p_transition; n_nw++; pr_nw += p_rev_transition * exp((dG_nw-en_neighbor)/kT) / pr_alpha;}
-          else                                  { p_sw += p_transition; n_sw++; pr_sw += p_rev_transition * exp((dG_sw-en_neighbor)/kT) / pr_alpha;}
-          free(s_neighbor);
+      outfp = fopen(fname3, "w");
+      fprintf(outfp, "%s\n%s", sequence, mfe_structure);
+      fprintf(outfp, " (%6.2f)\n", bla);
+
+      char *str1, *str2;
+      str1 = (char *)space((t + 1) * sizeof(char));
+      str2 = (char *)space((t + 1) * sizeof(char));
+      strncpy(str1, s1, t);
+      strncpy(str2, s2, t);
+      int state = 0;
+      for(i = t; i>0; i--){
+        if(state > 0){
+          if(str1[i-1] == ')') state++;
+          else if(str1[i-1] == '(') state--;
         }
-        /**
-        **********************************
-        **  insert base pair
-        **********************************
-        **/
-        else if(pt_kl[i] == 0){
-          for(j = i+TURN+1; j<=length; j++){
-            if(pt_kl[j] != 0) continue;
-            if(loopidx_kl[i] != loopidx_kl[j]) continue;
-            if(ptype[my_iindx[i]-j]){
-              int delta1, delta2;
-              char *s_neighbor = strdup(s_kl);
-              s_neighbor[i-1] = '(';
-              s_neighbor[j-1] = ')';
-              float en_neighbor = energy_of_struct(s, s_neighbor);
-              /* find out which neighbor we've just generated */
-              delta1 = (pt_ref1[i] == j) ? -1 : 1;
-              delta2 = (pt_ref2[i] == j) ? -1 : 1;
-              double p_transition, p_rev_transition;
-              if(en_neighbor < en_kl){
-                p_transition = 1.;
-                p_rev_transition = exp(-(en_kl-en_neighbor)/kT);
-              }
-              else{
-                p_transition = exp(-(en_neighbor-en_kl)/kT);
-                p_rev_transition = 1.;
-              }
-/* 
-              double p_transition     = MIN2(1., exp(-(en_neighbor-en_kl)/kT));
-              double p_rev_transition = MIN2(1., exp(-(en_kl-en_neighbor)/kT));
-*/
-              if((delta1 > 0) && (delta2 > 0))      { p_ne += p_transition; n_ne++; pr_ne += p_rev_transition * exp((dG_ne-en_neighbor)/kT) / pr_alpha;}
-              else if((delta1 > 0) && (delta2 < 0)) { p_se += p_transition; n_se++; pr_se += p_rev_transition * exp((dG_se-en_neighbor)/kT) / pr_alpha;}
-              else if((delta1 < 0) && (delta2 > 0)) { p_nw += p_transition; n_nw++; pr_nw += p_rev_transition * exp((dG_nw-en_neighbor)/kT) / pr_alpha;}
-              else                                  { p_sw += p_transition; n_sw++; pr_sw += p_rev_transition * exp((dG_sw-en_neighbor)/kT) / pr_alpha;}
-              free(s_neighbor);
+        else{
+          if(str1[i-1] == ')') state++;
+          else if(str1[i-1] == '(') str1[i-1] = '.';
+        }
+      }
+      state = 0;
+      for(i = t; i>0; i--){
+        if(state > 0){
+          if(str2[i-1] == ')') state++;
+          else if(str2[i-1] == '(') state--;
+        }
+        else{
+          if(str2[i-1] == ')') state++;
+          else if(str2[i-1] == '(') str2[i-1] = '.';
+        }
+      }
+      
+      float fee = (-log(Q)-t*log(pf_scale))*kT;;
+      fprintf(outfp, "%s (%6.2f) <ref 1>\n", str1, energy_of_struct(sequence,str1));
+      fprintf(outfp, "%s (%6.2f) <ref 2>\n", str2, energy_of_struct(sequence,str2));
+      fprintf(outfp, "free energy of ensemble = %6.2f kcal/mol\n", fee);
+      fprintf(outfp, "k\tl\tP(neighborhood)\tP(MFE in neighborhood)\tP(MFE in ensemble)\tMFE\tE_gibbs\tMFE-structure\n");
+      for(cnt1 = twoD_vars->k_min_values_f[t]; cnt1 <= MIN2(twoD_vars->k_max_values_f[t], twoD_vars->maxD1); cnt1++){
+        for(cnt2 = twoD_vars->l_min_values_f[t][cnt1]; cnt2 <= MIN2(twoD_vars->l_max_values_f[t][cnt1], twoD_vars->maxD2); cnt2+=2){
+          if(twoD_vars->E_F5[t]){
+            if(twoD_vars->E_F5[t][cnt1][cnt2/2] != INF){
+              float mfe = twoD_vars->E_F5[t][cnt1][cnt2/2]/(float)100.;
+              float free_energy = (-log((float)kl_pf_vars->Q[my_iindx[1]-t][cnt1][cnt2/2])-t*log(pf_scale))*kT;
+              fprintf(outfp, "%d\t%d\t%2.8f\t%2.8f\t%2.8f\t%6.2f\t%6.2f\t%s\n",
+                cnt1+k_correction, cnt2+l_correction,
+                (float)kl_pf_vars->Q[my_iindx[1]-t][cnt1][cnt2/2]/(float)Q,
+                exp((free_energy-mfe)/kT),
+                exp((fee-mfe)/kT),
+                mfe,
+                free_energy,
+                basin_data[assignment[KLINDX(cnt1, cnt2, twoD_vars->maxD1)]].s);
             }
           }
         }
-      } /* end generating neighbors */
+      }
+      free(str1);
+      free(str2);
+      free(mfe_structure);
+      fclose(outfp);
+      for(i = 0; i < macro_states; i++){
+        free(rate_matrix2[i]);
+      }
+      free(rate_matrix2);
 
-      if(avail_ne) rate_matrix2[idx_self][idx_ne] += p_ne/maxIterations;
-      if(avail_se) rate_matrix2[idx_self][idx_se] += p_se/maxIterations;
-      if(avail_nw) rate_matrix2[idx_self][idx_nw] += p_nw/maxIterations;
-      if(avail_sw) rate_matrix2[idx_self][idx_sw] += p_sw/maxIterations;
-      
-      /* add rates for reverse fluxes from neighbors */
-      if(avail_ne) rate_matrix2[idx_ne][idx_self] += pr_ne/maxIterations;
-      if(avail_se) rate_matrix2[idx_se][idx_self] += pr_se/maxIterations;
-      if(avail_nw) rate_matrix2[idx_nw][idx_self] += pr_nw/maxIterations;
-      if(avail_sw) rate_matrix2[idx_sw][idx_self] += pr_sw/maxIterations;
-      
-      /* free allocated memory */
-      free(s_kl);
-      free(pt_kl);
-      free(loopidx_kl);
-    }/* end of iteration */
-  } /* end of macrostates */
 
-  /* calculate the rate /f$q_{i,i} = -\sum_{i \neq j} q_{i,j} /f$ */
-  for(i = 0; i < macro_states; i++){
-    double qii = 0;
-    for(j = 0; j < macro_states; j++){
-      qii -= rate_matrix2[i][j];
     }
-    rate_matrix2[i][i] = qii;
-  }
-
-  FILE *outfp = fopen("rates.out", "w");
-  if (!outfp){
-    fprintf(stderr, "can't open file %s\n", "rates.out");
-    exit(1);
-  }
-  for(i = 0; i < macro_states; i++){
-    
-    printf("%4d %s %6.2f 0 0 0 0 %6.2f 0 %6.2f [%3d,%3d]\n",
-            i+1,
-            basin_data[i].s,
-            basin_data[i].en,
-            (-log(basin_data[i].pf)-length*log(kl_pf_vars->pf_scale)) * kT,
-            (-log(basin_data[i].pf)-length*log(kl_pf_vars->pf_scale)) * kT,
-            basin_data[i].k,
-            basin_data[i].l
-          );
-    for(j = 0; j < macro_states; j++){
-      fprintf(outfp, " %10.4g ", rate_matrix2[i][j]);
-    }
-    fprintf(outfp, "\n");
-  }
-  fclose(outfp);
-
+    free(sequence);
 #if 0
   /* check detailed balance */
   for(i = 0; i < macro_states; i++){
@@ -1639,7 +1770,48 @@ void transition_rates(const char *s, const char *s1, const char *s2){
     }
   }
 #endif
- 
+
+
+    /* free memeory of current macro state data structure */
+    for(k = 0; k<macro_states;k++){
+      free(basin_data[k].s);
+    }
+    free(basin_data);
+
+  } /* end cotranscription steps */
+
+
+  if(t < length + cotranscriptionSteps){
+    t = length;
+    idx_1n        = my_iindx[1] - t;
+    macro_states  = 0;
+    Q             = 0;
+    
+    /* convert mfe and partition function output to a datastructure that we may easily use for all further analysis */
+    kl_basin *basin_data  = (kl_basin *)space(sizeof(kl_basin) * ((twoD_vars->maxD1 + 1)*(twoD_vars->maxD2 + 1)));
+    macro_states          = extractMacroStateData(basin_data, t, twoD_vars, kl_pf_vars);
+    /* end preparation of datastructe */ 
+
+    /* shorten allocated memory to fit actual data */
+    basin_data = (kl_basin *)realloc(basin_data, macro_states*sizeof(kl_basin));
+    /* sort neighborhoods according their mfe */
+    qsort(basin_data, macro_states, sizeof(kl_basin), sort_neighborhood_by_energy_asc);
+
+    /* go through the macrostate list and extract 'k,l to index' information */
+    for(k = 0; k<macro_states;k++){
+      assignment[KLINDX(basin_data[k].k, basin_data[k].l, twoD_vars->maxD1)] = k;
+    }
+
+    /* get memory for rate matrix */
+    double **rate_matrix2 = (double **)space(sizeof(double *) * macro_states);
+    for(i = 0; i < macro_states; i++){
+      rate_matrix2[i] = (double *)space(sizeof(double) * macro_states);
+    }
+  
+  
+  }
+
+  /* free memory occupied by output of 2Dfold and 2Dpfold */
   for(k = 0; k<=twoD_vars->maxD1; k++){
     for(l = 0; l<=twoD_vars->maxD2; l++) if(kl_mfes[k][l].s) free(kl_mfes[k][l].s);
     free(kl_mfes[k]);
@@ -1647,11 +1819,9 @@ void transition_rates(const char *s, const char *s1, const char *s2){
   }
   free(kl_mfes);
   free(kl_pfs);
-
-  for(k = 0; k<macro_states;k++){
-    free(basin_data[k].s);
-  }
-  free(basin_data);
+  free(loopidx_ref1);
+  free(loopidx_ref2);
+  free(assignment);
   destroy_TwoDfold_variables(twoD_vars);
   destroy_TwoDpfold_variables(kl_pf_vars);
 }
