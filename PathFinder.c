@@ -49,6 +49,9 @@ int curr_iteration = 0;
 int cotranscriptionSteps = 0;
 int saveMSD = 0;
 int save2DD = 0;
+int computeEnsembleDiversity = 0;
+int saveSparse = 0;
+int noRates = 0;
 
 int method;
 extern  int circ;
@@ -192,7 +195,12 @@ void argument_check(int argc, char *argv[]){
                     else if(!strcmp(argv[i], "--save2DD")){
                       save2DD = 1;
                     }
-                   
+                    else if(!strcmp(argv[i], "--saveSparse")){
+                      saveSparse = 1;
+                    }
+                     else if(!strcmp(argv[i], "--ensembleDiv")){
+                      computeEnsembleDiversity = 1;
+                    }
                     break;
 
         case 'T':   if (argv[i][2]!='\0') usage();
@@ -1363,6 +1371,7 @@ typedef struct kl_basin{
   char    *s;
   float   en;
   double  pf;
+  double  diversity;
 } kl_basin;
 
 int sort_neighborhood_by_energy_asc(const void *p1, const void *p2){
@@ -1420,25 +1429,38 @@ PRIVATE int extractMacroStateData(kl_basin *basin_data, unsigned int t, TwoDfold
 ***
 **/
 void transition_rates(const char *s, const char *s1, const char *s2){
+  double sfact=1.07;
+  int k, l, i, j, iteration, t, cnt1, cnt2;
+
   dangles = 2;
+
   TwoDfold_vars *twoD_vars    = get_TwoDfold_variables(s, s1, s2, 0);
   TwoDfold_solution **kl_mfes = TwoDfold_bound(twoD_vars, -1, -1);
+
+  /* adjust pf scale to free energies seen */
+  int   length  = twoD_vars->seq_length;
+  float mmfe    = INF;
+  for(i=0; i<=twoD_vars->maxD1;i++){
+    for(j=0; j<=twoD_vars->maxD2;j++){
+      mmfe = (mmfe < kl_mfes[i][j].en) ? mmfe : kl_mfes[i][j].en;
+    }
+  }
+  double kT = (temperature+K0)*GASCONST/1000.;   /* kT in kcal/mol  */
+  pf_scale  = exp(-(sfact*mmfe)/kT/length);
+
+
   TwoDpfold_vars  *kl_pf_vars = get_TwoDpfold_variables_from_MFE(twoD_vars);
   FLT_OR_DBL      **kl_pfs    = TwoDpfold_bound(kl_pf_vars, -1, -1);
   init_rand();
   
-  int k, l, i, j, iteration, t, cnt1, cnt2;
   short         *pt_ref1      = twoD_vars->reference_pt1;
   short         *pt_ref2      = twoD_vars->reference_pt2;
   int           *loopidx_ref1 = pair_table_to_loop_index(pt_ref1);
   int           *loopidx_ref2 = pair_table_to_loop_index(pt_ref2);
-  int           length        = twoD_vars->seq_length;
   char          *ptype        = twoD_vars->ptype;
   unsigned int  *my_iindx     = twoD_vars->my_iindx;
-  double kT                   = (temperature+K0)*GASCONST/1000.;   /* kT in kcal/mol  */
   unsigned int  *assignment   = (unsigned int *)space(sizeof(unsigned int) * ((twoD_vars->maxD1 + 1)*(twoD_vars->maxD2 + 1)));
   unsigned int  macro_states  = 0;
-  FLT_OR_DBL    pf_scale      = kl_pf_vars->pf_scale;
   int           *k_min_values   = kl_pf_vars->k_min_values;
   int           *k_max_values   = kl_pf_vars->k_max_values;
   int           **l_min_values  = kl_pf_vars->l_min_values;
@@ -1485,6 +1507,12 @@ void transition_rates(const char *s, const char *s1, const char *s2){
       int avail_ne, avail_se, avail_sw, avail_nw;
       avail_ne = avail_se = avail_sw = avail_nw = 0;
 
+      int *bpfreq = NULL;
+      if(computeEnsembleDiversity){
+        /* prepare ensemble diversity calculations */
+        bpfreq = (int *)space(sizeof(int) * (((length+1)*(length+2)/2) + 1));
+      }
+
       /* check which neighbors are available */
       if((basin_data[k].k+1 >= k_min_values[idx_1n]) && (basin_data[k].k+1 <= k_max_values[idx_1n])){
         if((basin_data[k].l+1 >= l_min_values[idx_1n][basin_data[k].k+1]) && (basin_data[k].l+1 <= l_max_values[idx_1n][basin_data[k].k+1]))
@@ -1507,7 +1535,7 @@ void transition_rates(const char *s, const char *s1, const char *s2){
 
       /* get Gibbs free energy of neighboring macrostates */ 
       double    dG_alpha, dG_ne, dG_se, dG_sw, dG_nw;
-      dG_alpha  = (-log(basin_data[k].pf)-length*log(pf_scale))*kT;
+      dG_alpha  = (-log(basin_data[k].pf)-t*log(pf_scale))*kT;
       dG_ne     = (avail_ne) ? (-log(basin_data[idx_ne].pf)-t*log(pf_scale))*kT : (double)INF/100.;
       dG_se     = (avail_se) ? (-log(basin_data[idx_se].pf)-t*log(pf_scale))*kT : (double)INF/100.;
       dG_sw     = (avail_sw) ? (-log(basin_data[idx_sw].pf)-t*log(pf_scale))*kT : (double)INF/100.;
@@ -1539,6 +1567,13 @@ void transition_rates(const char *s, const char *s1, const char *s2){
         short *pt_kl      = make_pair_table(s_kl);
         int   *loopidx_kl = pair_table_to_loop_index(pt_kl);
         float en_kl       = energy_of_struct(sequence, s_kl);
+
+        if(computeEnsembleDiversity){
+          int nuc;
+          for(nuc = 1; nuc <= pt_kl[0]; nuc++)
+            if(nuc < pt_kl[nuc])
+              bpfreq[my_iindx[nuc] - pt_kl[nuc]]++;
+        }
 
         double pr_alpha   = exp((dG_alpha-en_kl)/kT);
 
@@ -1628,6 +1663,18 @@ void transition_rates(const char *s, const char *s1, const char *s2){
         free(pt_kl);
         free(loopidx_kl);
       }/* end of iteration */
+      if(computeEnsembleDiversity){
+        /* compute the ensemble diversity from structures seen */
+        double div = 0;
+        int i,j;
+        for(i = 1; i < t; i++)
+          for(j = i+TURN+1; j <= t; j++){
+            double p = (double) bpfreq[my_iindx[i] - j]/(double)maxIterations;
+            div += p * (1.0 - p);
+          }
+        basin_data[k].diversity = 2*div;
+        free(bpfreq);
+      }
     } /* end of macrostates */
 
 
@@ -1646,43 +1693,72 @@ void transition_rates(const char *s, const char *s1, const char *s2){
     int l_correction = kl_pf_vars->referenceBPs2[my_iindx[1]-length] - kl_pf_vars->referenceBPs2[my_iindx[1]-t];
 
     char fname[50], fname2[50], fname3[50];
-    if(t < length){
+//    if(t < length){
       sprintf(fname, "rates_%04d.out", t);
       sprintf(fname2, "msd_%04d.out", t);
       sprintf(fname3, "2D_%04d.out", t);
+//    }
+//    else{
+//      sprintf(fname, "rates.out");
+//      sprintf(fname2, "msd.out");
+//     sprintf(fname3, "2D.out");
+//    }
+    FILE *outfp2 = NULL;
+    if(saveMSD) outfp2 = fopen(fname2, "w");
+    else outfp2 = stdout;
+    
+    /* write fake barrier file */
+    fprintf(outfp2, "%s\n", sequence);
+    for(i = 0; i < macro_states; i++){
+      
+      if(computeEnsembleDiversity){
+        fprintf(outfp2, "%8d %s %6.2f 0 0 0 0 %6.2f 0 %6.2f [%4d,%4d] %-6.2f\n",
+                i+1,
+                basin_data[i].s,
+                basin_data[i].en,
+                (-log(basin_data[i].pf)-t*log(pf_scale)) * kT,
+                (-log(basin_data[i].pf)-t*log(pf_scale)) * kT,
+                basin_data[i].k + k_correction,
+                basin_data[i].l + l_correction,
+                basin_data[i].diversity
+              );
+      }
+      else{
+        fprintf(outfp2, "%8d %s %6.2f 0 0 0 0 %6.2f 0 %6.2f [%4d,%4d]\n",
+                i+1,
+                basin_data[i].s,
+                basin_data[i].en,
+                (-log(basin_data[i].pf)-t*log(pf_scale)) * kT,
+                (-log(basin_data[i].pf)-t*log(pf_scale)) * kT,
+                basin_data[i].k + k_correction,
+                basin_data[i].l + l_correction
+              );
+      }
     }
-    else{
-      sprintf(fname, "rates.out");
-      sprintf(fname2, "msd.out");
-      sprintf(fname3, "2D.out");
-    }
+    if(outfp2 != stdout) fclose(outfp2);
+    
+    /* write rate matrix */
     FILE *outfp = fopen(fname, "w");
     if (!outfp){
       fprintf(stderr, "can't open file %s\n", fname);
       exit(1);
     }
-    FILE *outfp2 = NULL;
-    if(saveMSD) outfp2 = fopen(fname2, "w");
-    else outfp2 = stdout;
-    
-    fprintf(outfp2, "%s\n", sequence);
-    for(i = 0; i < macro_states; i++){
-      
-      fprintf(outfp2, "%8d %s %6.2f 0 0 0 0 %6.2f 0 %6.2f [%4d,%4d]\n",
-              i+1,
-              basin_data[i].s,
-              basin_data[i].en,
-              (-log(basin_data[i].pf)-t*log(kl_pf_vars->pf_scale)) * kT,
-              (-log(basin_data[i].pf)-t*log(kl_pf_vars->pf_scale)) * kT,
-              basin_data[i].k + k_correction,
-              basin_data[i].l + l_correction
-            );
-      for(j = 0; j < macro_states; j++){
-        fprintf(outfp, " %10.4g ", rate_matrix2[i][j]);
+    if(saveSparse){
+      for(i = 0; i < macro_states; i++){
+        for(j = 0; j < macro_states; j++){
+          if(rate_matrix2[i][j] != 0.)
+            fprintf(outfp, "%d %d %1.15g\n", i, j, rate_matrix2[i][j]);
+        }
       }
-      fprintf(outfp, "\n");
     }
-    if(outfp2 != stdout) fclose(outfp2);
+    else{
+      for(i = 0; i < macro_states; i++){
+        for(j = 0; j < macro_states; j++){
+          fprintf(outfp, " %1.15  g ", rate_matrix2[i][j]);
+        }
+        fprintf(outfp, "\n");
+      }
+    }
     fclose(outfp);
     
     if(save2DD){
@@ -1772,7 +1848,7 @@ void transition_rates(const char *s, const char *s1, const char *s2){
 #endif
 
 
-    /* free memeory of current macro state data structure */
+    /* free memory of current macro state data structure */
     for(k = 0; k<macro_states;k++){
       free(basin_data[k].s);
     }
