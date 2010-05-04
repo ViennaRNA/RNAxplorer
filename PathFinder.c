@@ -1747,14 +1747,14 @@ void transition_rates(const char *s, const char *s1, const char *s2){
       for(i = 0; i < macro_states; i++){
         for(j = 0; j < macro_states; j++){
           if(rate_matrix2[i][j] != 0.)
-            fprintf(outfp, "%d %d %10.4g\n", i, j, rate_matrix2[i][j]);
+            fprintf(outfp, "%d %d %1.15g\n", i, j, rate_matrix2[i][j]);
         }
       }
     }
     else{
       for(i = 0; i < macro_states; i++){
         for(j = 0; j < macro_states; j++){
-          fprintf(outfp, " %10.4g ", rate_matrix2[i][j]);
+          fprintf(outfp, " %1.15g ", rate_matrix2[i][j]);
         }
         fprintf(outfp, "\n");
       }
