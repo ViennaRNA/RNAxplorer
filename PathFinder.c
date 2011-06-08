@@ -150,11 +150,11 @@ void argument_check(int argc, char *argv[]){
                       maximum_distance2 = maximum_distance1;
                     }             
                     else if(argv[i][2]=='1'){
-                      r=sscanf(argv[i+1], "%d", &maximum_distance1);
+                      r=sscanf(argv[++i], "%d", &maximum_distance1);
                       if(!r) usage();
                     }
                     else if(argv[i][2]=='2'){
-                      r=sscanf(argv[i+1], "%d", &maximum_distance2);
+                      r=sscanf(argv[++i], "%d", &maximum_distance2);
                       if(!r) usage();
                     }
                     else usage();
