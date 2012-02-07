@@ -1,5 +1,5 @@
 CC = gcc
-VRNADIR = ../ViennaRNA.work
+VRNADIR = ../ViennaRNA
 INCLUDES = -I$(VRNADIR)/H -I$(VRNADIR)/lib -DLOOP_EN
 LIBS    = -L$(VRNADIR)/lib -lRNA -lm
 CFLAGS = -O3 -Wall

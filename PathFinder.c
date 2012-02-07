@@ -7,7 +7,6 @@
 #include "fold.h"
 #include "part_func.h"
 #include "utils.h"
-#include "more_utils.h"
 #include "pair_mat.h"
 #include "energy_const.h"
 
@@ -17,6 +16,7 @@
 #include "2Dfold.h"
 #include "2Dpfold.h"
 #include "PathFinder.h"
+#include "mm.h"
 
 #ifdef WITH_DMALLOC
 #include "dmalloc.h"
@@ -453,13 +453,58 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
   
   
   TwoDfold_vars *twoD_vars = get_TwoDfold_variables(seq, s1, s2, circ);
-  TwoDfold_solution **dfold_structs = (circ) ? TwoDfold_circ_bound(twoD_vars, maxD1, maxD2) : TwoDfold_bound(twoD_vars, maxD1, maxD2);
+  TwoDfold_solution *mfe_s = TwoDfoldList(twoD_vars, maxD1, maxD2);
   int d1,d2;
   float mmfe = INF;
   nb_t **neighbors = (nb_t **)space((maxD1+1) * sizeof(nb_t *));
   int number_of_states = 0;
-  float mfe_s1 = dfold_structs[0][bp_dist].en;
-  float mfe_s2 = dfold_structs[bp_dist][0].en;
+
+  int real_d1, real_d2;
+  real_d1 = maxD1;
+  real_d2 = maxD2;
+
+  /* make a lucky guess for the real max distancies */
+  for(i=0;i<(maxD1+1);i++){
+    neighbors[i] = (nb_t *)space((maxD2+1) * sizeof(nb_t));
+  }
+
+  float mfe_s1, mfe_s2;
+
+  for(i=0; mfe_s[i].k != INF; i++){
+    if(mfe_s[i].k == -1){
+      free(mfe_s[i].s);
+      continue;
+    }
+    neighbors[mfe_s[i].k][mfe_s[i].l].s = strdup(mfe_s[i].s);
+    free(mfe_s[i].s);
+    neighbors[mfe_s[i].k][mfe_s[i].l].en = mfe_s[i].en;
+    neighbors[mfe_s[i].k][mfe_s[i].l].path_u = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].path_d = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].path_r = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].path_l = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].path_lu = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].path_ld = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].path_ru = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].path_rd = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].barrier_u = (float)INF/100.;
+    neighbors[mfe_s[i].k][mfe_s[i].l].barrier_d = (float)INF/100.;
+    neighbors[mfe_s[i].k][mfe_s[i].l].barrier_r = (float)INF/100.;
+    neighbors[mfe_s[i].k][mfe_s[i].l].barrier_l = (float)INF/100.;
+    neighbors[mfe_s[i].k][mfe_s[i].l].barrier_lu = (float)INF/100.;
+    neighbors[mfe_s[i].k][mfe_s[i].l].barrier_ld = (float)INF/100.;
+    neighbors[mfe_s[i].k][mfe_s[i].l].barrier_ru = (float)INF/100.;
+    neighbors[mfe_s[i].k][mfe_s[i].l].barrier_rd = (float)INF/100.;
+    neighbors[mfe_s[i].k][mfe_s[i].l].prev = NULL;
+    neighbors[mfe_s[i].k][mfe_s[i].l].dir = -1;
+    if(mfe_s[i].k == 0) mfe_s1 = mfe_s[i].en;
+    if(mfe_s[i].l == 0) mfe_s2 = mfe_s[i].en;
+
+    number_of_states++;
+    mmfe = MIN2(mmfe, mfe_s[i].en);
+  }
+  free(mfe_s);
+
+#if 0
   for(d1 = 0; d1 <= maxD1;d1++){
     neighbors[d1] = (nb_t *)space((maxD2+1) * sizeof(nb_t));
     for(d2 = 0; d2 <= maxD2;d2++){
@@ -491,23 +536,31 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
       }
     }
   }
+#endif
+
   double kT, sfact=1.07;
   kT = (temperature+K0)*GASCONST/1000.0; /* in Kcal */
   pf_scale = exp(-(sfact*mmfe)/kT/length);
   if (length>2000)
     fprintf(stdout, "scaling factor %f\n", pf_scale);
   TwoDpfold_vars *q_vars = get_TwoDpfold_variables(seq, s1, s2, circ);
-  FLT_OR_DBL **pf_s;
-  if(circ)
-    pf_s = TwoDpfold_circ_bound(q_vars, maxD1, maxD2);
-  else
-    pf_s = TwoDpfold_bound(q_vars, maxD1, maxD2);
+  TwoDpfold_solution *pf_s = TwoDpfoldList(q_vars, maxD1, maxD2);
 
+  for(i=0; pf_s[i].k != INF;i++){
+    if(pf_s[i].k > 0)
+      neighbors[pf_s[i].k][pf_s[i].l].pf = pf_s[i].q;
+  }
+
+  free(pf_s);
+
+#if 0
   for(d1 = 0; d1 <= maxD1;d1++){
     for(d2 = 0; d2 <= maxD2;d2++){
       neighbors[d1][d2].pf = pf_s[d1][d2];
     }
   }
+#endif
+
   position startPos, stopPos;
   startPos.i = 0;
   startPos.j = bp_dist;
@@ -1010,13 +1063,13 @@ void PathFinder(){
       nrerror("1st structure missing\n");
     else if(strlen(start_struct) != n)
       nrerror("sequence and 1st structure have unequal length");
-    strncpy(s1, start_struct, n);
+    strncpy(s2, start_struct, n);
 
     if ((target_struct = get_line(stdin))==NULL)
       nrerror("2nd structure missing\n");
     else if(strlen(target_struct) != n)
       nrerror("sequence and 2nd et structure have unequal length");
-      strncpy(s2, target_struct, n);
+      strncpy(s1, target_struct, n);
     if (istty)
       printf("length = %d\n", n);
 
@@ -1047,15 +1100,11 @@ void PathFinder(){
     pf_scale = exp(-(1.03*mfe)/kT/n);
     (circ) ? (void) pf_circ_fold(seq,ss) : (void) pf_fold(seq, ss);
     free(ss);
-    if(circ){
-      if(!get_circ_pf_arrays(&S_p, &S1_p, &ptype_p, &qb_p, &qm_p, &q1k_p, &qln_p, &qm1_p, &qm2_p, &qo_p, &qho_p, &qio_p, &qmo_p)){
-        nrerror("wtf circ");
-      }
-    }
-    else
+    if(!circ){
       if(!get_pf_arrays(&S_p, &S1_p, &ptype_p, &qb_p, &qm_p, &q1k_p, &qln_p)){
         nrerror("wtf");
       }
+    }
 
     fprintf(stdout, "%s\n", seq);
     if(whatToDo != TRANSITION_RATES){
@@ -1080,8 +1129,9 @@ void PathFinder(){
                                             for(r = foldingPath; r->s; r++){
                                               fprintf(stdout, "%s %6.2f\n", r->s, r->en);
                                             }
-                                            free(foldingPath);
-                                          
+                                            free_path(foldingPath);
+                                            foldingPath = NULL;
+
                                             /* this was the old way to compute the folding path... now the new one is following */
                                             fprintf(stdout, "\n# searching for alternative paths\n# ");
                                             fflush(stdout);
@@ -1089,7 +1139,10 @@ void PathFinder(){
                                             fprintf(stdout, "\n# done\n\n# Path with detours:\n# barrier: %6.2f\n\n", getSaddlePoint(foldingPath/*, numSteps*/)->en);
                                             for(r = foldingPath; r->s; r++){
                                               fprintf(stdout, "%s %6.2f\n", r->s, r->en);
-                                            }
+                                             }
+                                            free_path(foldingPath);
+                                            foldingPath=NULL;
+                                            fflush(stdout);
                                           }
                                           break;
       case TRANSITION_RATES:              {
@@ -1145,8 +1198,8 @@ void levelSaddlePoint(char *s1, char *s2){
     if(newSaddleEn < oldSaddleEn){
       insert_meshpoint(newSaddle, newSaddleEn, &bestMeshPoints, maxStorage);
     }
-    free(path_left);
-    free(path_right);
+    free_path(path_left);
+    free_path(path_right);
     fprintf(stdout, "\rsearching for alternative paths...(%2.1f %% done)", (float)(maxIterations-iterator)/(float)maxIterations * 100.);
     fflush(stdout);
   }
@@ -1217,9 +1270,30 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
   /* first collect all meshpoints where we get an initially better path */
   if(a+b > 1){
     TwoDfold_vars *twoD_vars = get_TwoDfold_variables(seq, s1, s2, circ);
-    TwoDfold_solution **dfold_structs = (circ) ? TwoDfold_circ_bound(twoD_vars, a+maximum_distance1, b+maximum_distance2) : TwoDfold_bound(twoD_vars, a+maximum_distance1, b+maximum_distance2);
+    TwoDfold_solution *mfe_s = TwoDfoldList(twoD_vars, a+maximum_distance1, b+maximum_distance2);
     destroy_TwoDfold_variables(twoD_vars);
 
+    for(i=0;  mfe_s[i].k != INF; i++){
+      if(mfe_s[i].k == -1){
+        free(mfe_s[i].s);
+        continue;
+      }
+      path_left = get_path(seq, s1, mfe_s[i].s, maxKeep/*, &steps1, circ*/);
+      path_right = get_path(seq, mfe_s[i].s, s2, maxKeep/*, &steps2, circ*/);
+
+      newLeftSaddle = getSaddlePoint(path_left/*, steps1*/);
+      newRightSaddle = getSaddlePoint(path_right/*, steps2*/);
+      newSaddleEn = MAX2(newLeftSaddle->en,  newRightSaddle->en);
+      if(newSaddleEn <= oldSaddleEn){
+        insert_meshpoint_with_struct_energy(mfe_s[i].s, newSaddleEn, mfe_s[i].en, &bestMeshPoints, maxStorage);
+      }
+      free(mfe_s[i].s);
+      free_path(path_left); path_left=NULL;
+      free_path(path_right); path_right=NULL;
+    }
+    free(mfe_s);
+
+#if 0
     for(i = 0; i<= a + maximum_distance1; i++){
       for(j = 0; j<= b + maximum_distance2; j++){
         if(dfold_structs[i][j].en != (float)INF/100.){
@@ -1232,12 +1306,13 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
           if(newSaddleEn <= oldSaddleEn){
             insert_meshpoint_with_struct_energy(dfold_structs[i][j].s, newSaddleEn, dfold_structs[i][j].en, &bestMeshPoints, maxStorage);
           }
-          free(path_left);
-          free(path_right);
+          free_path(path_left); path_left=NULL;
+          free_path(path_right); path_right=NULL;
         }
       }
       free(dfold_structs[i]);
     }
+#endif
   }
   if(bestMeshPoints.count > 0){
     /*
@@ -1260,17 +1335,17 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
         newSaddleEn = MAX2(newLeftSaddle->en,  newRightSaddle->en);
 
         if(newSaddleEn < oldSaddleEn){
-          if(path_left != NULL) free(path_left);
+          if(path_left) free_path(path_left);
           path_left = t_path_left;
-          if(path_right != NULL) free(path_right);
+          if(path_right) free_path(path_right);
           path_right = t_path_right;
           steps1 = t_steps1;
           steps2 = t_steps2;
           oldSaddleEn = newSaddleEn;
         }
         else{
-          free(t_path_left);
-          free(t_path_right);
+          free_path(t_path_left);t_path_left=NULL;
+          free_path(t_path_right);t_path_right=NULL;
         }
       }
       if(path_left == NULL || path_right == NULL){
@@ -1295,6 +1370,9 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
     newPath = (path_t *)space((steps1+steps2) * sizeof(path_t));
     memcpy((path_t *)newPath, (path_t *)path_left, steps1*sizeof(path_t));
     memcpy(((path_t *)newPath)+(steps1), ((path_t *)path_right) + 1, (steps2-1)*sizeof(path_t));
+    if(steps2>0){
+      free(path_right[0].s); /* since we skipped this entry and it never would be free'd */
+    }
   }
   else{
     free(pt1); free(pt2); free(intersect);
@@ -1302,9 +1380,9 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
   }
   
   free(pt1); free(pt2); free(intersect);
-  free(foldingPath);
-  if(path_left != NULL) free(path_left);
-  if(path_right != NULL) free(path_right);
+  free_path(foldingPath);
+  if(path_left) free(path_left); /* do not free the structures, since they are further uses in newPath */
+  if(path_right) free(path_right); /* do not free the structures, since they are further uses in newPath */
 
   curr_iteration++;
   //fprintf(stdout, "\rsearching for alternative paths...(%2.1f %% done %d %d)", (float)(curr_iteration)/(float)pow(2*maxStorage, maxIterations) * 100.,curr_iteration, (int)pow(2*maxStorage, maxIterations)  );
@@ -1383,29 +1461,6 @@ int sort_neighborhood_by_energy_asc(const void *p1, const void *p2){
 
 #define KLINDX(a,b,maxa)   (((b) * (maxa+1)) + a)
 
-PRIVATE int extractMacroStateData(kl_basin *msd, unsigned int t, TwoDfold_vars *twoD_vars, TwoDpfold_vars  *kl_pf_vars);
-
-PRIVATE int extractMacroStateData(kl_basin *basin_data, unsigned int t, TwoDfold_vars *twoD_vars, TwoDpfold_vars  *kl_pf_vars){
-  int           cnt1, cnt2, macro_states = 0;
-  unsigned int  *my_iindx     = twoD_vars->my_iindx;
-
-  for(cnt1 = twoD_vars->k_min_values_f[t]; cnt1 <= MIN2(twoD_vars->k_max_values_f[t], twoD_vars->maxD1); cnt1++){
-    for(cnt2 = twoD_vars->l_min_values_f[t][cnt1]; cnt2 <= MIN2(twoD_vars->l_max_values_f[t][cnt1], twoD_vars->maxD2); cnt2+=2){
-      if(twoD_vars->E_F5[t]){
-        if(twoD_vars->E_F5[t][cnt1][cnt2/2] != INF){
-          basin_data[macro_states].k  = cnt1;
-          basin_data[macro_states].l  = cnt2;
-          basin_data[macro_states].s  = TwoDfold_backtrack_f5(t, cnt1, cnt2, twoD_vars);
-          basin_data[macro_states].en = (float) twoD_vars->E_F5[t][cnt1][cnt2/2]/(float)100.;
-          basin_data[macro_states].pf = (double)kl_pf_vars->Q[my_iindx[1]-t][cnt1][cnt2/2];
-//          printf("[1, %d] %d,%d %6.2f %s %1.16g\n", t, cnt1, cnt2, basin_data[macro_states].en, basin_data[macro_states].s, basin_data[macro_states].pf);
-          macro_states++;
-        }
-      }
-    }
-  }
-  return macro_states;
-}
 
 /**
 *** Calculate the transition rates between k,l-macrostates
@@ -1429,477 +1484,7 @@ PRIVATE int extractMacroStateData(kl_basin *basin_data, unsigned int t, TwoDfold
 ***
 **/
 void transition_rates(const char *s, const char *s1, const char *s2){
-  double sfact=1.07;
-  int k, l, i, j, iteration, t, cnt1, cnt2;
-
-  dangles = 2;
-
-  TwoDfold_vars *twoD_vars    = get_TwoDfold_variables(s, s1, s2, 0);
-  TwoDfold_solution **kl_mfes = TwoDfold_bound(twoD_vars, -1, -1);
-
-  /* adjust pf scale to free energies seen */
-  int   length  = twoD_vars->seq_length;
-  float mmfe    = INF;
-  for(i=0; i<=twoD_vars->maxD1;i++){
-    for(j=0; j<=twoD_vars->maxD2;j++){
-      mmfe = (mmfe < kl_mfes[i][j].en) ? mmfe : kl_mfes[i][j].en;
-    }
-  }
-  double kT = (temperature+K0)*GASCONST/1000.;   /* kT in kcal/mol  */
-  pf_scale  = exp(-(sfact*mmfe)/kT/length);
-
-
-  TwoDpfold_vars  *kl_pf_vars = get_TwoDpfold_variables_from_MFE(twoD_vars);
-  FLT_OR_DBL      **kl_pfs    = TwoDpfold_bound(kl_pf_vars, -1, -1);
-  init_rand();
-  
-  short         *pt_ref1      = twoD_vars->reference_pt1;
-  short         *pt_ref2      = twoD_vars->reference_pt2;
-  int           *loopidx_ref1 = pair_table_to_loop_index(pt_ref1);
-  int           *loopidx_ref2 = pair_table_to_loop_index(pt_ref2);
-  char          *ptype        = twoD_vars->ptype;
-  unsigned int  *my_iindx     = twoD_vars->my_iindx;
-  unsigned int  *assignment   = (unsigned int *)space(sizeof(unsigned int) * ((twoD_vars->maxD1 + 1)*(twoD_vars->maxD2 + 1)));
-  unsigned int  macro_states  = 0;
-  int           *k_min_values   = kl_pf_vars->k_min_values;
-  int           *k_max_values   = kl_pf_vars->k_max_values;
-  int           **l_min_values  = kl_pf_vars->l_min_values;
-  int           **l_max_values  = kl_pf_vars->l_max_values;
-  int           idx_1n          = my_iindx[1] - length;
-  double        Q;
-  char          *sequence;
-
-
-  if(cotranscriptionSteps <= 0) cotranscriptionSteps = length;
-
-  for(t = MAX2(TURN+2, cotranscriptionSteps); t <= length; t += cotranscriptionSteps){
-    idx_1n        = my_iindx[1] - t;
-    macro_states  = 0;
-    Q             = 0;
-    sequence = (char *) space(sizeof(char) * (length + 1));
-    strncpy(sequence, s, t);
-
-    /* convert mfe and partition function output to a datastructure that we may easily use for all further analysis */
-    kl_basin *basin_data  = (kl_basin *)space(sizeof(kl_basin) * ((twoD_vars->maxD1 + 1)*(twoD_vars->maxD2 + 1)));
-    macro_states          = extractMacroStateData(basin_data, t, twoD_vars, kl_pf_vars);
-    /* end preparation of datastructe */ 
-
-    /* shorten allocated memory to fit actual data */
-    basin_data = (kl_basin *)realloc(basin_data, macro_states*sizeof(kl_basin));
-    /* sort neighborhoods according their mfe */
-    qsort(basin_data, macro_states, sizeof(kl_basin), sort_neighborhood_by_energy_asc);
-
-    /* go through the macrostate list and extract 'k,l to index' information */
-    for(k = 0; k<macro_states;k++){
-      Q += basin_data[k].pf;
-      assignment[KLINDX(basin_data[k].k, basin_data[k].l, twoD_vars->maxD1)] = k;
-    }
-
-    /* get memory for rate matrix */
-    double **rate_matrix2 = (double **)space(sizeof(double *) * macro_states);
-    for(i = 0; i < macro_states; i++){
-      rate_matrix2[i] = (double *)space(sizeof(double) * macro_states);
-    }
-
-    for(k = 0; k<macro_states;k++){
-
-      int idx_self, idx_ne, idx_se, idx_sw, idx_nw;
-      int avail_ne, avail_se, avail_sw, avail_nw;
-      avail_ne = avail_se = avail_sw = avail_nw = 0;
-
-      int *bpfreq = NULL;
-      if(computeEnsembleDiversity){
-        /* prepare ensemble diversity calculations */
-        bpfreq = (int *)space(sizeof(int) * (((length+1)*(length+2)/2) + 1));
-      }
-
-      /* check which neighbors are available */
-      if((basin_data[k].k+1 >= k_min_values[idx_1n]) && (basin_data[k].k+1 <= k_max_values[idx_1n])){
-        if((basin_data[k].l+1 >= l_min_values[idx_1n][basin_data[k].k+1]) && (basin_data[k].l+1 <= l_max_values[idx_1n][basin_data[k].k+1]))
-          avail_ne = 1;
-        if((basin_data[k].l-1 >= l_min_values[idx_1n][basin_data[k].k+1]) && (basin_data[k].l-1 <= l_max_values[idx_1n][basin_data[k].k+1]))
-          avail_se = 1;
-      }
-      if((basin_data[k].k-1 >= k_min_values[idx_1n]) && (basin_data[k].k-1 <= k_max_values[idx_1n])){
-        if((basin_data[k].l+1 >= l_min_values[idx_1n][basin_data[k].k-1]) && (basin_data[k].l+1 <= l_max_values[idx_1n][basin_data[k].k-1]))
-          avail_nw = 1;
-        if((basin_data[k].l-1 >= l_min_values[idx_1n][basin_data[k].k-1]) && (basin_data[k].l-1 <= l_max_values[idx_1n][basin_data[k].k-1]))
-          avail_sw = 1;
-      }
-
-      idx_self  = k;
-      idx_ne    = (avail_ne) ? assignment[KLINDX(basin_data[k].k+1, basin_data[k].l+1, twoD_vars->maxD1)] : -1;
-      idx_se    = (avail_se) ? assignment[KLINDX(basin_data[k].k+1, basin_data[k].l-1, twoD_vars->maxD1)] : -1;
-      idx_sw    = (avail_sw) ? assignment[KLINDX(basin_data[k].k-1, basin_data[k].l-1, twoD_vars->maxD1)] : -1;
-      idx_nw    = (avail_nw) ? assignment[KLINDX(basin_data[k].k-1, basin_data[k].l+1, twoD_vars->maxD1)] : -1;
-
-      /* get Gibbs free energy of neighboring macrostates */ 
-      double    dG_alpha, dG_ne, dG_se, dG_sw, dG_nw;
-      dG_alpha  = (-log(basin_data[k].pf)-t*log(pf_scale))*kT;
-      dG_ne     = (avail_ne) ? (-log(basin_data[idx_ne].pf)-t*log(pf_scale))*kT : (double)INF/100.;
-      dG_se     = (avail_se) ? (-log(basin_data[idx_se].pf)-t*log(pf_scale))*kT : (double)INF/100.;
-      dG_sw     = (avail_sw) ? (-log(basin_data[idx_sw].pf)-t*log(pf_scale))*kT : (double)INF/100.;
-      dG_nw     = (avail_nw) ? (-log(basin_data[idx_nw].pf)-t*log(pf_scale))*kT : (double)INF/100.;
-      /**
-      *** rates are calculated as follows
-      *** /f[
-      *** k_{\alpha \rightarrow \beta} = \frac{1}{N}\sum_{i \in \alpha}^{N} \sum_{j \in \beta \cap \mathcal{N}(i)}\\
-      *** /f]
-      *** as we only sample the microstates we have to take care about the detailed balanced condition:
-      *** /f[
-      *** k_{\alpha \rightarrow \beta} \cdot \pi_{\alpha} = k_{\beta \rightarrow \alpha} \cdot \pi_{\beta}
-      *** /f]
-      *** we do this by updating k_{\beta \rightarrow \alpha} in each step we generate the neighboring structure
-      *** /f$j \in \beta /f$ with /f$ j \in \mathcal{N}(i) /f$
-      *** then for each microrate /f$k_{i \rightarrow j} /f$ the reverse microrate /f$k_{j \rightarrow i} \cdot \frac{\pi_{j | \beta}{i | \alpha} /f$
-      *** is added to /f$k_{j \rightarrow i} /f$
-      *** at the end of all rate calculations, the rate /f$q_{i,i} = -\sum_{i \neq j} q_{i,j} /f$ is calculated
-      **/
-      for(iteration = 1; iteration <= maxIterations; iteration++){
-        unsigned int  n_nw, n_ne, n_se, n_sw;
-        double        p_nw, p_ne, p_se, p_sw;
-        double        pr_nw, pr_se, pr_sw, pr_ne;
-        p_nw = p_ne = p_se = p_sw = pr_nw = pr_ne = pr_se = pr_sw = 0.;
-        n_nw = n_ne = n_se = n_sw = 0;
-
-        /* sample a structure */
-        char  *s_kl       = TwoDpfold_pbacktrack_f5(kl_pf_vars, basin_data[k].k, basin_data[k].l, t);
-        short *pt_kl      = make_pair_table(s_kl);
-        int   *loopidx_kl = pair_table_to_loop_index(pt_kl);
-        float en_kl       = energy_of_struct(sequence, s_kl);
-
-        if(computeEnsembleDiversity){
-          int nuc;
-          for(nuc = 1; nuc <= pt_kl[0]; nuc++)
-            if(nuc < pt_kl[nuc])
-              bpfreq[my_iindx[nuc] - pt_kl[nuc]]++;
-        }
-
-        double pr_alpha   = exp((dG_alpha-en_kl)/kT);
-
-        /* generate 'k +- 1', 'l +- 1' - neighbors */
-        for(i = 1; i<t; i++){
-          /**
-          **********************************
-          **  remove base pair
-          **********************************
-          **/
-          if(i<pt_kl[i]){
-            int delta1, delta2;
-            delta1 = delta2 = 0;
-            char  *s_neighbor = strdup(s_kl);
-            s_neighbor[i-1]   = s_neighbor[pt_kl[i]-1] = '.';
-            float en_neighbor = energy_of_struct(sequence, s_neighbor);
-            /* find out which neighbor we've just generated */
-            delta1 = (pt_ref1[i] != 0 && (pt_ref1[i] == pt_kl[i])) ? 1 : -1;
-            delta2 = (pt_ref2[i] != 0 && (pt_ref2[i] == pt_kl[i])) ? 1 : -1;
-            double p_transition, p_rev_transition;
-            if(en_neighbor < en_kl){
-              p_transition = 1.;
-              p_rev_transition = exp(-(en_kl-en_neighbor)/kT);
-            }
-            else{
-              p_transition = exp(-(en_neighbor-en_kl)/kT);
-              p_rev_transition = 1.;
-            }
-
-            if((delta1 > 0) && (delta2 > 0))      { p_ne += p_transition; n_ne++; pr_ne += p_rev_transition * exp((dG_ne-en_neighbor)/kT) / pr_alpha;}
-            else if((delta1 > 0) && (delta2 < 0)) { p_se += p_transition; n_se++; pr_se += p_rev_transition * exp((dG_se-en_neighbor)/kT) / pr_alpha;}
-            else if((delta1 < 0) && (delta2 > 0)) { p_nw += p_transition; n_nw++; pr_nw += p_rev_transition * exp((dG_nw-en_neighbor)/kT) / pr_alpha;}
-            else                                  { p_sw += p_transition; n_sw++; pr_sw += p_rev_transition * exp((dG_sw-en_neighbor)/kT) / pr_alpha;}
-            free(s_neighbor);
-          }
-          /**
-          **********************************
-          **  insert base pair
-          **********************************
-          **/
-          else if(pt_kl[i] == 0){
-            for(j = i+TURN+1; j<=t; j++){
-              if(pt_kl[j] != 0) continue;
-              if(loopidx_kl[i] != loopidx_kl[j]) continue;
-              if(ptype[my_iindx[i]-j]){
-                int delta1, delta2;
-                char *s_neighbor = strdup(s_kl);
-                s_neighbor[i-1] = '(';
-                s_neighbor[j-1] = ')';
-                float en_neighbor = energy_of_struct(sequence, s_neighbor);
-                /* find out which neighbor we've just generated */
-                delta1 = (pt_ref1[i] == j) ? -1 : 1;
-                delta2 = (pt_ref2[i] == j) ? -1 : 1;
-                double p_transition, p_rev_transition;
-                if(en_neighbor < en_kl){
-                  p_transition = 1.;
-                  p_rev_transition = exp(-(en_kl-en_neighbor)/kT);
-                }
-                else{
-                  p_transition = exp(-(en_neighbor-en_kl)/kT);
-                  p_rev_transition = 1.;
-                }
-
-                if((delta1 > 0) && (delta2 > 0))      { p_ne += p_transition; n_ne++; pr_ne += p_rev_transition * exp((dG_ne-en_neighbor)/kT) / pr_alpha;}
-                else if((delta1 > 0) && (delta2 < 0)) { p_se += p_transition; n_se++; pr_se += p_rev_transition * exp((dG_se-en_neighbor)/kT) / pr_alpha;}
-                else if((delta1 < 0) && (delta2 > 0)) { p_nw += p_transition; n_nw++; pr_nw += p_rev_transition * exp((dG_nw-en_neighbor)/kT) / pr_alpha;}
-                else                                  { p_sw += p_transition; n_sw++; pr_sw += p_rev_transition * exp((dG_sw-en_neighbor)/kT) / pr_alpha;}
-                free(s_neighbor);
-              }
-            }
-          }
-        } /* end generating neighbors */
-
-        if(avail_ne) rate_matrix2[idx_self][idx_ne] += p_ne/maxIterations;
-        if(avail_se) rate_matrix2[idx_self][idx_se] += p_se/maxIterations;
-        if(avail_nw) rate_matrix2[idx_self][idx_nw] += p_nw/maxIterations;
-        if(avail_sw) rate_matrix2[idx_self][idx_sw] += p_sw/maxIterations;
-
-        /* add rates for reverse fluxes from neighbors */
-        if(avail_ne) rate_matrix2[idx_ne][idx_self] += pr_ne/maxIterations;
-        if(avail_se) rate_matrix2[idx_se][idx_self] += pr_se/maxIterations;
-        if(avail_nw) rate_matrix2[idx_nw][idx_self] += pr_nw/maxIterations;
-        if(avail_sw) rate_matrix2[idx_sw][idx_self] += pr_sw/maxIterations;
-
-        /* free allocated memory */
-        free(s_kl);
-        free(pt_kl);
-        free(loopidx_kl);
-      }/* end of iteration */
-      if(computeEnsembleDiversity){
-        /* compute the ensemble diversity from structures seen */
-        double div = 0;
-        int i,j;
-        for(i = 1; i < t; i++)
-          for(j = i+TURN+1; j <= t; j++){
-            double p = (double) bpfreq[my_iindx[i] - j]/(double)maxIterations;
-            div += p * (1.0 - p);
-          }
-        basin_data[k].diversity = 2*div;
-        free(bpfreq);
-      }
-    } /* end of macrostates */
-
-
-    /* calculate the rate /f$q_{i,i} = -\sum_{i \neq j} q_{i,j} /f$ */
-    for(i = 0; i < macro_states; i++){
-      double qii = 0;
-      for(j = 0; j < macro_states; j++){
-        qii -= rate_matrix2[i][j];
-      }
-      rate_matrix2[i][i] = qii;
-    }
-
-
-    /* create output file(s) */
-    int k_correction = kl_pf_vars->referenceBPs1[my_iindx[1]-length] - kl_pf_vars->referenceBPs1[my_iindx[1]-t];
-    int l_correction = kl_pf_vars->referenceBPs2[my_iindx[1]-length] - kl_pf_vars->referenceBPs2[my_iindx[1]-t];
-
-    char fname[50], fname2[50], fname3[50];
-//    if(t < length){
-      sprintf(fname, "rates_%04d.out", t);
-      sprintf(fname2, "msd_%04d.out", t);
-      sprintf(fname3, "2D_%04d.out", t);
-//    }
-//    else{
-//      sprintf(fname, "rates.out");
-//      sprintf(fname2, "msd.out");
-//     sprintf(fname3, "2D.out");
-//    }
-    FILE *outfp2 = NULL;
-    if(saveMSD) outfp2 = fopen(fname2, "w");
-    else outfp2 = stdout;
-    
-    /* write fake barrier file */
-    fprintf(outfp2, "%s\n", sequence);
-    for(i = 0; i < macro_states; i++){
-      
-      if(computeEnsembleDiversity){
-        fprintf(outfp2, "%8d %s %6.2f 0 0 0 0 %6.2f 0 %6.2f [%4d,%4d] %-6.2f\n",
-                i+1,
-                basin_data[i].s,
-                basin_data[i].en,
-                (-log(basin_data[i].pf)-t*log(pf_scale)) * kT,
-                (-log(basin_data[i].pf)-t*log(pf_scale)) * kT,
-                basin_data[i].k + k_correction,
-                basin_data[i].l + l_correction,
-                basin_data[i].diversity
-              );
-      }
-      else{
-        fprintf(outfp2, "%8d %s %6.2f 0 0 0 0 %6.2f 0 %6.2f [%4d,%4d]\n",
-                i+1,
-                basin_data[i].s,
-                basin_data[i].en,
-                (-log(basin_data[i].pf)-t*log(pf_scale)) * kT,
-                (-log(basin_data[i].pf)-t*log(pf_scale)) * kT,
-                basin_data[i].k + k_correction,
-                basin_data[i].l + l_correction
-              );
-      }
-    }
-    if(outfp2 != stdout) fclose(outfp2);
-    
-    /* write rate matrix */
-    FILE *outfp = fopen(fname, "w");
-    if (!outfp){
-      fprintf(stderr, "can't open file %s\n", fname);
-      exit(1);
-    }
-    if(saveSparse){
-      for(i = 0; i < macro_states; i++){
-        for(j = 0; j < macro_states; j++){
-          if(rate_matrix2[i][j] != 0.)
-            fprintf(outfp, "%d %d %1.15g\n", i, j, rate_matrix2[i][j]);
-        }
-      }
-    }
-    else{
-      for(i = 0; i < macro_states; i++){
-        for(j = 0; j < macro_states; j++){
-          fprintf(outfp, " %1.15g ", rate_matrix2[i][j]);
-        }
-        fprintf(outfp, "\n");
-      }
-    }
-    fclose(outfp);
-    
-    if(save2DD){
-      char *mfe_structure = (char *)space((t + 1) * sizeof(char));
-      float bla = fold(sequence, mfe_structure);
-
-      outfp = fopen(fname3, "w");
-      fprintf(outfp, "%s\n%s", sequence, mfe_structure);
-      fprintf(outfp, " (%6.2f)\n", bla);
-
-      char *str1, *str2;
-      str1 = (char *)space((t + 1) * sizeof(char));
-      str2 = (char *)space((t + 1) * sizeof(char));
-      strncpy(str1, s1, t);
-      strncpy(str2, s2, t);
-      int state = 0;
-      for(i = t; i>0; i--){
-        if(state > 0){
-          if(str1[i-1] == ')') state++;
-          else if(str1[i-1] == '(') state--;
-        }
-        else{
-          if(str1[i-1] == ')') state++;
-          else if(str1[i-1] == '(') str1[i-1] = '.';
-        }
-      }
-      state = 0;
-      for(i = t; i>0; i--){
-        if(state > 0){
-          if(str2[i-1] == ')') state++;
-          else if(str2[i-1] == '(') state--;
-        }
-        else{
-          if(str2[i-1] == ')') state++;
-          else if(str2[i-1] == '(') str2[i-1] = '.';
-        }
-      }
-      
-      float fee = (-log(Q)-t*log(pf_scale))*kT;;
-      fprintf(outfp, "%s (%6.2f) <ref 1>\n", str1, energy_of_struct(sequence,str1));
-      fprintf(outfp, "%s (%6.2f) <ref 2>\n", str2, energy_of_struct(sequence,str2));
-      fprintf(outfp, "free energy of ensemble = %6.2f kcal/mol\n", fee);
-      fprintf(outfp, "k\tl\tP(neighborhood)\tP(MFE in neighborhood)\tP(MFE in ensemble)\tMFE\tE_gibbs\tMFE-structure\n");
-      for(cnt1 = twoD_vars->k_min_values_f[t]; cnt1 <= MIN2(twoD_vars->k_max_values_f[t], twoD_vars->maxD1); cnt1++){
-        for(cnt2 = twoD_vars->l_min_values_f[t][cnt1]; cnt2 <= MIN2(twoD_vars->l_max_values_f[t][cnt1], twoD_vars->maxD2); cnt2+=2){
-          if(twoD_vars->E_F5[t]){
-            if(twoD_vars->E_F5[t][cnt1][cnt2/2] != INF){
-              float mfe = twoD_vars->E_F5[t][cnt1][cnt2/2]/(float)100.;
-              float free_energy = (-log((float)kl_pf_vars->Q[my_iindx[1]-t][cnt1][cnt2/2])-t*log(pf_scale))*kT;
-              fprintf(outfp, "%d\t%d\t%2.8f\t%2.8f\t%2.8f\t%6.2f\t%6.2f\t%s\n",
-                cnt1+k_correction, cnt2+l_correction,
-                (float)kl_pf_vars->Q[my_iindx[1]-t][cnt1][cnt2/2]/(float)Q,
-                exp((free_energy-mfe)/kT),
-                exp((fee-mfe)/kT),
-                mfe,
-                free_energy,
-                basin_data[assignment[KLINDX(cnt1, cnt2, twoD_vars->maxD1)]].s);
-            }
-          }
-        }
-      }
-      free(str1);
-      free(str2);
-      free(mfe_structure);
-      fclose(outfp);
-      for(i = 0; i < macro_states; i++){
-        free(rate_matrix2[i]);
-      }
-      free(rate_matrix2);
-
-
-    }
-    free(sequence);
-#if 0
-  /* check detailed balance */
-  for(i = 0; i < macro_states; i++){
-    for(j = 0; j < macro_states; j++){
-      double bla1 = rate_matrix2[i][j] * basin_data[i].pf/Q;
-      double bla2 = rate_matrix2[j][i] * basin_data[j].pf/Q;
-      if(abs(bla1 - bla2) > 0){
-        printf("[%d,%d]\n", i, j);
-        printf("k_a->b * pi_a = %6.8f * %6.8f = %6.8f\n", rate_matrix2[i][j], basin_data[i].pf/Q, bla1);
-        printf("k_b->a * pi_b = %6.8f * %6.8f = %6.8f\n\n", rate_matrix2[j][i], basin_data[j].pf/Q, bla2);
-      }
-    }
-  }
-#endif
-
-
-    /* free memory of current macro state data structure */
-    for(k = 0; k<macro_states;k++){
-      free(basin_data[k].s);
-    }
-    free(basin_data);
-
-  } /* end cotranscription steps */
-
-
-  if(t < length + cotranscriptionSteps){
-    t = length;
-    idx_1n        = my_iindx[1] - t;
-    macro_states  = 0;
-    Q             = 0;
-    
-    /* convert mfe and partition function output to a datastructure that we may easily use for all further analysis */
-    kl_basin *basin_data  = (kl_basin *)space(sizeof(kl_basin) * ((twoD_vars->maxD1 + 1)*(twoD_vars->maxD2 + 1)));
-    macro_states          = extractMacroStateData(basin_data, t, twoD_vars, kl_pf_vars);
-    /* end preparation of datastructe */ 
-
-    /* shorten allocated memory to fit actual data */
-    basin_data = (kl_basin *)realloc(basin_data, macro_states*sizeof(kl_basin));
-    /* sort neighborhoods according their mfe */
-    qsort(basin_data, macro_states, sizeof(kl_basin), sort_neighborhood_by_energy_asc);
-
-    /* go through the macrostate list and extract 'k,l to index' information */
-    for(k = 0; k<macro_states;k++){
-      assignment[KLINDX(basin_data[k].k, basin_data[k].l, twoD_vars->maxD1)] = k;
-    }
-
-    /* get memory for rate matrix */
-    double **rate_matrix2 = (double **)space(sizeof(double *) * macro_states);
-    for(i = 0; i < macro_states; i++){
-      rate_matrix2[i] = (double *)space(sizeof(double) * macro_states);
-    }
-  
-  
-  }
-
-  /* free memory occupied by output of 2Dfold and 2Dpfold */
-  for(k = 0; k<=twoD_vars->maxD1; k++){
-    for(l = 0; l<=twoD_vars->maxD2; l++) if(kl_mfes[k][l].s) free(kl_mfes[k][l].s);
-    free(kl_mfes[k]);
-    free(kl_pfs[k]);
-  }
-  free(kl_mfes);
-  free(kl_pfs);
-  free(loopidx_ref1);
-  free(loopidx_ref2);
-  free(assignment);
-  destroy_TwoDfold_variables(twoD_vars);
-  destroy_TwoDpfold_variables(kl_pf_vars);
+  return;
 }
 
 /* this comes from findpath.c ... */
@@ -1940,6 +1525,3 @@ static int *pair_table_to_loop_index (short *pt)
 }
 
 
-void fake_barriers_output(TwoDpfold_vars *vars){
-
-}
