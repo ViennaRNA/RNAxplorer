@@ -8,8 +8,8 @@ CFLAGS = -Wall -O3
 
 # rules
 
-OFILES =        PathFinder.o RNAwalk.o meshpoint.o Pathfinder_cmdl.o
-EXEFILE =       PathFinder
+OFILES =        RNAxplorer.o RNAwalk.o meshpoint.o RNAxplorer_cmdl.o
+EXEFILE =       RNAxplorer
 
 
 
@@ -29,8 +29,8 @@ all:                            $(EXEFILE)
 clean:				
 				rm -f $(OFILES) $(EXEFILE)
 
-PathFinder.o:			PathFinder.c PathFinder.h meshpoint.h RNAwalk.h Pathfinder_cmdl.h
-				$(CC) -c $(CFLAGS) $(INCLUDES) PathFinder.c
+RNAxplorer.o:			RNAxplorer.c RNAxplorer.h meshpoint.h RNAwalk.h RNAxplorer_cmdl.h
+				$(CC) -c $(CFLAGS) $(INCLUDES) RNAxplorer.c
 
 meshpoint.o:			meshpoint.c meshpoint.h
 				$(CC) -c $(CFLAGS) $(INCLUDES) meshpoint.c
@@ -38,13 +38,13 @@ meshpoint.o:			meshpoint.c meshpoint.h
 RNAwalk.o:			RNAwalk.c RNAwalk.h meshpoint.h
 				$(CC) -c $(CFLAGS) $(INCLUDES) RNAwalk.c
 
-Pathfinder_cmdl.h:		Pathfinder.ggo
-				gengetopt -i Pathfinder.ggo
+RNAxplorer_cmdl.h:		RNAxplorer.ggo
+				gengetopt -i RNAxplorer.ggo
 
-Pathfinder_cmdl.o:		Pathfinder_cmdl.h Pathfinder.ggo
-				$(CC) -c $(CFLAGS) $(INCLUDES) Pathfinder_cmdl.c
+RNAxplorer_cmdl.o:		RNAxplorer_cmdl.h RNAxplorer.ggo
+				$(CC) -c $(CFLAGS) $(INCLUDES) RNAxplorer_cmdl.c
 
-PathFinder: 			$(OFILES)
+RNAxplorer: 			$(OFILES)
 				$(CC) $(CFLAGS) -o $(EXEFILE) $(OFILES) $(LIBS)
 
 # End of file

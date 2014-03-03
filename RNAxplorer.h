@@ -10,7 +10,7 @@
 #define KLKIN                           3
 #define TRANSITION_RATES                4
 
-void    PathFinder(void);
+void    RNAxplorer(void);
 void    levelSaddlePoint(char *s1, char *s2);
 path_t  *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration);
 path_t  *getSaddlePoint(path_t *foldingPath/*, int steps*/);

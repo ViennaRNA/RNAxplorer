@@ -1,14 +1,14 @@
 # Name of your program
-package "Pathfinder" # don't use package if you're using automake
+package "RNAxplorer" # don't use package if you're using automake
 
 purpose "Compute folding trajectories and stuff"
 
-#usage "Pathfinder [options]\n"
+#usage "RNAxplorer [options]\n"
 version "0.9"   # don't use version if you're using automake
 
 
 # command line options passed to gengetopt
-args "--file-name=Pathfinder_cmdl --include-getopt --default-optional --func-name=Pathfinder_cmdline_parser --arg-struct-name=Pathfinder_args_info"
+args "--file-name=RNAxplorer_cmdl --include-getopt --default-optional --func-name=RNAxplorer_cmdline_parser --arg-struct-name=RNAxplorer_args_info"
 
 
 description "Some blabla"

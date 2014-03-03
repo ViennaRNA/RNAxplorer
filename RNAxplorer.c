@@ -15,17 +15,17 @@
 #include "RNAwalk.h"
 #include "2Dfold.h"
 #include "2Dpfold.h"
-#include "PathFinder.h"
+#include "RNAxplorer.h"
 #include "mm.h"
 
-#include "Pathfinder_cmdl.h"
+#include "RNAxplorer_cmdl.h"
 
 #ifdef WITH_DMALLOC
 #include "dmalloc.h"
 #endif
 
 /**
-*** \file PathFinder.c
+*** \file RNAxplorer.c
 **/
 
 
@@ -65,7 +65,7 @@ void fake_barriers_output(TwoDpfold_vars *vars);
 
 
 void usage(void){
-  fprintf(stdout, "usage: PathFinder [OPTIONS]\n");
+  fprintf(stdout, "usage: RNAxplorer [OPTIONS]\n");
   fprintf(stdout, "\n[OPTIONS]\n");
   fprintf(stdout, "-M [METHOD]  set method\n");
   fprintf(stdout, "   available methods are:\n");
@@ -100,14 +100,14 @@ void usage(void){
 
 int main(int argc, char *argv[]) {
   
-  struct Pathfinder_args_info args_info;
+  struct RNAxplorer_args_info args_info;
 
   /*
   #############################################
   # check the command line parameters
   #############################################
   */
-  if(Pathfinder_cmdline_parser(argc, argv, &args_info) != 0) exit(1);
+  if(RNAxplorer_cmdline_parser(argc, argv, &args_info) != 0) exit(1);
 
   /* temperature */
   if(args_info.temp_given) temperature = args_info.temp_arg;
@@ -172,7 +172,7 @@ int main(int argc, char *argv[]) {
 
 
   /* free allocated memory of command line data structure */
-  Pathfinder_cmdline_parser_free (&args_info);
+  RNAxplorer_cmdline_parser_free (&args_info);
 
   switch(whatToDo){
     case FIND_BASIN_STRUCTURE:  GetBasinStructure();
@@ -181,7 +181,7 @@ int main(int argc, char *argv[]) {
     case 99:                    testParallelFold();
                                 break;
 
-    default:                    PathFinder();
+    default:                    RNAxplorer();
                                 break;
   }
   return(EXIT_SUCCESS);
@@ -987,7 +987,7 @@ void GetBasinStructure(void){
 
 }
 
-void PathFinder(){
+void RNAxplorer(){
   char *s1 = NULL, *s2=NULL, *line, *start_struct=NULL, *target_struct=NULL;
   int i, istty, n;
 
