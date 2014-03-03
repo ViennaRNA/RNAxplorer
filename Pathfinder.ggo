@@ -1,0 +1,124 @@
+# Name of your program
+package "Pathfinder" # don't use package if you're using automake
+
+purpose "Compute folding trajectories and stuff"
+
+#usage "Pathfinder [options]\n"
+version "0.9"   # don't use version if you're using automake
+
+
+# command line options passed to gengetopt
+args "--file-name=Pathfinder_cmdl --include-getopt --default-optional --func-name=Pathfinder_cmdline_parser --arg-struct-name=Pathfinder_args_info"
+
+
+description "Some blabla"
+
+
+# Options
+section "General Options"
+sectiondesc="Below are command line options which alter the general behavior of this program\n\n"
+
+option  "verbose" v
+"Be verbose\n"
+flag
+off
+
+section "Algorithms"
+sectiondesc="Select additional algorithms which should be included in the calculations.\n\n"
+
+option "method" M
+"Set the method used to obtain meshpoint structures for the bisection algorithm\n"
+details="Available options are:\n GW        Gradient Walk             (default)\n\
+ MC        Monte Carlo walk\n\
+ MC-SA     Monte Carlo Walk\n             with simulated Annealing\n\
+ DB-MFE    Distance based MFE structure\n             meshpoints\n\
+ TRATES    Transition rate computation\n\n"
+string
+typestr="<method>"
+optional
+default="GW"
+
+option  "iterations"  i
+"Set the number of iterations/simulations\n\n"
+int
+default="1"
+optional
+
+option  "maxKeep"     m
+"maxKeep for direct path search\n\n"
+int
+default="10"
+optional
+
+option  "maxStore"    s
+"amount of best solutions to hold per iteration\n\n"
+int
+default="10"
+optional
+
+option  "remember"    r
+"Set the number of structure states to remember in a TABU list\n\n"
+int
+default="10"
+optional
+
+option  "circ"    c
+"Assume a circular (instead of linear) RNA molecule.\n"
+flag
+off
+
+option  "cooling-rate"  -
+"Cooling factor used for simulated annealing\n\n"
+float
+default="0.9998"
+optional
+
+option  "tstart"  -
+"start temperature in deg. Celcius\n\n"
+float
+default="37.0"
+optional
+
+option  "tstop" -
+"stop temperature in deg. Celcius\n\n"
+float
+default="0.0"
+optional
+
+option  "penalizeBackWalks" -
+"Add a penalty for backward moves, i.e. moves along states already visited\n\n"
+flag
+off
+
+option  "basinStructure"  -
+"just perform a gradient walk starting from a given structure\n\n"
+flag
+off
+
+
+option  "maxDist" D
+"Maximum base pair distance between meshpoints and references\n\n"
+int
+default="5"
+optional
+
+option  "maxDist1"  -
+"Maximum base pair distance between meshpoints and reference structure 1\n\n"
+int
+default="5"
+optional
+
+option  "maxDist2"  -
+"Maximum base pair distance between meshpoints and reference structure 2\n\n"
+int
+default="5"
+optional
+
+
+section "Model Details`"
+
+option  "temp"  T
+"Rescale energy parameters to a temperature of temp C. Default is 37C.\n\n"
+double
+optional
+

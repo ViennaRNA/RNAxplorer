@@ -18,6 +18,8 @@
 #include "PathFinder.h"
 #include "mm.h"
 
+#include "Pathfinder_cmdl.h"
+
 #ifdef WITH_DMALLOC
 #include "dmalloc.h"
 #endif
@@ -96,127 +98,82 @@ void usage(void){
   exit(EXIT_SUCCESS);
 }
 
-void argument_check(int argc, char *argv[]){
-  int i, r;
-  circ = 0;
-  for(i=1; i<argc; i++){
-    if(argv[i][0]=='-')
-      switch(argv[i][1]){
-        case 'm':   if(argv[i][2]!='\0') usage();
-                    if(i==argc-1) usage();
-                    r = sscanf(argv[++i], "%d", &maxKeep);
-                    if(!r) usage();
-                    break;
-        case 'i':   if(argv[i][2]!='\0') usage();
-                    if(i==argc-1) usage();
-                    r = sscanf(argv[++i], "%d", &maxIterations);
-                    if(!r) usage();
-                    break;
-                    
-        case 's':   if(argv[i][2]!='\0') usage();
-                    if(i==argc-1) usage();
-                    r = sscanf(argv[++i], "%d", &maxStorage);
-                    if(!r) usage();
-                    break;
-                    
-        case 'r':   if(argv[i][2]!='\0') usage();
-                    if(i==argc-1) usage();
-                    r = sscanf(argv[++i], "%d", &rememberStructures);
-                    if(!r) usage();
-                    break;
-
-        case 'M':   if(argv[i][2]!='\0') usage();
-                    if(i==argc-1) usage();    
-                    if(!strcmp(argv[++i], "MC"))
-                      method = MC_METROPOLIS;
-                    else if(!strcmp(argv[i], "MC-SA")){
-                      method = MC_METROPOLIS;
-                      simulatedAnnealing = 1;
-                    }
-                    else if(!strcmp(argv[i], "GW"))
-                      method = GRADIENT_WALK;
-                    else if(!strcmp(argv[i], "DB-MFE"))
-                      whatToDo = FIND_DISTANCE_BASED_MFE_PATH;
-                    else if(!strcmp(argv[i], "BLUBB"))
-                      whatToDo = KLKIN;
-                    else if(!strcmp(argv[i], "TRATES"))
-                      whatToDo = TRANSITION_RATES;
-                    break;
-
-        case 'D':   if(i==argc-1) usage();
-                    if(argv[i][2]=='\0'){
-                      r = sscanf(argv[++i], "%d", &maximum_distance1);
-                      if(!r) usage();
-                      maximum_distance2 = maximum_distance1;
-                    }             
-                    else if(argv[i][2]=='1'){
-                      r=sscanf(argv[++i], "%d", &maximum_distance1);
-                      if(!r) usage();
-                    }
-                    else if(argv[i][2]=='2'){
-                      r=sscanf(argv[++i], "%d", &maximum_distance2);
-                      if(!r) usage();
-                    }
-                    else usage();
-                    break;
-
-        case 'c':   if(!strcmp(argv[i], "-circ")) circ = 1;
-                    else usage();
-                    break;
-
-        case '-':   if(!strcmp(argv[i], "--cooling-rate")){
-                      r = sscanf(argv[++i], "%f", &treduction);
-                      if(!r) usage();
-                    }
-                    else if(!strcmp(argv[i], "--tstart")){
-                      r = sscanf(argv[++i], "%lf", &tstart);
-                      tstart += K0;
-                      if(!r) usage();
-                    }
-                    else if(!strcmp(argv[i], "--tstop")){
-                      r = sscanf(argv[++i], "%lf", &tstop);
-                      tstop += K0;
-                      if(!r) usage();
-                    }
-                    else if(!strcmp(argv[i], "--penalizeBackWalks")){
-                      backWalkPenalty = 1;r=1;
-                    }
-                    else if(!strcmp(argv[i], "--basinStructure")){
-                      whatToDo = FIND_BASIN_STRUCTURE;r=1;
-                    }
-                    else if(!strcmp(argv[i], "--coSteps")){
-                      r = sscanf(argv[++i], "%d", &cotranscriptionSteps);
-                      if(cotranscriptionSteps <= 0) cotranscriptionSteps = 0;
-                      if(!r) usage();
-                    }
-                    else if(!strcmp(argv[i], "--saveMSD")){
-                      saveMSD = 1;
-                    }
-                    else if(!strcmp(argv[i], "--save2DD")){
-                      save2DD = 1;
-                    }
-                    else if(!strcmp(argv[i], "--saveSparse")){
-                      saveSparse = 1;
-                    }
-                     else if(!strcmp(argv[i], "--ensembleDiv")){
-                      computeEnsembleDiversity = 1;
-                    }
-                    break;
-
-        case 'T':   if (argv[i][2]!='\0') usage();
-                    if(i==argc-1) usage();
-                    r=sscanf(argv[++i], "%lf", &temperature);
-                    if (!r) usage();
-                    break;
-                    
-        default:    usage();
-    }
-  }
-}
-
-
 int main(int argc, char *argv[]) {
-  argument_check(argc, argv);
+  
+  struct Pathfinder_args_info args_info;
+
+  /*
+  #############################################
+  # check the command line parameters
+  #############################################
+  */
+  if(Pathfinder_cmdline_parser(argc, argv, &args_info) != 0) exit(1);
+
+  /* temperature */
+  if(args_info.temp_given) temperature = args_info.temp_arg;
+
+  /* method */
+  if(args_info.method_given){
+    char *m = args_info.method_arg;
+    if(!strcmp(m, "MC"))
+      method = MC_METROPOLIS;
+    else if(!strcmp(m, "MC-SA")){
+      method = MC_METROPOLIS;
+      simulatedAnnealing = 1;
+    } else if(!strcmp(m, "GW"))
+      method = GRADIENT_WALK;
+    else if(!strcmp(m, "DB-MFE"))
+      whatToDo = FIND_DISTANCE_BASED_MFE_PATH;
+    else if(!strcmp(m, "BLUBB"))
+      whatToDo = KLKIN;
+    else if(!strcmp(m, "TRATES"))
+      whatToDo = TRANSITION_RATES;
+  }
+
+  /* maximum number of simulations / iterations */
+  if(args_info.iterations_given)
+    maxIterations = args_info.iterations_arg;
+
+  /* maxkeep for Flamm et al. direct path heuristics */
+  if(args_info.maxKeep_given)
+    maxKeep = args_info.maxKeep_arg;
+
+  /* Amount of best solutions to store per iteration */
+  if(args_info.maxStore_given)
+    maxStorage = args_info.maxStore_arg;
+
+  if(args_info.circ_given)
+    circ = 1;
+
+  if(args_info.cooling_rate_given)
+    treduction = args_info.cooling_rate_arg;
+
+  if(args_info.tstart_given)
+    tstart = args_info.tstart_arg + K0;
+
+  if(args_info.tstop_given)
+    tstop = args_info.tstop_arg + K0;
+
+  if(args_info.penalizeBackWalks_given)
+    backWalkPenalty = 1;
+
+  if(args_info.basinStructure_given)
+    whatToDo = FIND_BASIN_STRUCTURE;
+
+  if(args_info.maxDist_given)
+    maximum_distance1 = maximum_distance2 = args_info.maxDist_arg;
+
+  if(args_info.maxDist1_given)
+    maximum_distance1 = args_info.maxDist1_arg;
+
+  if(args_info.maxDist2_given)
+    maximum_distance2 = args_info.maxDist2_arg;
+
+
+
+  /* free allocated memory of command line data structure */
+  Pathfinder_cmdline_parser_free (&args_info);
+
   switch(whatToDo){
     case FIND_BASIN_STRUCTURE:  GetBasinStructure();
                                 break;
