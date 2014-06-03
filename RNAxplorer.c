@@ -53,6 +53,31 @@ extern  int circ;
 static char  scale1[] = "....,....1....,....2....,....3....,....4";
 static char  scale2[] = "....,....5....,....6....,....7....,....8";
 
+typedef struct nb_t{
+
+  float B;
+  int   n_lu;
+  int   n_ld;
+  int   n_ru;
+  int   n_rd;
+  int   k;
+  int   l;
+  int   prev_idx;
+
+  float en;
+  char *s;
+} nb_t;
+
+
+typedef struct position{
+  int i;
+  int j;
+} position;
+
+void barrier_estimate_2D(char *seq,char *s1, char *s2);
+void printBarrier(float B, float E, char *s);
+
+
 int main(int argc, char *argv[]) {
   
   struct RNAxplorer_args_info args_info;
@@ -80,7 +105,7 @@ int main(int argc, char *argv[]) {
     else if(!strcmp(m, "DB-MFE"))
       whatToDo = FIND_DISTANCE_BASED_MFE_PATH;
     else if(!strcmp(m, "BLUBB"))
-      whatToDo = KLKIN;
+      whatToDo = FIND_2D_BARRIER_ESTIMATE;
   }
 
   /* maximum number of simulations / iterations */
@@ -137,31 +162,8 @@ int main(int argc, char *argv[]) {
   return(EXIT_SUCCESS);
 }
 
-typedef struct nb_t{
 
-  float B;
-  int   n_lu;
-  int   n_ld;
-  int   n_ru;
-  int   n_rd;
-  int   k;
-  int   l;
-  int   prev_idx;
-
-  float en;
-  char *s;
-} nb_t;
-
-
-typedef struct position{
-  int i;
-  int j;
-} position;
-
-static void backtrack(nb_t *final, int dir);
-void klkin(char *seq,char *s1, char *s2, int maxKeep);
-
-void klkin(char *seq,char *s1, char *s2, int maxkeep){
+void barrier_estimate_2D(char *seq,char *s1, char *s2){
   short *pt1, *pt2;
   pt1 = make_pair_table(s1);
   pt2 = make_pair_table(s2);
@@ -248,39 +250,33 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
 
     if(k == -1) continue;
 
-    nodes[i].en = mfe_s[i].en;
-    nodes[i].k = k;
-    nodes[i].l = l;
-    nodes[i].n_lu = nodes[i].n_ld = nodes[i].n_ru = nodes[i].n_rd = -1;
-    nodes[i].B = (float)INF/100.;
+    nodes[i].en       = mfe_s[i].en;
+    nodes[i].s        = mfe_s[i].s;
+    nodes[i].k        = k;
+    nodes[i].l        = l;
+    nodes[i].n_lu     = nodes[i].n_ld = nodes[i].n_ru = nodes[i].n_rd = -1;
+    nodes[i].B        = (float)INF/100.;
     nodes[i].prev_idx = -1;
 
     /* set the four neighbor indices, if they are within range */
     if(k - 1 >= min_k){
       if((l - 1 >= min_l[k-1]) && (l - 1 <= max_l[k-1])){
         nodes[i].n_ld = mapping[k-1][l-1];
-//        printf("ld: %d %d [%d]\n", k-1, l-1, mapping[k-1][l-1]);
       }
       if((l + 1 <= max_l[k-1]) && (l + 1 >= min_l[k-1])){
         nodes[i].n_lu = mapping[k-1][l+1];
-//        printf("lu: %d %d [%d]\n", k-1, l+1, mapping[k-1][l+1]);
       }
     }
     if(k + 1 <= max_k){
     
       if((l - 1 >= min_l[k+1]) && (l - 1 <= max_l[k+1])){
         nodes[i].n_rd = mapping[k+1][l-1];
-//        printf("rd: %d %d [%d]\n", k+1, l-1, mapping[k+1][l-1]);
       }
       if((l + 1 <= max_l[k+1]) && (l + 1 >= min_l[k+1])){
         nodes[i].n_ru = mapping[k+1][l+1];
-//        printf("ru: %d %d [%d]\n", k+1, l+1, mapping[k+1][l+1]);
       }
     }
   }
-
-  printf("source: %d %f\n", map_source, min12);
-  printf("target: %d %f\n", map_target, min12);
 
   nb_t *vertices = nodes;
   int vertex_count = number_of_states;
@@ -288,6 +284,7 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
 
   vertices[map_source].B = 0.;
 
+  /* search for optimal path using Dijkstra algorithm */
   do{
     /* put node with smallest barrier to front */
     int min_idx = 0;
@@ -341,14 +338,12 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
       }
     }
 
-//    printf("%d %d -> %6.2f\n", vertices[0].k, vertices[0].l, vertices[0].B);
     /* now lets update the neighboring vertices */
     if(vertices[0].n_ld > 0){
       float tmp_b = MAX2(vertices[0].B, vertices[vertices[0].n_ld].en - min12);
       if(tmp_b < vertices[vertices[0].n_ld].B){
         vertices[vertices[0].n_ld].B = tmp_b;
         vertices[vertices[0].n_ld].prev_idx = shift;
-//        printf("u ld %d %d -> %6.2f\n", vertices[vertices[0].n_ld].k, vertices[vertices[0].n_ld].l, vertices[vertices[0].n_ld].B);
       }
     }
 
@@ -357,7 +352,6 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
       if(tmp_b < vertices[vertices[0].n_lu].B){
         vertices[vertices[0].n_lu].B = tmp_b;
         vertices[vertices[0].n_lu].prev_idx = shift;
-//        printf("u lu %d %d -> %6.2f\n", vertices[vertices[0].n_lu].k, vertices[vertices[0].n_lu].l, vertices[vertices[0].n_lu].B);
       }
     }
 
@@ -366,7 +360,6 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
       if(tmp_b < vertices[vertices[0].n_rd].B){
         vertices[vertices[0].n_rd].B = tmp_b;
         vertices[vertices[0].n_rd].prev_idx = shift;
-//        printf("u rd %d %d -> %6.2f\n", vertices[vertices[0].n_rd].k, vertices[vertices[0].n_rd].l, vertices[vertices[0].n_rd].B);
       }
     }
 
@@ -375,11 +368,9 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
       if(tmp_b < vertices[vertices[0].n_ru].B){
         vertices[vertices[0].n_ru].B = tmp_b;
         vertices[vertices[0].n_ru].prev_idx = shift;
-//        printf("u ru %d %d -> %6.2f\n", vertices[vertices[0].n_ru].k, vertices[vertices[0].n_ru].l, vertices[vertices[0].n_ru].B);
       }
     }
 
-//    printf("%d %d -> %6.2f\n", vertices[map_target].k, vertices[map_target].l, vertices[map_target].B);
     vertices++;
     vertex_count--;
     map_target--;
@@ -394,15 +385,36 @@ void klkin(char *seq,char *s1, char *s2, int maxkeep){
   } while(vertex_count > 0);
 
   /* now backtrack the optimal path */
-  printf("tracing back path (%d)\n", shift);
-  int curr = map_target + shift;
+  int curr        = map_target + shift;
+  float B         = nodes[curr].B;
+  float E_saddle  = nodes[curr].en;
+  char  *s_saddle  = nodes[curr].s;
+
   while(curr != 0){
+    if(nodes[curr].en > E_saddle){
+      E_saddle = nodes[curr].en;
+      s_saddle = nodes[curr].s;
+    }
     printf("%d %d -> %6.2f\n", nodes[curr].k, nodes[curr].l, nodes[curr].B);
     curr = nodes[curr].prev_idx;
   }
   printf("%d %d -> %6.2f\n", nodes[0].k, nodes[0].l, nodes[0].B);
 
+  printBarrier(B, E_saddle, s_saddle);
+
   destroy_TwoDfold_variables(twoD_vars);
+  free(nodes);
+  for(i=0;i<(maxD1+1);i++){
+    free(mapping[i]);
+  }
+  free(mapping);
+}
+
+void printBarrier(float B, float E, char *s){
+  if(s)
+    printf("Estimated energy barrier is %6.2f\nSaddle: %s (%6.2f)\n", B, s, E);
+  else
+    printf("Estimated energy barrier is %6.2f\n", B);
 }
 
 void GetBasinStructure(void){
@@ -491,16 +503,15 @@ void RNAxplorer(){
     }
 
     fprintf(stdout, "%s\n", seq);
-    if(whatToDo != TRANSITION_RATES){
-      fprintf(stdout, "%s %6.2f\n", s1, (circ) ? energy_of_circ_struct(seq,s1) : energy_of_struct(seq, s1));
-      fprintf(stdout, "%s %6.2f\n", s2, (circ) ? energy_of_circ_struct(seq,s2) : energy_of_struct(seq, s2));
-    }
+    fprintf(stdout, "%s %6.2f\n", s1, (circ) ? energy_of_circ_struct(seq,s1) : energy_of_struct(seq, s1));
+    fprintf(stdout, "%s %6.2f\n", s2, (circ) ? energy_of_circ_struct(seq,s2) : energy_of_struct(seq, s2));
+
     int numSteps;
     path_t *foldingPath, *Saddle, *r;
     curr_iteration = 0;
     switch(whatToDo){
-      case KLKIN:                         {
-                                            klkin(seq, s1, s2, maxKeep);
+      case FIND_2D_BARRIER_ESTIMATE:      {
+                                            barrier_estimate_2D(seq, s1, s2);
                                           }
                                           break;
 
@@ -527,10 +538,6 @@ void RNAxplorer(){
                                             free_path(foldingPath);
                                             foldingPath=NULL;
                                             fflush(stdout);
-                                          }
-                                          break;
-      case TRANSITION_RATES:              {
-                                            transition_rates((const char *)seq, (const char *)s1, (const char *)s2);
                                           }
                                           break;
       default:                            init_rand();
@@ -816,59 +823,6 @@ void print_structure(short* pt, int E){
   }
   fprintf(stderr," %4d\n", E);
   fflush(stderr);
-}
-
-typedef struct transition_rates_kl{
-  double p_nw;
-  double p_sw;
-  double p_ne;
-  double p_se;
-  double p_self;
-} transition_rates_kl;
-
-
-typedef struct kl_basin{
-  int     k;
-  int     l;
-  char    *s;
-  float   en;
-  double  pf;
-  double  diversity;
-} kl_basin;
-
-int sort_neighborhood_by_energy_asc(const void *p1, const void *p2){
-  if(((kl_basin *)p1)->en > ((kl_basin *)p2)->en) return 1;
-  else if(((kl_basin *)p1)->en < ((kl_basin *)p2)->en) return -1;
-  return 0;
-}
-
-
-#define KLINDX(a,b,maxa)   (((b) * (maxa+1)) + a)
-
-
-/**
-*** Calculate the transition rates between k,l-macrostates
-*** This function creates a transition rate matrix and a fake
-*** barrier output to use with treekin
-***
-*** rates are calculated as follows
-*** /f[
-*** k_{\alpha \rightarrow \beta} = \frac{1}{N}\sum_{i \in \alpha}^{N} \sum_{j \in \beta \cap \mathcal{N}(i)}\\
-*** /f]
-*** as we only sample the microstates we have to take care about the detailed balanced condition:
-*** /f[
-*** k_{\alpha \rightarrow \beta} \cdot \pi_{\alpha} = k_{\beta \rightarrow \alpha} \cdot \pi_{\beta}
-*** /f]
-*** we do this by updating k_{\beta \rightarrow \alpha} in each step we generate the neighboring structure
-*** /f$j \in \beta /f$ with /f$ j \in \mathcal{N}(i) /f$
-*** then for each microrate /f$k_{i \rightarrow j} /f$ the reverse microrate /f$k_{j \rightarrow i} \cdot \frac{\pi_{j | \beta}{i | \alpha} /f$
-*** is added to /f$k_{j \rightarrow i} /f$
-*** at the end of all rate calculations, the rate /f$q_{i,i} = -\sum_{i \neq j} q_{i,j} /f$ is calculated
-***
-***
-**/
-void transition_rates(const char *s, const char *s1, const char *s2){
-  return;
 }
 
 /* this comes from findpath.c ... */
