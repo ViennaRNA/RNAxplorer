@@ -38,7 +38,7 @@ void init_meshpoint_list(meshpoint_list *list);
 
 void init_structure_queue(structure_queue *queue);
 void clear_structure_queue(structure_queue *queue);
-int insert_structure_in_queue(structure_queue *queue, char *s, float en, neighbor *neighbor_list, int neighbor_cnt, float bestNeighborEn, int bestNeighborIdx, int maxStructs);
+void insert_structure_in_queue(structure_queue *queue, char *s, float en, neighbor *neighbor_list, int neighbor_cnt, float bestNeighborEn, int bestNeighborIdx, int maxStructs);
 meshpoint *is_in_queue(char *s, structure_queue *queue);
 
 int sort_neighbors_by_energy_asc(const void *p1, const void *p2);

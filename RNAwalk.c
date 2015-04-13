@@ -1,13 +1,14 @@
 
 /* this must be included first due to the dependency of pair_mat.h from fold_vars.h */
+
+
+#include <ViennaRNA/data_structures.h>
+#include <ViennaRNA/fold.h>
+#include <ViennaRNA/utils.h>
+#include <ViennaRNA/structure_utils.h>
+#include <ViennaRNA/energy_const.h>
+
 #include "RNAwalk.h"
-
-
-#include "fold.h"
-#include "utils.h"
-#include "energy_const.h"
-#include "pair_mat.h"
-
 #include "meshpoint.h"
 
 
@@ -22,37 +23,41 @@ int         maxRest = 100;
 
 int         backWalkPenalty = 0;
 
-static short *S = NULL, *S1 = NULL;
+static vrna_fold_compound *vc = NULL;
 
-void initRNAWalk(char *seq, int circ){
-  int i;
-  init_rand();
-  update_fold_params();
-  make_pair_matrix();
+void
+initRNAWalk(char *seq,
+            int circ){
 
-  /* nummerically encode sequence */
-  S = (short *) space(sizeof(short)*(strlen(seq)+2));
-  S1 = (short *) space(sizeof(short)*(strlen(seq)+2));
-  S[0] = S1[0] = strlen(seq);
-  for (i=0; i< strlen(seq); i++) {
-    S[i+1] = encode_char(seq[i]);
-    S1[i+1] = alias[S[i+1]];
-  }
-  if(circ){
-    S1[0] = S1[S[0]];
-    S1[S[0]+1] = S1[1];
-  }
+  vrna_md_t md;
+  vrna_md_set_default(&md);
+  md.circ = circ;
+
+  vc = vrna_get_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_EVAL_ONLY);
+
+  vrna_init_rand();
+
 }
 
-void freeRNAWalkArrays(void){
-  if(S) free(S);
-  if(S1) free(S1);
+void
+freeRNAWalkArrays(void){
+
+  vrna_free_fold_compound(vc);
+  vc = NULL;
 }
 
-char *structureWalk(char *seq, char *structure, int method, int circ){
+char *
+structureWalk(char *seq,
+              char *structure,
+              int method,
+              int circ){
+
+
+  vrna_md_t *md;
+  short *S1;
+
   char *minStruct = strdup(structure);
-  float curr_en = (circ) ? energy_of_circ_struct(seq,structure) : energy_of_struct(seq, structure);
-  short *curr_pt = make_pair_table(structure);
+  float curr_en   = vrna_eval_structure(vc, structure);
 
   /* generate all neighbors that have 1 bp more */
   int i, j;
@@ -60,20 +65,24 @@ char *structureWalk(char *seq, char *structure, int method, int circ){
   float bottom_en = min_e;
   int curr_loop;
   FLT_OR_DBL tcurr = tstart;
+
+  md = &(vc->params->model_details);
+  S1 = vc->sequence_encoding;
+
   structure_queue *lastStructures = NULL;
   if(rememberStructures > 0){
-    lastStructures = (structure_queue *)space(sizeof(structure_queue));
+    lastStructures = (structure_queue *)vrna_alloc(sizeof(structure_queue));
     init_structure_queue(lastStructures);  
   }
   while(1){
-    short *curr_pt = make_pair_table(minStruct);
-    int *loopidx = pair_table_to_loop_index(curr_pt);
+    short *curr_pt  = vrna_pt_get(minStruct);
+    int *loopidx    = vrna_get_loop_index(curr_pt);
     int neighbor_cnt = 0;
     neighbor *neighbors = NULL;
     
     float lowestNeighborEn = INF;
     int lowestNeighborIdx = 0;
-    int min_i = 0, min_j = 0;
+    int min_i = 0;
     min_e = bottom_en;
     meshpoint *state = NULL;
     if((state = is_in_queue(minStruct, lastStructures)) != NULL){
@@ -87,14 +96,14 @@ char *structureWalk(char *seq, char *structure, int method, int circ){
         curr_loop = loopidx[i];
         if(!curr_pt[i])
           for(j=i+TURN+1; j <= curr_pt[0]; j++){
-            if(!curr_pt[j] && (curr_loop == loopidx[j]) && pair[S1[i]][S1[j]]){
+            if(!curr_pt[j] && (curr_loop == loopidx[j]) && md->pair[S1[i]][S1[j]]){
               char *s = strdup(minStruct);
               s[i-1] = '(';
               s[j-1] = ')';
-              neighbors = (neighbor *)realloc(neighbors, ++neighbor_cnt*sizeof(neighbor));
+              neighbors = (neighbor *)vrna_realloc(neighbors, ++neighbor_cnt*sizeof(neighbor));
               neighbors[neighbor_cnt-1].i = i;
               neighbors[neighbor_cnt-1].j = j;
-              neighbors[neighbor_cnt-1].en = (circ) ? energy_of_circ_struct(seq, s) : energy_of_struct(seq, s);
+              neighbors[neighbor_cnt-1].en = vrna_eval_structure(vc, s);
               if(lowestNeighborEn > neighbors[neighbor_cnt-1].en){
                 lowestNeighborEn = neighbors[neighbor_cnt-1].en;
                 lowestNeighborIdx = neighbor_cnt-1;
@@ -108,10 +117,10 @@ char *structureWalk(char *seq, char *structure, int method, int circ){
         if(i<curr_pt[i]){
           char *s = strdup(minStruct);
           s[i-1] = s[curr_pt[i]-1] = '.';
-          neighbors = (neighbor *)realloc(neighbors, ++neighbor_cnt*sizeof(neighbor));
+          neighbors = (neighbor *)vrna_realloc(neighbors, ++neighbor_cnt*sizeof(neighbor));
           neighbors[neighbor_cnt-1].i = -i;
           neighbors[neighbor_cnt-1].j = -curr_pt[i];
-          neighbors[neighbor_cnt-1].en = (circ) ? energy_of_circ_struct(seq, s) : energy_of_struct(seq, s);
+          neighbors[neighbor_cnt-1].en = vrna_eval_structure(vc, s);
           if(lowestNeighborEn > neighbors[neighbor_cnt-1].en){
             lowestNeighborEn = neighbors[neighbor_cnt-1].en;
             lowestNeighborIdx = neighbor_cnt-1;
@@ -176,7 +185,7 @@ char *structureWalk(char *seq, char *structure, int method, int circ){
                                 s[neighbors[0].j-1] = ')';
                               }
                               float deltaG = bottom_en-neighbors[0].en + ((is_in_queue(s, lastStructures) != NULL) ? penalty : 0.);
-                              float *pathProbs = (float *)space(neighbor_cnt*sizeof(float));
+                              float *pathProbs = (float *)vrna_alloc(neighbor_cnt*sizeof(float));
                               pathProbs[0] = (MIN2(1., exp(deltaG/kT)))/neighbor_cnt;
                               free(s);
                               int i;
@@ -193,12 +202,12 @@ char *structureWalk(char *seq, char *structure, int method, int circ){
                                 free(s);
                               }
                               lambda = pathProbs[neighbor_cnt-1];
-                              float rnd = urn()*lambda;
+                              float rnd = vrna_urn() * lambda;
                               int found_path = getPosition(pathProbs, rnd, neighbor_cnt-1);
                               
                               if(min_i == 0){
                                 float prob = exp((bottom_en-neighbors[0].en)/kT);
-                                if(urn() > prob){
+                                if(vrna_urn() > prob){
                                   ThisIsTheEnd = 1;
                                   bottom_en = min_e;
                                   break;
@@ -265,42 +274,5 @@ int getPosition(float *array, float value, int max_idx){
     return getPosition(array+center_idx+1, value, max_idx-center_idx-1) + center_idx+1;
   else
     return getPosition(array, value, center_idx);
-}
-
-/* this comes from findpath.c ... */
-static int *pair_table_to_loop_index (short *pt)
-{
-  /* number each position by which loop it belongs to (positions structure
-     at 1) */
-  int i,hx,l,nl;
-  int length;
-  int *stack = NULL;
-  int *loop = NULL;
-
-  length = pt[0];
-  stack  = (int *) space(sizeof(int)*(length+1));
-  loop   = (int *) space(sizeof(int)*(length+2));
-  hx=l=nl=0;
-
-  for (i=1; i<=length; i++) {
-    if ((pt[i] != 0) && (i < pt[i])) { /* ( */
-      nl++; l=nl;
-      stack[hx++]=i;
-    }
-    loop[i]=l;
-
-    if ((pt[i] != 0) && (i > pt[i])) { /* ) */
-      --hx;
-      if (hx>0)
-        l = loop[stack[hx-1]];  /* index of enclosing loop   */
-      else l=0;                 /* external loop has index 0 */
-      if (hx<0) {
-        nrerror("unbalanced brackets in make_pair_table");
-      }
-    }
-  }
-  loop[0] = nl;
-  free(stack);
-  return (loop);
 }
 

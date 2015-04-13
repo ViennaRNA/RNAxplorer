@@ -3,22 +3,21 @@
 #include <string.h>
 #include <math.h>
 #include <unistd.h>
-#include "fold_vars.h"
-#include "fold.h"
-#include "part_func.h"
-#include "utils.h"
-#include "pair_mat.h"
-#include "energy_const.h"
 
-#include "findpath.h"
-#include "meshpoint.h"
-#include "RNAwalk.h"
-#include "2Dfold.h"
-#include "2Dpfold.h"
-#include "RNAxplorer.h"
-#include "mm.h"
+#include <ViennaRNA/fold_vars.h>
+#include <ViennaRNA/fold.h>
+#include <ViennaRNA/part_func.h>
+#include <ViennaRNA/utils.h>
+#include <ViennaRNA/energy_const.h>
+#include <ViennaRNA/findpath.h>
+#include <ViennaRNA/2Dfold.h>
+#include <ViennaRNA/2Dpfold.h>
+#include <ViennaRNA/mm.h>
 
 #include "RNAxplorer_cmdl.h"
+#include "RNAwalk.h"
+#include "meshpoint.h"
+#include "RNAxplorer.h"
 
 #ifdef WITH_DMALLOC
 #include "dmalloc.h"
@@ -32,14 +31,6 @@
 int         whatToDo = FIND_BEST_FOLDINGPATH;
 
 static char *seq;
-static short *S, *S1;
-extern int   st_back;
-
-static FLT_OR_DBL *qb_p, *qm_p, *q1k_p, *qln_p, qo_p, *qm1_p, qio_p, qho_p, qmo_p, *qm2_p;
-static short *S_p, *S1_p;
-static char *ptype_p;
-
-
 int maxKeep = 100;
 int maxIterations = 1;
 int maxStorage = 10;
@@ -165,10 +156,9 @@ int main(int argc, char *argv[]) {
 
 void barrier_estimate_2D(char *seq,char *s1, char *s2){
   short *pt1, *pt2;
-  pt1 = make_pair_table(s1);
-  pt2 = make_pair_table(s2);
-  int i, j, k, n = pt1[0];
-  int length = strlen(seq);
+  pt1 = vrna_pt_get(s1);
+  pt2 = vrna_pt_get(s2);
+  int i, n = pt1[0];
   /* compute symmetrical difference between both structures */
   int a = 0;
   int b = 0;
@@ -182,41 +172,39 @@ void barrier_estimate_2D(char *seq,char *s1, char *s2){
       if(i < pt2[i]) b++;
     }  
   }
-  int bp_dist = a+b;
   printf("%d:%d ... %d:%d\n", a+c, a+maximum_distance1, b+c, b+maximum_distance2);
   int maxD1 = (a+c < a+maximum_distance1) ? a+maximum_distance1 : a+c;
   int maxD2 = (b+c < b+maximum_distance2) ? b+maximum_distance2 : a+c;
   
-  
-  TwoDfold_vars *twoD_vars = get_TwoDfold_variables(seq, s1, s2, circ);
-  TwoDfold_solution *mfe_s = TwoDfoldList(twoD_vars, maxD1, maxD2);
-  int d1,d2;
-  float mmfe = INF;
-  nb_t **neighbors = (nb_t **)space((maxD1+1) * sizeof(nb_t *));
-  int number_of_states = 0;
+  vrna_md_t md;
+  vrna_md_set_default(&md);
+  md.circ     = circ;
+  md.uniq_ML  = 1;
 
-  int real_d1, real_d2;
-  real_d1 = maxD1;
-  real_d2 = maxD2;
+  vrna_fold_compound *vc = vrna_get_fold_compound_2D(seq, s1, s2, &md, VRNA_OPTION_MFE | VRNA_OPTION_DIST_CLASS);
+  vrna_sol_TwoD_t *mfe_s = vrna_TwoD_fold(vc, maxD1, maxD2);
+
+  nb_t **neighbors = (nb_t **)vrna_alloc((maxD1+1) * sizeof(nb_t *));
+  int number_of_states = 0;
 
   /* make a lucky guess for the real max distancies */
   for(i=0;i<(maxD1+1);i++){
-    neighbors[i] = (nb_t *)space((maxD2+1) * sizeof(nb_t));
+    neighbors[i] = (nb_t *)vrna_alloc((maxD2+1) * sizeof(nb_t));
   }
   float mfe_s1, mfe_s2;
   int map_s1, map_s2;
 
   int max_k = 0;
   int min_k = INF;
-  int *max_l = (int *)space(sizeof(int) * (maxD1 + 1));
-  int *min_l = (int *)space(sizeof(int) * (maxD1 + 1));
+  int *max_l = (int *)vrna_alloc(sizeof(int) * (maxD1 + 1));
+  int *min_l = (int *)vrna_alloc(sizeof(int) * (maxD1 + 1));
   for(i=0;i<(maxD1+1);i++){
     max_l[i] = 0;
     min_l[i] = INF;
   }
-  int **mapping = (int **)space(sizeof(int *) * (maxD1 + 1));
+  int **mapping = (int **)vrna_alloc(sizeof(int *) * (maxD1 + 1));
   for(i=0;i<(maxD1+1);i++){
-    mapping[i] = (int *)space(sizeof(int) * (maxD2 + 1));
+    mapping[i] = (int *)vrna_alloc(sizeof(int) * (maxD2 + 1));
   }
 
   /* get some statistics of the 2D fold output */
@@ -239,7 +227,7 @@ void barrier_estimate_2D(char *seq,char *s1, char *s2){
   }
 
   /* begin actual graph node construction */
-  nb_t *nodes = (nb_t *)space(sizeof(nb_t) * (number_of_states + 1));
+  nb_t *nodes = (nb_t *)vrna_alloc(sizeof(nb_t) * (number_of_states + 1));
   int map_source = (mfe_s1 < mfe_s2) ? map_s1 : map_s2;
   int map_target = (mfe_s2 <= mfe_s1) ? map_s1 : map_s2;
   float min12 = MIN2(mfe_s1, mfe_s2);
@@ -288,7 +276,6 @@ void barrier_estimate_2D(char *seq,char *s1, char *s2){
   do{
     /* put node with smallest barrier to front */
     int min_idx = 0;
-    int tmp_idx = 0;
     int min_b   = vertices[0].B;
     for(i = 1; i < vertex_count; i++){
       if(vertices[i].B < min_b){
@@ -402,7 +389,7 @@ void barrier_estimate_2D(char *seq,char *s1, char *s2){
 
   printBarrier(B, E_saddle, s_saddle);
 
-  destroy_TwoDfold_variables(twoD_vars);
+  vrna_free_fold_compound(vc);
   free(nodes);
   for(i=0;i<(maxD1+1);i++){
     free(mapping[i]);
@@ -428,7 +415,7 @@ void GetBasinStructure(void){
 
 void RNAxplorer(){
   char *s1 = NULL, *s2=NULL, *line, *start_struct=NULL, *target_struct=NULL;
-  int i, istty, n;
+  int istty, n;
 
   istty = isatty(fileno(stdout))&&isatty(fileno(stdin));
   do {
@@ -448,65 +435,46 @@ void RNAxplorer(){
 
     if ((line ==NULL) || (strcmp(line, "@") == 0)) break;
 
-    seq = (char *) space(strlen(line)+1);
+    seq = (char *) vrna_alloc(strlen(line)+1);
     (void) sscanf(line,"%s",seq);
     free(line);
     n = (int) strlen(seq);
 
-    s1 = (char *) space((unsigned) n+1);
-    s2 = (char *) space((unsigned) n+1);
+    s1 = (char *) vrna_alloc((unsigned) n+1);
+    s2 = (char *) vrna_alloc((unsigned) n+1);
+
     if ((start_struct = get_line(stdin))==NULL)
-      nrerror("1st structure missing\n");
+      vrna_message_error("1st structure missing\n");
     else if(strlen(start_struct) != n)
-      nrerror("sequence and 1st structure have unequal length");
+      vrna_message_error("sequence and 1st structure have unequal length");
     strncpy(s2, start_struct, n);
 
     if ((target_struct = get_line(stdin))==NULL)
-      nrerror("2nd structure missing\n");
+      vrna_message_error("2nd structure missing\n");
     else if(strlen(target_struct) != n)
-      nrerror("sequence and 2nd et structure have unequal length");
+      vrna_message_error("sequence and 2nd et structure have unequal length");
       strncpy(s1, target_struct, n);
     if (istty)
       printf("length = %d\n", n);
 
-    update_fold_params();
-    make_pair_matrix();
+    /* get fold compound for MFE and PF computation */
+    double mfe;
+    vrna_md_t md;
+    vrna_md_set_default(&md);
+    /* set user-defined model details */
+    md.circ     = circ;
+    md.uniq_ML  = 1; /* in case we need M1 arrays */
 
-    /* nummerically encode sequence */
-    S = (short *) space(sizeof(short)*(strlen(seq)+2));
-    S1 = (short *) space(sizeof(short)*(strlen(seq)+2));
-    S[0] = S1[0] = strlen(seq);
-    for (i=0; i< strlen(seq); i++) {
-      S[i+1] = encode_char(seq[i]);
-      S1[i+1] = alias[S[i+1]];
-    }
-    if(circ){
-      S1[0] = S1[S[0]];
-      S1[S[0]+1] = S1[1];
-    }
-    do_backtrack = 1;
-    dangles = 2;
-    double mfe, kT;
-    char *ss;
-    /* simulate stochastic backtracking in case we need the qm1 array from pf_fold */
-    st_back=1;
-    ss = (char *) space(strlen(seq)+1);
-    mfe = (circ) ? circfold(seq,ss) : fold(seq, ss);
-    kT = (temperature+K0)*GASCONST/1000.; /* in Kcal */
-    pf_scale = exp(-(1.03*mfe)/kT/n);
-    (circ) ? (void) pf_circ_fold(seq,ss) : (void) pf_fold(seq, ss);
-    free(ss);
-    if(!circ){
-      if(!get_pf_arrays(&S_p, &S1_p, &ptype_p, &qb_p, &qm_p, &q1k_p, &qln_p)){
-        nrerror("wtf");
-      }
-    }
+    vrna_fold_compound *vc = vrna_get_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_PF);
+
+    mfe = vrna_fold(vc, NULL);
+    vrna_rescale_pf_params(vc, &mfe);
+    (void)vrna_pf_fold(vc, NULL);
 
     fprintf(stdout, "%s\n", seq);
-    fprintf(stdout, "%s %6.2f\n", s1, (circ) ? energy_of_circ_struct(seq,s1) : energy_of_struct(seq, s1));
-    fprintf(stdout, "%s %6.2f\n", s2, (circ) ? energy_of_circ_struct(seq,s2) : energy_of_struct(seq, s2));
+    fprintf(stdout, "%s %6.2f\n", s1, vrna_eval_structure(vc, s1));
+    fprintf(stdout, "%s %6.2f\n", s2, vrna_eval_structure(vc, s2));
 
-    int numSteps;
     path_t *foldingPath, *Saddle, *r;
     curr_iteration = 0;
     switch(whatToDo){
@@ -516,7 +484,6 @@ void RNAxplorer(){
                                           break;
 
       case FIND_DISTANCE_BASED_MFE_PATH:  {
-                                            int steps, i, j;
                                             foldingPath = get_path(seq, s1, s2, maxKeep/*, &numSteps, circ*/);
                                             Saddle = getSaddlePoint(foldingPath/*, numSteps*/);
 
@@ -540,19 +507,22 @@ void RNAxplorer(){
                                             fflush(stdout);
                                           }
                                           break;
-      default:                            init_rand();
+      default:                            vrna_init_rand();
                                           levelSaddlePoint(s1, s2);
                                           break;
     }
   
-    free(seq); free(s1); free(s2); free(S); free(S1);free(start_struct);free(target_struct);
-  }while(1);
+    free(seq);
+    free(s1);
+    free(s2);
+    free(start_struct);
+    free(target_struct);
+  } while(1);
 }
 
 void levelSaddlePoint(char *s1, char *s2){
 
   int iterator = maxIterations;
-  int steps;
   path_t *foldingPath = get_path(seq, s1, s2, maxKeep/*, &steps, circ*/);
   path_t *Saddle = getSaddlePoint(foldingPath/*, steps*/);
 
@@ -564,13 +534,7 @@ void levelSaddlePoint(char *s1, char *s2){
   }
   path_t *newLeftSaddle, *newRightSaddle;
   path_t *path_left, *path_right;
-  int steps1, steps2;
   float newSaddleEn = oldSaddleEn;
-  char *intermediates[10];
-  for(d=0; d<10;d++)
-    intermediates[d] = (char *)space((strlen(s1)+1)*sizeof(char));
-  float *intermediateEn = (float *)space(sizeof(float));
-  int insertedIntermediates = 0;
   meshpoint_list bestMeshPoints;
   init_meshpoint_list(&bestMeshPoints);
   fprintf(stdout, "\nsearching for alternative paths...");
@@ -619,8 +583,7 @@ void levelSaddlePoint(char *s1, char *s2){
 path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration){
 
 
-  int iterator = maxIterations;
-  int steps, i, j;
+  int i;
   path_t *foldingPath = get_path(seq, s1, s2, maxKeep/*, &steps, circ*/);
   path_t *Saddle = getSaddlePoint(foldingPath/*, steps*/);
 
@@ -636,11 +599,11 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
 
   /* begin the nice pathfinding routine */
   short *pt1, *pt2;
-  pt1 = make_pair_table(s1);
-  pt2 = make_pair_table(s2);
+  pt1 = vrna_pt_get(s1);
+  pt2 = vrna_pt_get(s2);
   int n = pt1[0];
   
-  short *intersect = (short *) space(sizeof(short)*(n+2));
+  short *intersect = (short *) vrna_alloc(sizeof(short)*(n+2));
   intersect[0] = n;
   /* compute symmetrical difference between both structures */
   int a = 0;
@@ -660,9 +623,15 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
  
   /* first collect all meshpoints where we get an initially better path */
   if(a+b > 1){
-    TwoDfold_vars *twoD_vars = get_TwoDfold_variables(seq, s1, s2, circ);
-    TwoDfold_solution *mfe_s = TwoDfoldList(twoD_vars, a+maximum_distance1, b+maximum_distance2);
-    destroy_TwoDfold_variables(twoD_vars);
+    vrna_md_t md;
+    vrna_md_set_default(&md);
+    md.circ = circ;
+    md.uniq_ML  = 1;
+
+    vrna_fold_compound *vc = vrna_get_fold_compound_2D(seq, s1, s2, &md, VRNA_OPTION_MFE | VRNA_OPTION_DIST_CLASS);
+    vrna_sol_TwoD_t *mfe_s = vrna_TwoD_fold(vc, a+maximum_distance1, b+maximum_distance2);
+
+    vrna_free_fold_compound(vc);
 
     for(i=0;  mfe_s[i].k != INF; i++){
       if(mfe_s[i].k == -1){
@@ -711,7 +680,7 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
     */
     
     if(iteration < maxIterations){
-      meshpoint *cur, *next;
+      meshpoint *cur;
       int t_steps1, t_steps2;
       path_t *t_path_left = NULL, *t_path_right =  NULL;
       path_left = NULL;
@@ -758,7 +727,7 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
     clear_meshpoints(&bestMeshPoints);
     for(steps1=0; path_left[steps1].s; steps1++);
     for(steps2=0; path_right[steps2].s; steps2++);
-    newPath = (path_t *)space((steps1+steps2) * sizeof(path_t));
+    newPath = (path_t *)vrna_alloc((steps1+steps2) * sizeof(path_t));
     memcpy((path_t *)newPath, (path_t *)path_left, steps1*sizeof(path_t));
     memcpy(((path_t *)newPath)+(steps1), ((path_t *)path_right) + 1, (steps2-1)*sizeof(path_t));
     if(steps2>0){
@@ -795,15 +764,6 @@ path_t *getSaddlePoint(path_t *foldingPath){
 }
 
 
-char *pair_table_to_dotbracket(short *pt){
-  char *dotbracket = (char *)space((pt[0]+1)*sizeof(char));
-  int i;
-  for(i=1; i<=pt[0]; i++)
-    dotbracket[i-1] = (pt[i]) ? ((i < pt[i]) ? '(' : ')') : '.';
-  dotbracket[i-1] = '\0';
-  return dotbracket;
-}
-
 /* taken from ivo's "neighbor.c" */
 void print_structure(short* pt, int E){
   int i;
@@ -824,42 +784,3 @@ void print_structure(short* pt, int E){
   fprintf(stderr," %4d\n", E);
   fflush(stderr);
 }
-
-/* this comes from findpath.c ... */
-static int *pair_table_to_loop_index (short *pt)
-{
-  /* number each position by which loop it belongs to (positions structure
-     at 1) */
-  int i,hx,l,nl;
-  int length;
-  int *stack = NULL;
-  int *loop = NULL;
-
-  length = pt[0];
-  stack  = (int *) space(sizeof(int)*(length+1));
-  loop   = (int *) space(sizeof(int)*(length+2));
-  hx=l=nl=0;
-
-  for (i=1; i<=length; i++) {
-    if ((pt[i] != 0) && (i < pt[i])) { /* ( */
-      nl++; l=nl;
-      stack[hx++]=i;
-    }
-    loop[i]=l;
-
-    if ((pt[i] != 0) && (i > pt[i])) { /* ) */
-      --hx;
-      if (hx>0)
-        l = loop[stack[hx-1]];  /* index of enclosing loop   */
-      else l=0;                 /* external loop has index 0 */
-      if (hx<0) {
-        nrerror("unbalanced brackets in make_pair_table");
-      }
-    }
-  }
-  loop[0] = nl;
-  free(stack);
-  return (loop);
-}
-
-

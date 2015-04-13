@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include "fold_vars.h"
+#include <ViennaRNA/fold_vars.h>
 
 #define DEBUG
 //#define _DEBUG_LOOPIDX
@@ -49,10 +49,5 @@ char *structureWalk(char *seq, char *structure, int method, int circ);
 * that exceeds a given value
 */
 int getPosition(float *array, float value, int array_size);
-
-/* this function is "stolen" from the pathfinder.c
-*  of Ivo and Xtof
-*/
-static int *pair_table_to_loop_index (short *pt);
 
 #endif

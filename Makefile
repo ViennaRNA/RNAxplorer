@@ -1,6 +1,6 @@
 CC = gcc
-VRNA_INC = $(shell pkg-config --cflags "RNAlib2 >= 2.0")
-VRNA_LIB = $(shell pkg-config --libs "RNAlib2 >= 2.0")
+VRNA_INC = $(shell pkg-config --cflags "RNAlib2 >= 2.2")
+VRNA_LIB = $(shell pkg-config --libs "RNAlib2 >= 2.2")
 
 INCLUDES = $(VRNA_INC) -DLOOP_EN
 LIBS    = ${VRNA_LIB} -lm

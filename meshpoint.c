@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "utils.h"
+#include <ViennaRNA/utils.h>
 #include "meshpoint.h"
 
 int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_list *list, int maxEntries, int with_struct_en){
@@ -22,7 +22,7 @@ int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_
             /* so we allocate memory for our new meshpoint and connect it into the list */
             else{
               meshpoint *tmp = cur;
-              meshpoint *new = (meshpoint *)space(sizeof(meshpoint));
+              meshpoint *new = (meshpoint *)vrna_alloc(sizeof(meshpoint));
               if(prev == NULL){
                 list->first = new;
                 cur = list->first;
@@ -63,7 +63,7 @@ int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_
         else{
           /* else we just insert our new meshpoint right before the next worse meshpoint */
           meshpoint *tmp = cur;
-          meshpoint *new = (meshpoint *)space(sizeof(meshpoint));
+          meshpoint *new = (meshpoint *)vrna_alloc(sizeof(meshpoint));
           /* if we are at the beginning of our list, we have to do smth. different... */
           if(prev == NULL){
             list->first = new;
@@ -112,7 +112,7 @@ int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_
       else{
         /* else we just insert our new meshpoint right before the next worse meshpoint */
         meshpoint *tmp = cur;
-        meshpoint *new = (meshpoint *)space(sizeof(meshpoint));
+        meshpoint *new = (meshpoint *)vrna_alloc(sizeof(meshpoint));
         /* if we are at the beginning of our list, we have to do smth. different... */
         if(prev == NULL){
           list->first = new;
@@ -134,7 +134,7 @@ int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_
         /* this is the very first element in our list, so we have to do the memory
         *  allocating stuff now, as it was not done in the loop above
         */
-        list->first = (meshpoint *)space(sizeof(meshpoint));
+        list->first = (meshpoint *)vrna_alloc(sizeof(meshpoint));
         cur = list->first;
         cur->s = strdup(s);
         cur->en = en;
@@ -143,7 +143,7 @@ int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_
       }
       else{
         /* we insert our new meshpoint at the end of the list */
-        prev->next = (meshpoint *)space(sizeof(meshpoint));
+        prev->next = (meshpoint *)vrna_alloc(sizeof(meshpoint));
         cur = prev->next;
         cur->s = strdup(s);
         cur->en = en;
@@ -197,7 +197,6 @@ void init_structure_queue(structure_queue *queue){
 
 void clear_structure_queue(structure_queue *queue){
   meshpoint *cur = NULL;
-  meshpoint *prev = NULL;
   for(cur = queue->first; cur != NULL;cur=queue->first){
     queue->first = cur->next;
     if(is_in_queue(cur->s, queue) == NULL) free(cur->neighbor_list);
@@ -209,9 +208,9 @@ void clear_structure_queue(structure_queue *queue){
   queue->last = NULL;
 }
 
-int insert_structure_in_queue(structure_queue *queue, char *s, float en, neighbor *neighbor_list, int neighbor_cnt, float bestNeighborEn, int bestNeighborIdx, int maxStructs){
+void insert_structure_in_queue(structure_queue *queue, char *s, float en, neighbor *neighbor_list, int neighbor_cnt, float bestNeighborEn, int bestNeighborIdx, int maxStructs){
   //fprintf(stdout, "inserting %s\n", s);
-  meshpoint *new = (meshpoint *)space(sizeof(meshpoint));
+  meshpoint *new = (meshpoint *)vrna_alloc(sizeof(meshpoint));
   new->s = strdup(s);
   new->en = en;
   new->neighbor_cnt = neighbor_cnt;
