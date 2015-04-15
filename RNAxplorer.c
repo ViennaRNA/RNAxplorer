@@ -515,13 +515,14 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
                                   break;
   }
 
-  return x * d1 + y * d2;
+  return (x * d1 + y * d2)*100;
 }
 
 FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, char decomp, void *data){
 
   double kT                   = ((kl_soft_constraints *)data)->kT;
-  return exp(-kl_pseudo_energy(i,j,k,l,decomp,data)/kT);
+//  printf("adding %g\n", kl_pseudo_energy(i,j,k,l,decomp,data));
+  return exp((-10.*(double)kl_pseudo_energy(i,j,k,l,decomp,data))/kT);
 }
 
 typedef struct {
@@ -603,18 +604,33 @@ estimate_landscape( vrna_fold_compound *vc,
   exp_ref2  = exp(-e_ref2/kT);
 
   if(mmfe == e_ref1){
-    distortion_y = 0;
-    distortion_x = (e_ref1 - e_ref2) / bp_dist + distortion_y;
-  } else if(mmfe == e_ref2){
+/*
     distortion_x = 0;
     distortion_y = distortion_x - (e_ref1 - e_ref2) / bp_dist;
+    we use the Wolfram alpha solution below ;)
+*/
+    distortion_x = 0;
+    distortion_y = (distortion_x * bp_dist_mfe_ref2 - mmfe + e_ref2) / bp_dist_mfe_ref2;
+  } else if(mmfe == e_ref2){
+/*
+    distortion_y = 0;
+    distortion_x = (e_ref1 - e_ref2) / bp_dist + distortion_y;
+    we use the Wolfram alpha solution below ;)
+*/
+    distortion_y = 0;
+    distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - mmfe) / bp_dist_mfe_ref1;
   } else {
+/*
     distortion_x = ((e_ref1 * bp_dist_mfe_ref2) / (bp_dist * bp_dist_mfe_ref1)) - (mmfe / bp_dist_mfe_ref1);
     distortion_y = ((e_ref2 * bp_dist_mfe_ref1) / (bp_dist * bp_dist_mfe_ref2)) - (mmfe / bp_dist_mfe_ref2);
+    we use the Wolfram alpha solution below ;)
+*/
+    double nenner = bp_dist * (bp_dist_mfe_ref1 + bp_dist_mfe_ref2 - bp_dist);
+    distortion_x = ( bp_dist_mfe_ref2 * e_ref1 - bp_dist_mfe_ref2 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref2) / nenner;
+    distortion_y = (-bp_dist_mfe_ref1 * e_ref1 + bp_dist_mfe_ref1 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref1) / nenner;
   }
 
-  printf("s1: %s\ns2: %s\n", s1, s2);
-  printf("maxIterations: %d\ne_1 = %6.2f, e_2 = %6.2f\nbp_dist = %d (%d) (%d)\nd_x = %1.10f, d_y = %1.10f\n", maxIterations, e_ref1, e_ref2, bp_dist, bp_dist_mfe_ref1, bp_dist_mfe_ref2, distortion_x, distortion_y);
+  printf("d_x = %1.10f, d_y = %1.10f\n", distortion_x, distortion_y);
 
   /* create the 2D landscape data structure */
   gridpointT **landscape;
@@ -634,7 +650,7 @@ estimate_landscape( vrna_fold_compound *vc,
   vrna_rescale_pf_params(vc, &rescale);
 
   /* apply distortion soft constraints */
-  vrna_sc_remove(vc);
+  vrna_sc_init(vc);
   kl_soft_constraints *data = kl_init_datastructures( vc,
                                                       (const char *)s1,
                                                       (const char *)s2,
@@ -644,6 +660,7 @@ estimate_landscape( vrna_fold_compound *vc,
   vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy,(void *)data);
 
   /* compute distorted partition function */
+
   (void)vrna_pf_fold(vc, NULL);
 
   /* prefill the landscape with 1000 sample structures according to current distortion values */
