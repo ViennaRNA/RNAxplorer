@@ -1,6 +1,8 @@
 CC = gcc
 VRNA_INC = $(shell pkg-config --cflags "RNAlib2 >= 2.2")
 VRNA_LIB = $(shell pkg-config --libs "RNAlib2 >= 2.2")
+#VRNA_INC = -I/home/mescalin/ronny/WORK/ViennaRNA/src
+#VRNA_LIB = -L/home/mescalin/ronny/WORK/ViennaRNA/src/ViennaRNA -lRNA -lgomp
 
 INCLUDES = $(VRNA_INC) -DLOOP_EN
 LIBS    = ${VRNA_LIB} -lm
@@ -8,7 +10,7 @@ CFLAGS = -Wall -O3
 
 # rules
 
-OFILES =        RNAxplorer.o RNAwalk.o meshpoint.o RNAxplorer_cmdl.o
+OFILES =        RNAxplorer.o RNAwalk.o meshpoint.o RNAxplorer_cmdl.o barrier_lower_bound.o distorted_sampling.o
 EXEFILE =       RNAxplorer
 
 
@@ -28,6 +30,12 @@ all:                            $(EXEFILE)
 
 clean:				
 				rm -f $(OFILES) $(EXEFILE)
+
+barrier_lower_bound.o:		barrier_lower_bound.c barrier_lower_bound.h
+				$(CC) -c $(CFLAGS) $(INCLUDES) barrier_lower_bound.c
+
+distorted_sampling.o:		distorted_sampling.c distorted_sampling.h
+				$(CC) -c $(CFLAGS) $(INCLUDES) distorted_sampling.c
 
 RNAxplorer.o:			RNAxplorer.c RNAxplorer.h meshpoint.h RNAwalk.h RNAxplorer_cmdl.h
 				$(CC) -c $(CFLAGS) $(INCLUDES) RNAxplorer.c
