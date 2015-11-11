@@ -202,11 +202,11 @@ void RNAxplorer(){
     md.circ     = circ;
     md.uniq_ML  = 1; /* in case we need M1 arrays */
 
-    vrna_fold_compound *vc = vrna_get_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_PF);
+    vrna_fold_compound_t *vc = vrna_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_PF);
 
-    mfe = vrna_fold(vc, NULL);
+    mfe = vrna_mfe(vc, NULL);
     vrna_exp_params_rescale(vc, &mfe);
-    (void)vrna_pf_fold(vc, NULL);
+    (void)vrna_pf(vc, NULL);
 
     fprintf(stdout, "%s\n", seq);
     fprintf(stdout, "%s %6.2f\n", s1, vrna_eval_structure(vc, s1));
@@ -341,8 +341,8 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
 
   /* begin the nice pathfinding routine */
   short *pt1, *pt2;
-  pt1 = vrna_pt_get(s1);
-  pt2 = vrna_pt_get(s2);
+  pt1 = vrna_ptable(s1);
+  pt2 = vrna_ptable(s2);
   int n = pt1[0];
   
   short *intersect = (short *) vrna_alloc(sizeof(short)*(n+2));
@@ -370,10 +370,10 @@ path_t *levelSaddlePoint2(char *s1, char *s2/*, int *num_entry*/, int iteration)
     md.circ = circ;
     md.uniq_ML  = 1;
 
-    vrna_fold_compound *vc = vrna_get_fold_compound_2D(seq, s1, s2, &md, VRNA_OPTION_MFE | VRNA_OPTION_DIST_CLASS);
-    vrna_sol_TwoD_t *mfe_s = vrna_TwoD_fold(vc, a+maximum_distance1, b+maximum_distance2);
+    vrna_fold_compound_t *vc = vrna_fold_compound_TwoD(seq, s1, s2, &md, VRNA_OPTION_MFE);
+    vrna_sol_TwoD_t *mfe_s = vrna_mfe_TwoD(vc, a+maximum_distance1, b+maximum_distance2);
 
-    vrna_free_fold_compound(vc);
+    vrna_fold_compound_free(vc);
 
     for(i=0;  mfe_s[i].k != INF; i++){
       if(mfe_s[i].k == -1){

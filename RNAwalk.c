@@ -23,7 +23,7 @@ int         maxRest = 100;
 
 int         backWalkPenalty = 0;
 
-static vrna_fold_compound *vc = NULL;
+static vrna_fold_compound_t *vc = NULL;
 
 void
 initRNAWalk(char *seq,
@@ -33,7 +33,7 @@ initRNAWalk(char *seq,
   vrna_md_set_default(&md);
   md.circ = circ;
 
-  vc = vrna_get_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_EVAL_ONLY);
+  vc = vrna_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_EVAL_ONLY);
 
   vrna_init_rand();
 
@@ -42,7 +42,7 @@ initRNAWalk(char *seq,
 void
 freeRNAWalkArrays(void){
 
-  vrna_free_fold_compound(vc);
+  vrna_fold_compound_free(vc);
   vc = NULL;
 }
 
@@ -75,8 +75,8 @@ structureWalk(char *seq,
     init_structure_queue(lastStructures);  
   }
   while(1){
-    short *curr_pt  = vrna_pt_get(minStruct);
-    int *loopidx    = vrna_get_loop_index(curr_pt);
+    short *curr_pt  = vrna_ptable(minStruct);
+    int *loopidx    = vrna_loopidx_from_ptable(curr_pt);
     int neighbor_cnt = 0;
     neighbor *neighbors = NULL;
     

@@ -22,7 +22,8 @@
 #include <ViennaRNA/utils.h>
 #include <ViennaRNA/structure_utils.h>
 #include <ViennaRNA/constraints.h>
-#include <ViennaRNA/fold.h>
+#include <ViennaRNA/mfe.h>
+#include <ViennaRNA/eval.h>
 #include <ViennaRNA/part_func.h>
 #include <ViennaRNA/mm.h>
 
@@ -40,7 +41,7 @@ typedef struct {
 } kl_soft_constraints;
 
 
-kl_soft_constraints *kl_init_datastructures(vrna_fold_compound *vc, const char *s1, const char *s2, double x, double y){
+kl_soft_constraints *kl_init_datastructures(vrna_fold_compound_t *vc, const char *s1, const char *s2, double x, double y){
   kl_soft_constraints *data;
   unsigned int n;
   char *s = vc->sequence;
@@ -50,17 +51,30 @@ kl_soft_constraints *kl_init_datastructures(vrna_fold_compound *vc, const char *
   /* alloc all memory */
   data = (kl_soft_constraints *)vrna_alloc(sizeof(kl_soft_constraints));
   data->kT            = vc->exp_params->kT;
-  data->idx           = vrna_get_iindx(n);
+  data->idx           = vrna_idx_row_wise(n);
   data->ref1          = strdup(s1);
   data->ref2          = strdup(s2);
-  data->reference_pt1 = vrna_pt_get(data->ref1);
-  data->reference_pt2 = vrna_pt_get(data->ref2);
+  data->reference_pt1 = vrna_ptable(data->ref1);
+  data->reference_pt2 = vrna_ptable(data->ref2);
   data->referenceBPs1 = vrna_refBPcnt_matrix(data->reference_pt1, TURN); /* matrix containing number of basepairs of reference structure1 in interval [i,j] */
   data->referenceBPs2 = vrna_refBPcnt_matrix(data->reference_pt2, TURN); /* matrix containing number of basepairs of reference structure2 in interval [i,j] */
   data->x             = x;
   data->y             = y;
 
   return data;
+}
+
+static void
+free_kl_soft_constraints( void *data){
+  kl_soft_constraints *dat = (kl_soft_constraints *)data;
+
+  free(dat->idx);
+  free(dat->ref1);
+  free(dat->ref2);
+  free(dat->reference_pt1);
+  free(dat->reference_pt2);
+  free(dat->referenceBPs1);
+  free(dat->referenceBPs2);
 }
 
 FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data){
@@ -81,43 +95,81 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
   d1 = d2 = 0;
 
   switch(decomp){
-    case VRNA_DECOMP_PAIR_HP:     d1 = base_da + referenceBPs1[ij];
-                                  d2 = base_db + referenceBPs2[ij];
-                                  break;
-    case VRNA_DECOMP_PAIR_IL:     d1 = base_da + referenceBPs1[ij] - referenceBPs1[kl];
-                                  d2 = base_db + referenceBPs2[ij] - referenceBPs2[kl];
-                                  break;
-    case VRNA_DECOMP_PAIR_ML:     d1 = base_da + referenceBPs1[ij] - referenceBPs1[idx[i+1]-k+1] - referenceBPs1[idx[k]-j+1];
-                                  d2 = base_db + referenceBPs2[ij] - referenceBPs2[idx[i+1]-k+1] - referenceBPs2[idx[k]-j+1];
-                                  break;
-    case VRNA_DECOMP_ML_UP_5:     d1 = referenceBPs1[ij] - referenceBPs1[idx[k]-j];
-                                  d2 = referenceBPs2[ij] - referenceBPs2[idx[k]-j];
-                                  break;
-    case VRNA_DECOMP_ML_UP_3:     d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k];
-                                  d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k];
-                                  break;
-    case VRNA_DECOMP_ML_UP:       d1 = referenceBPs1[ij];
-                                  d2 = referenceBPs2[ij];
-                                  break;
-    case VRNA_DECOMP_ML_ML_ML:    d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k+1] - referenceBPs1[idx[k]-j] ;
-                                  d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k+1] - referenceBPs2[idx[k]-j] ;
-                                  break;
-    case VRNA_DECOMP_EXT_UP_3:    d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k];
-                                  d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k];
-                                  break;
-    case VRNA_DECOMP_EXT_UP_5:    d1 = referenceBPs1[ij] - referenceBPs1[idx[k]-j];
-                                  d2 = referenceBPs2[ij] - referenceBPs2[idx[k]-j];
-                                  break;
-    case VRNA_DECOMP_EXT_UP:      d1 = referenceBPs1[ij];
-                                  d2 = referenceBPs2[ij];
-                                  break;
-    case VRNA_DECOMP_EXT_EXT:     d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k] - referenceBPs1[idx[k+1]-j];
-                                  d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k] - referenceBPs2[idx[k+1]-j];
-                                  break;
-    case VRNA_DECOMP_EXT_STEM_UP: d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k];
-                                  d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k];
-                                  break;
+    /* cases where we actually introduce a base pair */
+
+    case VRNA_DECOMP_PAIR_HP:           d1 = base_da + referenceBPs1[ij];
+                                        d2 = base_db + referenceBPs2[ij];
+                                        break;
+
+    case VRNA_DECOMP_PAIR_IL:           d1 = base_da + referenceBPs1[ij] - referenceBPs1[kl];
+                                        d2 = base_db + referenceBPs2[ij] - referenceBPs2[kl];
+                                        break;
+
+    case VRNA_DECOMP_PAIR_ML:           d1 = base_da + referenceBPs1[ij] - referenceBPs1[kl];
+                                        d2 = base_db + referenceBPs2[ij] - referenceBPs2[kl];
+                                        break;
+
+    /* cases where we split a segment into one or two subsegments */
+
+    case VRNA_DECOMP_ML_STEM:           d1 = referenceBPs1[ij] - referenceBPs1[kl];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[kl];
+                                        break;
+
+    case VRNA_DECOMP_ML_ML:             d1 = referenceBPs1[ij] - referenceBPs1[kl];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[kl];
+                                        break;
+
+    case VRNA_DECOMP_ML_ML_ML:          d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k] - referenceBPs1[idx[l]-j];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k] - referenceBPs2[idx[l]-j];
+                                        break;
+
+    case VRNA_DECOMP_ML_UP:             d1 = referenceBPs1[ij];
+                                        d2 = referenceBPs2[ij];
+                                        break;
+
+    case VRNA_DECOMP_ML_ML_STEM:        d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k] - referenceBPs1[idx[l]-j];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k] - referenceBPs2[idx[l]-j];
+                                        break;
+
+    case VRNA_DECOMP_ML_COAXIAL:        /* (i,j) stacks onto (k,l), lets ignore this case for now */
+                                        d1 = 0;
+                                        d2 = 0;
+                                        break;
+
+    case VRNA_DECOMP_EXT_EXT:           d1 = referenceBPs1[ij] - referenceBPs1[kl];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[kl];
+                                        break;
+
+    case VRNA_DECOMP_EXT_UP:            d1 = referenceBPs1[ij];
+                                        d2 = referenceBPs2[ij];
+                                        break;
+
+    case VRNA_DECOMP_EXT_EXT_EXT:       d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k] - referenceBPs1[idx[l]-j];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k] - referenceBPs2[idx[l]-j];
+                                        break;
+
+    case VRNA_DECOMP_EXT_STEM:          d1 = referenceBPs1[ij] - referenceBPs1[kl];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[kl];
+                                        break;
+
+    case VRNA_DECOMP_EXT_EXT_STEM:      /* fall through */
+    case VRNA_DECOMP_EXT_STEM_EXT:      d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k] - referenceBPs1[idx[l]-j];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k] - referenceBPs2[idx[l]-j];
+                                        break;
+
+    case VRNA_DECOMP_EXT_EXT_STEM1:     d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-k] - referenceBPs1[idx[l]-(j-1)];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k] - referenceBPs2[idx[l]-(j-1)];
+                                        break;
+
+    case VRNA_DECOMP_EXT_STEM_OUTSIDE:  d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-(k-1)] - referenceBPs1[kl] - referenceBPs1[idx[l+1]-j];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-(k-1)] - referenceBPs2[kl] - referenceBPs2[idx[l+1]-j];
+                                        break;
+
+    default:                            d1 = d2 = 0;
+                                        break;
   }
+
+#define VRNA_DECOMP_EXT_EXT_STEM1 19
 
   return (x * d1 + y * d2)*100;
 }
@@ -142,7 +194,7 @@ typedef struct {
 
 
 void
-estimate_landscape( vrna_fold_compound *vc,
+estimate_landscape( vrna_fold_compound_t *vc,
                     const char *s1,
                     const char *s2,
                     int maxIterations){
@@ -165,7 +217,7 @@ estimate_landscape( vrna_fold_compound *vc,
 
   /* get mfe for this sequence */
   mfe_struct  = (char *)vrna_alloc(sizeof(char)*(length+1));
-  mmfe        = (double)vrna_fold(vc, mfe_struct);
+  mmfe        = (double)vrna_mfe(vc, mfe_struct);
 
   /* get free energies of the reference structures */
   e_ref1  = vrna_eval_structure(vc, s1);
@@ -178,9 +230,9 @@ estimate_landscape( vrna_fold_compound *vc,
   /* ######################################################################### */
 
   /* first get pair table and loop index of the reference structures */
-  pt_ref1       = vrna_pt_get(s1);
-  pt_ref2       = vrna_pt_get(s2);
-  pt_mfe        = vrna_pt_get(mfe_struct);
+  pt_ref1       = vrna_ptable(s1);
+  pt_ref2       = vrna_ptable(s2);
+  pt_mfe        = vrna_ptable(mfe_struct);
 
   /* then compute maximum matching with disallowed reference structures */
   mm1 = maximumMatchingConstraint(s, pt_ref1);
@@ -255,12 +307,13 @@ estimate_landscape( vrna_fold_compound *vc,
                                                       (const char *)s2,
                                                       distortion_x,
                                                       distortion_y);
-//  vrna_sc_add_f(vc, &kl_pseudo_energy, NULL);
-  vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy,(void *)data);
+//  vrna_sc_add_f(vc, &kl_pseudo_energy);
+  vrna_sc_add_data(vc, (void *)data, &free_kl_soft_constraints);
+  vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy);
 
   /* compute distorted partition function */
 
-  (void)vrna_pf_fold(vc, NULL);
+  (void)vrna_pf(vc, NULL);
 
   /* prefill the landscape with 1000 sample structures according to current distortion values */
   for(i = 0; i < maxIterations; i++){
@@ -305,9 +358,10 @@ estimate_landscape( vrna_fold_compound *vc,
                                                       (const char *)s2,
                                                       distortion_x,
                                                       distortion_y);
-    vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy,(void *)data);
+    vrna_sc_add_data(vc, (void *)data, &free_kl_soft_constraints);
+    vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy);
 
-    (void) vrna_pf_fold(vc, NULL);
+    (void) vrna_pf(vc, NULL);
 
     for(i = 0; i < maxIterations; i++){
       char *sample  = vrna_pbacktrack(vc);
@@ -389,8 +443,11 @@ estimate_landscape( vrna_fold_compound *vc,
   /* debug output */
   for(i = 0; i <= MAX_k; i++)
     for(j = 0; j <= MAX_l; j++){
-      if(landscape[i][j].num_structs > 0)
-        printf("%d\t%d\t%6.2f\t(%d)\n", i, j, landscape[i][j].mfe, landscape[i][j].num_structs);
+      if(landscape[i][j].num_structs > 0){
+        int k;
+        for(k=0; k < landscape[i][j].num_structs; k++)
+          printf("%d\t%d\t%6.2f\t(%d) %s\n", i, j, vrna_eval_structure(vc, landscape[i][j].structures[k]), landscape[i][j].num_structs, landscape[i][j].structures[k]);
+      }
     }
 }
 

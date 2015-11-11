@@ -57,8 +57,8 @@ void printBarrier(float B, float E, char *s){
 
 void barrier_estimate_2D(char *seq,char *s1, char *s2, int maximum_distance1, int maximum_distance2){
   short *pt1, *pt2;
-  pt1 = vrna_pt_get(s1);
-  pt2 = vrna_pt_get(s2);
+  pt1 = vrna_ptable(s1);
+  pt2 = vrna_ptable(s2);
   int i, n = pt1[0];
   /* compute symmetrical difference between both structures */
   int a = 0;
@@ -82,8 +82,8 @@ void barrier_estimate_2D(char *seq,char *s1, char *s2, int maximum_distance1, in
   md.circ     = circ;
   md.uniq_ML  = 1;
 
-  vrna_fold_compound *vc = vrna_get_fold_compound_2D(seq, s1, s2, &md, VRNA_OPTION_MFE | VRNA_OPTION_DIST_CLASS);
-  vrna_sol_TwoD_t *mfe_s = vrna_TwoD_fold(vc, maxD1, maxD2);
+  vrna_fold_compound_t *vc = vrna_fold_compound_TwoD(seq, s1, s2, &md, VRNA_OPTION_MFE);
+  vrna_sol_TwoD_t *mfe_s = vrna_mfe_TwoD(vc, maxD1, maxD2);
 
   nb_t **neighbors = (nb_t **)vrna_alloc((maxD1+1) * sizeof(nb_t *));
   int number_of_states = 0;
@@ -290,7 +290,7 @@ void barrier_estimate_2D(char *seq,char *s1, char *s2, int maximum_distance1, in
 
   printBarrier(B, E_saddle, s_saddle);
 
-  vrna_free_fold_compound(vc);
+  vrna_fold_compound_free(vc);
   free(nodes);
   for(i=0;i<(maxD1+1);i++){
     free(mapping[i]);

@@ -3,7 +3,7 @@
 
 #include <ViennaRNA/data_structures.h>
 
-void estimate_landscape( vrna_fold_compound *vc,
+void estimate_landscape( vrna_fold_compound_t *vc,
                     const char *s1,
                     const char *s2,
                     int maxIterations);
