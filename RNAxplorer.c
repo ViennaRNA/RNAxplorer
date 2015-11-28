@@ -201,6 +201,7 @@ void RNAxplorer(){
     /* set user-defined model details */
     md.circ     = circ;
     md.uniq_ML  = 1; /* in case we need M1 arrays */
+    md.compute_bpp = 0;
 
     vrna_fold_compound_t *vc = vrna_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_PF);
 
