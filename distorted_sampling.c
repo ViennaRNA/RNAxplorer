@@ -161,15 +161,21 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
                                         d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-k] - referenceBPs2[idx[l]-(j-1)];
                                         break;
 
-    case VRNA_DECOMP_EXT_STEM_OUTSIDE:  d1 = referenceBPs1[ij] - referenceBPs1[idx[i]-(k-1)] - referenceBPs1[kl] - referenceBPs1[idx[l+1]-j];
-                                        d2 = referenceBPs2[ij] - referenceBPs2[idx[i]-(k-1)] - referenceBPs2[kl] - referenceBPs2[idx[l+1]-j];
+    case VRNA_DECOMP_EXT_STEM_OUTSIDE:  d1 = referenceBPs1[ij] - referenceBPs1[kl];
+                                        d2 = referenceBPs2[ij] - referenceBPs2[kl];
+                                        if(k > i){
+                                          d1 -= referenceBPs1[idx[i]-(k-1)];
+                                          d2 -= referenceBPs2[idx[i]-(k-1)];
+                                        }
+                                        if(l < j){
+                                          d1 -= referenceBPs1[idx[l+1]-j];
+                                          d2 -= referenceBPs2[idx[l+1]-j];
+                                        }
                                         break;
 
     default:                            d1 = d2 = 0;
                                         break;
   }
-
-#define VRNA_DECOMP_EXT_EXT_STEM1 19
 
   return (x * d1 + y * d2)*100;
 }
