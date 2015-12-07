@@ -246,7 +246,7 @@ def displayBestCluster(cl,n):
         for ss in cl[num]:
             print convertBack(ss,n)
         
-def doClustering(fpath,fclusters):
+def doClustering(structs,fclusters):
     """
     Computes and displays the best clustering of a set of RNA secondary
     structures, determining the best possible number of clusters.
@@ -257,7 +257,6 @@ def doClustering(fpath,fclusters):
         fpath (string): Path to list of secondary structures.
         fclusters (string): Path to output of R script.
     """        
-    structs = parseFile(fpath)
     n = sum([len(s) for s,ss in structs])/len(structs)
     clusters = loadClusters(fclusters,structs)
     maxCH = -sys.maxint
@@ -271,19 +270,15 @@ def doClustering(fpath,fclusters):
                 keepGoing = refinementQuality(cl1,cl2)
                 if not keepGoing:
                     displayBestCluster(clusters[i-1],n)
-                    break
+                    return clusters[i-1]
             cl1 = cl
-            
-##            if maxCH>locCH:
-##                displayBestCluster(clusters[i+3],n)
-##                break
-##            else:
-##                maxCH=locCH
+    return clusters[-1]
     
 
 
 if __name__ == "__main__":
     fpath = sys.argv[1]
     fclusters = sys.argv[2]
-    doClustering(fpath,fclusters)
+    structs = parseFile(fpath)
+    doClustering(structs,fclusters)
     
