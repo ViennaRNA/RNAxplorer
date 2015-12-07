@@ -260,23 +260,41 @@ estimate_landscape( vrna_fold_compound_t *vc,
   bp_dist_mfe_ref1  = vrna_bp_distance(mfe_struct, s1);
   bp_dist_mfe_ref2  = vrna_bp_distance(mfe_struct, s2);
 
-  if(mmfe == e_ref1){
+  //if(mmfe == e_ref1)
+  if(bp_dist_mfe_ref1 == 0)
+  {
 /*
     distortion_x = 0;
     distortion_y = distortion_x - (e_ref1 - e_ref2) / bp_dist;
     we use the Wolfram alpha solution below ;)
 */
     distortion_x = 0;
-    distortion_y = (distortion_x * bp_dist_mfe_ref2 - mmfe + e_ref2) / bp_dist_mfe_ref2;
-  } else if(mmfe == e_ref2){
+    if(bp_dist_mfe_ref2 != 0)
+    {
+   	  distortion_y = (distortion_x * bp_dist_mfe_ref2 - mmfe + e_ref2) / bp_dist_mfe_ref2;
+    }
+  }
+
+  //if(mmfe == e_ref2)
+  if(bp_dist_mfe_ref2 == 0)
+  {
 /*
     distortion_y = 0;
     distortion_x = (e_ref1 - e_ref2) / bp_dist + distortion_y;
     we use the Wolfram alpha solution below ;)
 */
     distortion_y = 0;
-    distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - mmfe) / bp_dist_mfe_ref1;
-  } else {
+    if(bp_dist_mfe_ref1 != 0)
+    {
+      distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - mmfe) / bp_dist_mfe_ref1;
+    }
+  }
+
+  //GE: what is if s1=s2 and s1!=mfe and s2!=mfe ?
+
+  //else
+  if(bp_dist != 0 && bp_dist_mfe_ref1+bp_dist_mfe_ref2 != bp_dist)
+  {
 /*
     distortion_x = ((e_ref1 * bp_dist_mfe_ref2) / (bp_dist * bp_dist_mfe_ref1)) - (mmfe / bp_dist_mfe_ref1);
     distortion_y = ((e_ref2 * bp_dist_mfe_ref1) / (bp_dist * bp_dist_mfe_ref2)) - (mmfe / bp_dist_mfe_ref2);
