@@ -57,36 +57,51 @@ def callRNAxplorer(seq, ref_struct1, ref_struct2, n=100):
 
 def addToClusters(clusters, structures):
     """
-    Group the provided structures into
-    clusters, and for each cluster compute
-    a representative, e.g. the centroid, or
-    MFE
+    Group the provided structures into clusters,
+    and for each cluster compute a representative,
+    e.g. the centroid, or MFE, and possibly its
+    ensemble diversity and partition function,
+    i.e. whatever property we might be interested in
 
-    We can either utilize the hierarchical clustering method
-    that we employed before, or, as Maria suggested, create
-    gradient basins at this stage.
+    We can either utilize the hierarchical clustering
+    method that we employed before, or, as Maria
+    suggested, create gradient basins at this stage.
     """
     new_clusters = clusters
+
+    # this loop is just a placeholder
+    # we actually need to assign each structure to
+    # a corresponding cluster instead
+    for s in structures:
+        new_clusters.append(s)
 
     return new_clusters
 
 
-def mergeStructures(samples, new_structures):
+def getInterestingClusters(clusters):
     """
-    Merge new_structures into a pre-existing
-    sample set non-redundantly
+    Extract a list of interesting clusters that
+    we want to emphasize in the next sampling
+    iteration
+
+    This could be a cluster with low sample number,
+    or one that has the highest distance to all the
+    others. Open for suggestions here...
     """
-
-    # to be implemented
-    samples.append(new_structures)
-
-    return samples
 
 
 def generateSamples(seq, mfe_struct, mfe, iterations=0):
     """
     Generate a diverse structure sample set
     by iteratively calling RNAxplorer
+
+    In each iteration, we select a number of interesting
+    clusters, and take its representative structure as
+    input for RNAxplorer, to sample more structures from
+    the vicinity of this cluster. As second reference, we
+    take the MFE structure for now. This procedure may,
+    and actually should, be refined, since we expect too
+    many structures arround the MFE using this approach.
     """
 
     # Initial step:
