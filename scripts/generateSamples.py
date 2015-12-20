@@ -3,7 +3,8 @@ General pipeline for diverse structure sample set generation
 using RNAxplorer
 """
 
-import sys, re, RNA
+import sys, re, RNA, subprocess
+from flooding import *
 
 
 def readFasta(filename):
@@ -39,6 +40,37 @@ def readFasta(filename):
 
     return res
 
+def readRNAxplorerFile(filename):
+    """
+    Read a RNAxplorer output file and extract the references and structures.
+    """
+    structures = [];
+    ref_struct1 = "";
+    ref_struct2 = "";
+    
+    for l in open(filename):
+        l.rstrip('\n')
+
+        # start actual parsing
+        match = re.search('(^[ACGUTacgutnN]+$)', l)
+        if match:
+            sequence = match.group(1)
+        
+        match = re.search('^([\(\)\.]+)\s+(\-?\d+\.\d+)$', l)
+        if match:
+            structure = match.group(1)
+            if(ref_struct1 == ""):
+                ref_struct1 = structure
+            else:
+                if (ref_struct2 == ""):
+                    ref_struct2 = structure
+            
+        match = re.search('(^(\d+)\s+(\d+)\s+(\-?\d+\.\d+)\s+\(\d+\)\s+([\(\)\.]+)$)', l)
+        if match:
+            structure = match.group(5)
+
+    return structures
+
 def callRNAxplorer(seq, ref_struct1, ref_struct2, n=100):
     """
     Call RNAxplorer using ref_struct1, ref_struct2 as
@@ -50,8 +82,19 @@ def callRNAxplorer(seq, ref_struct1, ref_struct2, n=100):
     """
     structures = []
 
+    RNAxplorer="RNAxplorer -M SM -i "+str(n)
+    #Unique=" | sort -k5 | uniq"
+    sequenceAndStructures=seq+"\n"+ref_struct1+"\n"+ref_struct2
+    # Run RNAxplorer
+    result=subprocess.check_output("echo -e \""+sequenceAndStructures+"\" | "+RNAxplorer, shell=True)
+    result = result.splitlines()
+    for line in result:   
+        match = re.search('(^(\d+)\s+(\d+)\s+(\-?\d+\.\d+)\s+\(\d+\)\s+([\(\)\.]+)$)', line)
+        if match:
+            structures=match.group(5)
+    
     print "Generating %d samples with RNAxplorer using\n%s\n%s\n%s" % (n, seq, ref_struct1, ref_struct2)
-
+    
     return structures
 
 
@@ -98,10 +141,25 @@ def get2DBasins(samples, ref1, ref2):
     Using the MFE representatives of each distance class,
     determine the basins of attraction in this projection,
     and associate each structure to on such basin.
-    Basin detection might be implemented using a flodding
+    Basin detection might be implemented using a flooding
     technique that stops as soon as a saddle point in the
     projection is encountered
     """
+    
+     #RNA.energy_of_struct("GGGCCC","(....)");
+     
+    twoDlandscapeData = []
+    #generate k,l neighborhoods.
+    for structure in samples:
+        k = bpDist(structure,ref1)
+        l = bpDist(structure,ref2)
+        energy = 0 #TODO: compute energy RNA.energy_of_struct("GGGCCC","(....)")
+        twoDlandscapeData.append( [k, l, energy, structure] )
+    
+    #iterative gradientwalks should be used, because the landscape is not necessarily connected.
+    twoDbasinCluster = iterativeGradientWalks(twoDlandscapeData);
+        
+    return twoDbasinCluster
 
 
 
@@ -132,7 +190,7 @@ def generateSamples(seq, mfe_struct, reference_stack):
         new_ref1 = reference_stack.pop()
         if len(reference_stack) > 0:
             new_ref2 = reference_stack.pop()
-        else
+        else:
             new_ref2 = mfe_struct
 
         # call RNAxplorer with our reference structures
@@ -190,8 +248,11 @@ def maintloop(seq, mfe_struct, mfe, iterations=0):
 
 if __name__ == "__main__":
     inputfile = sys.argv[1]
-    records = readFasta(inputfile)
-
+    #records = readFasta(inputfile)
+    
+    #records = readRNAxplorerFile(inputfile)
+    callRNAxplorer("GGGAAUUAUUGUUCCCUGAGAGCGGUAGUUCUC", ".................................", "((((((((((((((.....))))))))))))))", 10)
+"""
     for fasta_id, seq in records:
         print "...processing new Record:\n\nID: %s\n%s" % (fasta_id, seq)
 
@@ -204,3 +265,4 @@ if __name__ == "__main__":
 
 
         print "\n...done\n"
+"""
