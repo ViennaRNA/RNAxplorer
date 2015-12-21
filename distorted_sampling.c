@@ -366,7 +366,8 @@ estimate_landscape( vrna_fold_compound_t *vc,
 
 #define DO_MORE                   /* do more sampling */
 //#define BOTH_AT_ONCE              /* change x, and y simultaneously */
-#define RELAX_GUIDING_POTENTIAL   /* relax guiding potential instead of repelling from references */
+#define RELAX_GUIDING_POTENTIAL   /* relax guiding potential instead of increasing attraction */
+#define RELAX_FACTOR   1.         /* if set to 1. final relaxation sets x and/or y to 0. */
 
 #ifdef DO_MORE
 
@@ -375,9 +376,9 @@ estimate_landscape( vrna_fold_compound_t *vc,
   if(bla_x > 0)
   for(j = 0; j < bp_dist; j++){
 #ifdef RELAX_GUIDING_POTENTIAL
-    data->x -= bla_x/bp_dist;
+    data->x -= RELAX_FACTOR * bla_x/bp_dist;
 #else
-    data->x += bla_x/bp_dist;
+    data->x += RELAX_FACTOR * bla_x/bp_dist;
 #endif
     fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
     (void)vrna_pf(vc, NULL);
@@ -408,9 +409,9 @@ estimate_landscape( vrna_fold_compound_t *vc,
   if(bla_y > 0.)
   for(j = 0; j < bp_dist; j++){
 #ifdef RELAX_GUIDING_POTENTIAL
-    data->y -= bla_y/bp_dist;
+    data->y -= RELAX_FACTOR * bla_y/bp_dist;
 #else
-    data->y += bla_y/bp_dist;
+    data->y += RELAX_FACTOR * bla_y/bp_dist;
 #endif
     fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
     (void)vrna_pf(vc, NULL);
@@ -442,11 +443,11 @@ estimate_landscape( vrna_fold_compound_t *vc,
   data->y = bla_y;
   for(j = 0; j < bp_dist; j++){
 #ifdef RELAX_GUIDING_POTENTIAL
-    data->x -= bla_x/bp_dist;
-    data->y -= bla_y/bp_dist;
+    data->x -= RELAX_FACTOR * bla_x/bp_dist;
+    data->y -= RELAX_FACTOR * bla_y/bp_dist;
 #else
-    data->x += bla_x/bp_dist;
-    data->y += bla_y/bp_dist;
+    data->x += RELAX_FACTOR * bla_x/bp_dist;
+    data->y += RELAX_FACTOR * bla_y/bp_dist;
 #endif
     fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
     (void)vrna_pf(vc, NULL);
