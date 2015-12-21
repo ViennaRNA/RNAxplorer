@@ -84,6 +84,7 @@ def readRNAxplorerFile(filename):
     result = XplorerData(sequence, ref_struct1, ref_struct2, structures)
     return result
 
+
 def callRNAxplorer(seq, ref_struct1, ref_struct2, n=100):
     """
     Call RNAxplorer using ref_struct1, ref_struct2 as
@@ -107,7 +108,7 @@ def callRNAxplorer(seq, ref_struct1, ref_struct2, n=100):
             structures.append(match.group(5))
     
     print "Generating %d samples with RNAxplorer using\n%s\n%s\n%s" % (n, seq, ref_struct1, ref_struct2)
-
+    
     return structures
 
 

@@ -190,4 +190,5 @@ def flood2min(landscapeData):
             print("Error: algorithm has stopped, because the cell has zero neighbors!")
             #indicesAndClusterIDs.append( [currentStructure[0], currentStructure[1], 1] )
             break
+
     return indicesAndClusterIDs
