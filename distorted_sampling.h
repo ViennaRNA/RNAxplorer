@@ -6,6 +6,7 @@
 void estimate_landscape( vrna_fold_compound_t *vc,
                     const char *s1,
                     const char *s2,
-                    int maxIterations);
+                    int maxIterations,
+                    char *extended_options);
 
 #endif

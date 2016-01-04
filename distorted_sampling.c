@@ -203,7 +203,8 @@ void
 estimate_landscape( vrna_fold_compound_t *vc,
                     const char *s1,
                     const char *s2,
-                    int maxIterations){
+                    int maxIterations,
+                    char *extended_options){
 
   unsigned int      *mm1, *mm2;
   int               i, j, MAX_k, MAX_l, length, *my_iindx;
@@ -214,6 +215,35 @@ estimate_landscape( vrna_fold_compound_t *vc,
   short             *pt_ref1, *pt_ref2, *pt_mfe;
   char              *s, *mfe_struct;
   double            distortion_x, distortion_y;
+  kl_soft_constraints *data;
+  /* parse extended options string */
+  int plain, do_more, both_at_once, relax, verbose, shift, shift_to_first;
+
+
+  do_more = 0;
+  both_at_once = 0;
+  relax = 0;
+  plain = 0;
+  verbose = 0;
+  shift = 0;
+  shift_to_first = 0;
+
+  if(extended_options){
+    if(strchr(extended_options, 'M')) /* More sampling required */
+      do_more = 1;
+    if(strchr(extended_options, 'B')) /* alter both potentials at once */
+      both_at_once = 1;
+    if(strchr(extended_options, 'R')) /* relax potential instead of increasing it */
+      relax = 1;
+    if(strchr(extended_options, 'S')) /* shift potential to other structure */
+      shift = 1;
+    if(strchr(extended_options, 'F')) /* shift to first structure */
+      shift_to_first = 1;
+    if(strchr(extended_options, 'V')) /* verbose */
+      verbose = 1;
+    if(strchr(extended_options, 'P')) /* plain sampling, no distortion */
+      plain = 1;
+  }
 
   s         = vc->sequence;
   length    = vc->length;
@@ -260,52 +290,55 @@ estimate_landscape( vrna_fold_compound_t *vc,
   bp_dist_mfe_ref1  = vrna_bp_distance(mfe_struct, s1);
   bp_dist_mfe_ref2  = vrna_bp_distance(mfe_struct, s2);
 
-  //if(mmfe == e_ref1)
-  if(bp_dist_mfe_ref1 == 0)
-  {
+  if(!plain){
+    //if(mmfe == e_ref1)
+    if(bp_dist_mfe_ref1 == 0)
+    {
 /*
     distortion_x = 0;
     distortion_y = distortion_x - (e_ref1 - e_ref2) / bp_dist;
     we use the Wolfram alpha solution below ;)
 */
-    distortion_x = 0;
-    if(bp_dist_mfe_ref2 != 0)
-    {
-   	  distortion_y = (distortion_x * bp_dist_mfe_ref2 - mmfe + e_ref2) / bp_dist_mfe_ref2;
+      distortion_x = 0;
+      if(bp_dist_mfe_ref2 != 0)
+      {
+     	  distortion_y = (distortion_x * bp_dist_mfe_ref2 - mmfe + e_ref2) / bp_dist_mfe_ref2;
+      }
     }
-  }
 
-  //if(mmfe == e_ref2)
-  if(bp_dist_mfe_ref2 == 0)
-  {
+    //if(mmfe == e_ref2)
+    if(bp_dist_mfe_ref2 == 0)
+    {
 /*
     distortion_y = 0;
     distortion_x = (e_ref1 - e_ref2) / bp_dist + distortion_y;
     we use the Wolfram alpha solution below ;)
 */
-    distortion_y = 0;
-    if(bp_dist_mfe_ref1 != 0)
-    {
-      distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - mmfe) / bp_dist_mfe_ref1;
+      distortion_y = 0;
+      if(bp_dist_mfe_ref1 != 0)
+      {
+        distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - mmfe) / bp_dist_mfe_ref1;
+      }
     }
-  }
 
-  //GE: what is if s1=s2 and s1!=mfe and s2!=mfe ?
+    //GE: what is if s1=s2 and s1!=mfe and s2!=mfe ?
 
-  //else
-  if(bp_dist != 0 && (bp_dist_mfe_ref1+bp_dist_mfe_ref2 != bp_dist))
-  {
+    //else
+    if(bp_dist != 0 && (bp_dist_mfe_ref1+bp_dist_mfe_ref2 != bp_dist))
+    {
 /*
     distortion_x = ((e_ref1 * bp_dist_mfe_ref2) / (bp_dist * bp_dist_mfe_ref1)) - (mmfe / bp_dist_mfe_ref1);
     distortion_y = ((e_ref2 * bp_dist_mfe_ref1) / (bp_dist * bp_dist_mfe_ref2)) - (mmfe / bp_dist_mfe_ref2);
     we use the Wolfram alpha solution below ;)
 */
-    double nenner = bp_dist * (bp_dist_mfe_ref1 + bp_dist_mfe_ref2 - bp_dist);
-    distortion_x = ( bp_dist_mfe_ref2 * e_ref1 - bp_dist_mfe_ref2 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref2) / nenner;
-    distortion_y = (-bp_dist_mfe_ref1 * e_ref1 + bp_dist_mfe_ref1 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref1) / nenner;
-  }
+      double nenner = bp_dist * (bp_dist_mfe_ref1 + bp_dist_mfe_ref2 - bp_dist);
+      distortion_x = ( bp_dist_mfe_ref2 * e_ref1 - bp_dist_mfe_ref2 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref2) / nenner;
+      distortion_y = (-bp_dist_mfe_ref1 * e_ref1 + bp_dist_mfe_ref1 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref1) / nenner;
+    }
 
-  printf("d_x = %1.10f, d_y = %1.10f\n", distortion_x, distortion_y);
+    printf("d_x = %1.10f, d_y = %1.10f\n", distortion_x, distortion_y);
+
+  }
 
   /* create the 2D landscape data structure */
   gridpointT **landscape;
@@ -321,21 +354,27 @@ estimate_landscape( vrna_fold_compound_t *vc,
     }
 
   /* prepare pf fold */
-  rescale = mmfe + (bp_dist_mfe_ref1 * distortion_x) + (bp_dist_mfe_ref2 * distortion_y);
+  if(!plain){
+    rescale = mmfe + (bp_dist_mfe_ref1 * distortion_x) + (bp_dist_mfe_ref2 * distortion_y);
+  } else {
+    rescale = mmfe;
+  }
   vrna_exp_params_rescale(vc, &rescale);
 
-  /* apply distortion soft constraints */
-  vrna_sc_init(vc);
-  kl_soft_constraints *data = kl_init_datastructures( vc,
-                                                      (const char *)s1,
-                                                      (const char *)s2,
-                                                      distortion_x,
-                                                      distortion_y);
-//  vrna_sc_add_f(vc, &kl_pseudo_energy);
-  vrna_sc_add_data(vc, (void *)data, &free_kl_soft_constraints);
-  vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy);
+  if(!plain){
+    /* apply distortion soft constraints */
+    vrna_sc_init(vc);
+    data = kl_init_datastructures(vc,
+                                  (const char *)s1,
+                                  (const char *)s2,
+                                  distortion_x,
+                                  distortion_y);
 
-  /* compute distorted partition function */
+    vrna_sc_add_data(vc, (void *)data, &free_kl_soft_constraints);
+    vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy);
+  }
+
+  /* compute (distorted) partition function */
 
   (void)vrna_pf(vc, NULL);
 
@@ -364,117 +403,124 @@ estimate_landscape( vrna_fold_compound_t *vc,
   double bla_x = data->x;
   double bla_y = data->y;
 
-#define DO_MORE                   /* do more sampling */
-//#define BOTH_AT_ONCE              /* change x, and y simultaneously */
-#define RELAX_GUIDING_POTENTIAL   /* relax guiding potential instead of increasing attraction */
-#define RELAX_FACTOR   1.         /* if set to 1. final relaxation sets x and/or y to 0. */
 
-#ifdef DO_MORE
+#define RELAX_FACTOR   1.5         /* if set to 1. final relaxation sets x and/or y to 0. */
 
-#ifndef BOTH_AT_ONCE
-  /* lower prob of first reference */
-  if(bla_x > 0)
-  for(j = 0; j < bp_dist; j++){
-#ifdef RELAX_GUIDING_POTENTIAL
-    data->x -= RELAX_FACTOR * bla_x/bp_dist;
-#else
-    data->x += RELAX_FACTOR * bla_x/bp_dist;
-#endif
-    fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
-    (void)vrna_pf(vc, NULL);
-    for(i = 0; i < maxIterations; i++){
-      char *sample  = vrna_pbacktrack(vc);
-      /* get k,l coords and free energy */
-      int k     = vrna_bp_distance(s1, sample);
-      int l     = vrna_bp_distance(s2, sample);
-      double fe = (double)vrna_eval_structure(vc, sample);
+  if(do_more && (!plain)){
 
-      /* check if we have sufficient memory allocated and alloc more if necessary */
-      if(landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs){
-        landscape[k][l].max_structs *= 2;
-        landscape[k][l].structures = (char **)vrna_realloc(landscape[k][l].structures, sizeof(char *) * landscape[k][l].max_structs);
+    if(!both_at_once){
+      /* change potential of first reference */
+      if(bla_x > 0)
+        for(j = 0; j < bp_dist; j++){
+          if(relax){
+            data->x -= RELAX_FACTOR * bla_x/bp_dist;
+          } else {
+            data->x += RELAX_FACTOR * bla_x/bp_dist;
+          }
+
+          if(verbose)
+            fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
+          (void)vrna_pf(vc, NULL);
+          for(i = 0; i < maxIterations; i++){
+            char *sample  = vrna_pbacktrack(vc);
+            /* get k,l coords and free energy */
+            int k     = vrna_bp_distance(s1, sample);
+            int l     = vrna_bp_distance(s2, sample);
+            double fe = (double)vrna_eval_structure(vc, sample);
+
+            /* check if we have sufficient memory allocated and alloc more if necessary */
+            if(landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs){
+              landscape[k][l].max_structs *= 2;
+              landscape[k][l].structures = (char **)vrna_realloc(landscape[k][l].structures, sizeof(char *) * landscape[k][l].max_structs);
+            }
+
+            /* insert structure */
+            landscape[k][l].structures[landscape[k][l].num_structs] = sample;
+            landscape[k][l].num_structs++;
+            if(landscape[k][l].mfe > fe)
+              landscape[k][l].mfe = fe;
+          }
+        }
+
+      /* change potential of second reference */
+      data->x = bla_x;
+      if(bla_y > 0.)
+        for(j = 0; j < bp_dist; j++){
+          if(relax){
+            data->y -= RELAX_FACTOR * bla_y/bp_dist;
+          } else {
+            data->y += RELAX_FACTOR * bla_y/bp_dist;
+          }
+          if(verbose)
+            fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
+          (void)vrna_pf(vc, NULL);
+          for(i = 0; i < maxIterations; i++){
+            char *sample  = vrna_pbacktrack(vc);
+            /* get k,l coords and free energy */
+            int k     = vrna_bp_distance(s1, sample);
+            int l     = vrna_bp_distance(s2, sample);
+            double fe = (double)vrna_eval_structure(vc, sample);
+
+            /* check if we have sufficient memory allocated and alloc more if necessary */
+            if(landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs){
+              landscape[k][l].max_structs *= 2;
+              landscape[k][l].structures = (char **)vrna_realloc(landscape[k][l].structures, sizeof(char *) * landscape[k][l].max_structs);
+            }
+
+            /* insert structure */
+            landscape[k][l].structures[landscape[k][l].num_structs] = sample;
+            landscape[k][l].num_structs++;
+            if(landscape[k][l].mfe > fe)
+              landscape[k][l].mfe = fe;
+          }
+        }
+    } else { /* change potential of both references at the same time */
+      data->x = bla_x;
+      data->y = bla_y;
+      for(j = 0; j < bp_dist; j++){
+        if(shift){
+          if(shift_to_first){
+            data->x += RELAX_FACTOR * bla_x/bp_dist;
+            data->y -= RELAX_FACTOR * bla_y/bp_dist;
+          } else {
+            data->x -= RELAX_FACTOR * bla_x/bp_dist;
+            data->y += RELAX_FACTOR * bla_y/bp_dist;
+          }
+        } else {
+          if(relax){
+            data->x -= RELAX_FACTOR * bla_x/bp_dist;
+            data->y -= RELAX_FACTOR * bla_y/bp_dist;
+          } else {
+            data->x += RELAX_FACTOR * bla_x/bp_dist;
+            data->y += RELAX_FACTOR * bla_y/bp_dist;
+          }
+        }
+
+        if(verbose)
+          fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
+        (void)vrna_pf(vc, NULL);
+        for(i = 0; i < maxIterations; i++){
+          char *sample  = vrna_pbacktrack(vc);
+          /* get k,l coords and free energy */
+          int k     = vrna_bp_distance(s1, sample);
+          int l     = vrna_bp_distance(s2, sample);
+          double fe = (double)vrna_eval_structure(vc, sample);
+
+          /* check if we have sufficient memory allocated and alloc more if necessary */
+          if(landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs){
+            landscape[k][l].max_structs *= 2;
+            landscape[k][l].structures = (char **)vrna_realloc(landscape[k][l].structures, sizeof(char *) * landscape[k][l].max_structs);
+          }
+
+          /* insert structure */
+          landscape[k][l].structures[landscape[k][l].num_structs] = sample;
+          landscape[k][l].num_structs++;
+          if(landscape[k][l].mfe > fe)
+            landscape[k][l].mfe = fe;
+        }
       }
-
-      /* insert structure */
-      landscape[k][l].structures[landscape[k][l].num_structs] = sample;
-      landscape[k][l].num_structs++;
-      if(landscape[k][l].mfe > fe)
-        landscape[k][l].mfe = fe;
     }
-  
   }
-
-  /* lower prob of second reference */
-  data->x = bla_x;
-  if(bla_y > 0.)
-  for(j = 0; j < bp_dist; j++){
-#ifdef RELAX_GUIDING_POTENTIAL
-    data->y -= RELAX_FACTOR * bla_y/bp_dist;
-#else
-    data->y += RELAX_FACTOR * bla_y/bp_dist;
-#endif
-    fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
-    (void)vrna_pf(vc, NULL);
-    for(i = 0; i < maxIterations; i++){
-      char *sample  = vrna_pbacktrack(vc);
-      /* get k,l coords and free energy */
-      int k     = vrna_bp_distance(s1, sample);
-      int l     = vrna_bp_distance(s2, sample);
-      double fe = (double)vrna_eval_structure(vc, sample);
-
-      /* check if we have sufficient memory allocated and alloc more if necessary */
-      if(landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs){
-        landscape[k][l].max_structs *= 2;
-        landscape[k][l].structures = (char **)vrna_realloc(landscape[k][l].structures, sizeof(char *) * landscape[k][l].max_structs);
-      }
-
-      /* insert structure */
-      landscape[k][l].structures[landscape[k][l].num_structs] = sample;
-      landscape[k][l].num_structs++;
-      if(landscape[k][l].mfe > fe)
-        landscape[k][l].mfe = fe;
-    }
-  
-  }
-
-#else
-  /* lower prob of both references at the same time */
-  data->x = bla_x;
-  data->y = bla_y;
-  for(j = 0; j < bp_dist; j++){
-#ifdef RELAX_GUIDING_POTENTIAL
-    data->x -= RELAX_FACTOR * bla_x/bp_dist;
-    data->y -= RELAX_FACTOR * bla_y/bp_dist;
-#else
-    data->x += RELAX_FACTOR * bla_x/bp_dist;
-    data->y += RELAX_FACTOR * bla_y/bp_dist;
-#endif
-    fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
-    (void)vrna_pf(vc, NULL);
-    for(i = 0; i < maxIterations; i++){
-      char *sample  = vrna_pbacktrack(vc);
-      /* get k,l coords and free energy */
-      int k     = vrna_bp_distance(s1, sample);
-      int l     = vrna_bp_distance(s2, sample);
-      double fe = (double)vrna_eval_structure(vc, sample);
-
-      /* check if we have sufficient memory allocated and alloc more if necessary */
-      if(landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs){
-        landscape[k][l].max_structs *= 2;
-        landscape[k][l].structures = (char **)vrna_realloc(landscape[k][l].structures, sizeof(char *) * landscape[k][l].max_structs);
-      }
-
-      /* insert structure */
-      landscape[k][l].structures[landscape[k][l].num_structs] = sample;
-      landscape[k][l].num_structs++;
-      if(landscape[k][l].mfe > fe)
-        landscape[k][l].mfe = fe;
-    }
-  
-  }
-#endif
-
-#endif
 
 #if 1
   /* now we try to fill the landscape with more values */

@@ -42,12 +42,14 @@ int maximum_distance1 = 5;
 int maximum_distance2 = 5;
   
 int curr_iteration = 0;  
+float betascale = 1.0;
 
 int method;
 extern  int circ;
 static char  scale1[] = "....,....1....,....2....,....3....,....4";
 static char  scale2[] = "....,....5....,....6....,....7....,....8";
 
+static char *extended_options = NULL;
 
 int main(int argc, char *argv[]) {
   
@@ -80,6 +82,10 @@ int main(int argc, char *argv[]) {
     else if(!strcmp(m, "SM"))
       whatToDo = FIND_2D_LANDSCAPE_ESTIMATE;
   }
+
+  /* maximum number of simulations / iterations */
+  if(args_info.extended_opt_given)
+    extended_options = strdup(args_info.extended_opt_arg);
 
   /* maximum number of simulations / iterations */
   if(args_info.iterations_given)
@@ -120,7 +126,8 @@ int main(int argc, char *argv[]) {
   if(args_info.maxDist2_given)
     maximum_distance2 = args_info.maxDist2_arg;
 
-
+  if(args_info.betaScale_given)
+    betascale = args_info.betaScale_arg;
 
   /* free allocated memory of command line data structure */
   RNAxplorer_cmdline_parser_free (&args_info);
@@ -202,6 +209,7 @@ void RNAxplorer(){
     md.circ     = circ;
     md.uniq_ML  = 1; /* in case we need M1 arrays */
     md.compute_bpp = 0;
+    md.betaScale = betascale;
 
     vrna_fold_compound_t *vc = vrna_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_PF);
 
@@ -222,7 +230,7 @@ void RNAxplorer(){
                                           break;
 
       case FIND_2D_LANDSCAPE_ESTIMATE:    {
-                                            estimate_landscape(vc, s1, s2, maxIterations);
+                                            estimate_landscape(vc, s1, s2, maxIterations, extended_options);
                                           }
                                           break;
 
