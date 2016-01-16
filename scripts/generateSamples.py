@@ -96,7 +96,7 @@ def callRNAxplorer(seq, ref_struct1, ref_struct2, n=100):
     """
     structures = []
 
-    RNAxplorer="RNAxplorer -M SM -i "+str(n)
+    RNAxplorer="./RNAxplorer -M SM -e \"MSF\" --betaScale=1.2 -i "+str(n)
     #Unique=" | sort -k5 | uniq"
     sequenceAndStructures=seq+"\n"+ref_struct1+"\n"+ref_struct2
     # Run RNAxplorer
@@ -154,12 +154,16 @@ def get2DBasins(samples, sequence, ref1, ref2):
     the 2D projection of the provided sample set of structures.
     Using the MFE representatives of each distance class,
     determine the basins of attraction in this projection,
-    and associate each structure to on such basin.
+    and associate each structure to such basin.
     Basin detection might be implemented using a flooding
     technique that stops as soon as a saddle point in the
     projection is encountered
-    """
     
+    This function returns a list of lists of (s,idx) pairs, where
+    s is a secondary structure in dot-bracket notation, and idx
+    is the corresponding index in the samples list
+    """
+
     twoDlandscapeData = []
     #generate k,l neighborhoods.
     for structure in samples:
@@ -167,12 +171,13 @@ def get2DBasins(samples, sequence, ref1, ref2):
         l = RNA.bp_distance(structure,ref2)
         energy = RNA.energy_of_struct(sequence, structure)        
         twoDlandscapeData.append( [k, l, energy, structure] )
-    
-    #iterative gradientwalks should be used, because the landscape is not necessarily connected.
-    twoDbasinCluster = iterativeGradientWalks(twoDlandscapeData)
-    #twoDbasinCluster = flood2min(twoDlandscapeData)
-    return twoDbasinCluster
 
+    return watershed_flooding(twoDlandscapeData)
+
+def uniq_list(seq):
+    seen = set()
+    seen_add = seen.add
+    return [x for x in seq if not (x in seen or seen_add(x))]
 
 
 def generateSamples(seq, mfe_struct, reference_stack):
@@ -207,19 +212,24 @@ def generateSamples(seq, mfe_struct, reference_stack):
 
         # call RNAxplorer with our reference structures
         new_samples = callRNAxplorer(seq, new_ref1, new_ref2)
+        new_samples = uniq_list(new_samples)
 
         # determine which structures belong to the same region
         # of interest, according to current 2D projection.
-        basins_2D = get2DBasins(samples, new_ref1, new_ref2)
+        basins_2D = get2DBasins(new_samples, seq, new_ref1, new_ref2)
 
         # cluster the structures within each basin to
         # obtain potentially interesting new reference
         # structures
-        for b in basins_2D:
-            basin_clusters = getClusters(b)
-            s = getInterestingClusters(basin_clusters)
-            for c in s:
-                new_reference_stack.append(c)
+        for i, b in enumerate(basins_2D):
+            print i
+            for (s,idx) in b:
+                print s
+
+            #basin_clusters = getClusters(b)
+            #s = getInterestingClusters(basin_clusters)
+            #for c in s:
+            #    new_reference_stack.append(c)
 
         # finally, we add the new_samples to our sample_set
         for s in new_samples:
@@ -228,7 +238,7 @@ def generateSamples(seq, mfe_struct, reference_stack):
     return sample_set, new_reference_stack
 
 
-def maintloop(seq, mfe_struct, mfe, iterations=0):
+def mainloop(seq, mfe_struct, mfe, iterations=0):
     """
     This is the mainloop that iteratively calls
     generateSamples() to grow the global_structures list
@@ -252,8 +262,8 @@ def maintloop(seq, mfe_struct, mfe, iterations=0):
         # add new samples to set of global structues
         global_structures = addToClusters(global_structures, samples)
         # assign new reference structures for next iteration
-        ref_structs = new_ref_structsreadRNAxplorerFile
-        iterations = iteration - 1
+        ref_structs = new_ref_structs
+        iterations = iterations - 1
 
     return global_structures
 
@@ -263,17 +273,26 @@ if __name__ == "__main__":
     #records = readFasta(inputfile)
     
     #records = readRNAxplorerFile(inputfile)
-    #seq = "GGGAAUUAUUGUUCCCUGAGAGCGGUAGUUCUC"
+    seq = "GGGAAUUAUUGUUCCCUGAGAGCGGUAGUUCUC"
+    (mfe_struct, mfe) = RNA.fold(seq)
+    print mfe
+    print mfe_struct
+    sss = mainloop(seq, mfe_struct, mfe, 1)
+
+    print sss
+
     #ref1 = "................................."
     #ref2 = "((((((((((((((.....))))))))))))))"
     #samples = callRNAxplorer(seq, ref1, ref2, 10)
-    xplorerData = readRNAxplorerFile(inputfile)
-    seq = xplorerData.Sequence
-    ref1 = xplorerData.Ref_struc1
-    ref2 = xplorerData.Ref_struc2
-    samples = xplorerData.Structures
-    basins = get2DBasins(samples, seq, ref1, ref2)
-    print basins
+
+    #result = XplorerData(seq, ref1, ref2, samples)
+    #xplorerData = readRNAxplorerFile(inputfile)
+    #seq = xplorerData.Sequence
+    #ref1 = xplorerData.Ref_struc1
+    #ref2 = xplorerData.Ref_struc2
+    #samples = xplorerData.Structures
+    #basins = get2DBasins(samples, seq, ref1, ref2)
+    #print basins
     
     
 """
