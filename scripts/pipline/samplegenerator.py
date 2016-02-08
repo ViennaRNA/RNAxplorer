@@ -5,6 +5,7 @@ using RNAxplorer
 
 import sys, re, RNA, subprocess, operator
 from clusteralgorithms.two_d_flooder import WatershedFlooder
+from parameters import TwoDSamplingParameters
 
 class Matrix2D:
     """
@@ -115,6 +116,8 @@ def getInterestingClusters(seq, clusters):
                 minE = energy
         selection.append(minS)
     """
+    if len(clusters) <= 0:
+        return []
     
     # try two smallest basins
     selection = []
@@ -156,7 +159,7 @@ def uniq_list(seq):
     return [x for x in seq if not (x in seen or seen_add(x))]
 
 
-def generateSamples(seq, mfe_struct, reference_stack):
+def generateSamples(seq, reference_stack, maxXplorerSamles):
     """
     Generate a diverse structure sample set by calling
     RNAxplorer for each pair of reference structures
@@ -177,17 +180,12 @@ def generateSamples(seq, mfe_struct, reference_stack):
     # now process all the structures in the reference_stack
     # to obtain more structure samples. 
     while len(reference_stack) >= 2:
-        # at this point, pop two structures at a time to get
-        # new references and only default to using mfe_struct
-        # as first reference if we have just a single new_ref left
+        # at this point, pop two structures at a time to get new references
         new_ref1 = reference_stack.pop()
-        if len(reference_stack) > 0:
-            new_ref2 = reference_stack.pop()
-        else:
-            new_ref2 = mfe_struct
+        new_ref2 = reference_stack.pop()
 
         # call RNAxplorer with our reference structures
-        xplorerData = callRNAxplorer(seq, new_ref1, new_ref2)
+        xplorerData = callRNAxplorer(seq, new_ref1, new_ref2, maxXplorerSamles)
         new_samples = xplorerData.samples
 
         # determine which structures belong to the same region
@@ -214,7 +212,7 @@ def generateSamples(seq, mfe_struct, reference_stack):
     return sample_set, new_reference_stack
 
 
-def mainloop(seq, mfe_struct, mfe, iterations=0):
+def mainloop(twoDsamplingParameters):
     """
     This is the mainloop that iteratively calls
     generateSamples() to grow the global_structures list
@@ -224,17 +222,22 @@ def mainloop(seq, mfe_struct, mfe, iterations=0):
     # don't require the structures to be clustered here.
     global_structures = set()
 
+    if not isinstance(twoDsamplingParameters,TwoDSamplingParameters):
+        return global_structures
+    
     # Initial step:
-    # start with mfe_struct and open chain as references
-    # to retrieve first sample set
+    # start with given structures as references
+    # to retrieve first sample set (recommended structures: mfe_struct and open chain)
     ref_structs = []
-    openchain = "." * len(seq)
-    ref_structs.append(mfe_struct)
-    ref_structs.append(openchain)
+    ref_structs.append(twoDsamplingParameters.Reference_one)
+    ref_structs.append(twoDsamplingParameters.Reference_two)
+    iterations = twoDsamplingParameters.SamplingIterations
+    seq = twoDsamplingParameters.Sequence
+    maxXplorerSamles = twoDsamplingParameters.MaxXplorerSamples
 
     while iterations >= 0 and len(ref_structs) > 0:
         # get new samples and potentially new reference structures
-        samples, new_ref_structs = generateSamples(seq, mfe_struct, ref_structs)
+        samples, new_ref_structs = generateSamples(seq, ref_structs, maxXplorerSamles)
         
         # add new samples to set of global structures
         global_structures.update(samples)
@@ -243,6 +246,7 @@ def mainloop(seq, mfe_struct, mfe, iterations=0):
         # assign new reference structures for next iteration   
         ref_structs = new_ref_structs
         iterations = iterations - 1
-
+    
+    
     return global_structures
 

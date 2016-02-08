@@ -36,7 +36,7 @@ class WatershedFlooder:
                         [1,4,-4,".).("],
                         [0,5,-1,".).."]
                       ]"""
-        if len(landscapeData) <= 0 | len(landscapeData[0]) < 4:
+        if len(landscapeData) <= 0 or len(landscapeData[0]) < 4:
             print "Error: landscapeData has the wrong structure."
             return []
     

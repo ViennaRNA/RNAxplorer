@@ -102,31 +102,53 @@ def varianceRatio(parentCluster, clusterA, clusterB, dissMatrix):
     return withinRatio, randomRatio
 
 def maxDiameterInLeafNodes(clusterTree, dissMatrix):
-        maxDiameter = -1
-        maxCluster = None
-        if len(clusterTree.childNodes) > 0:
-            for cn in clusterTree.childNodes:
-                dia, cluster = maxDiameterInLeafNodes(cn, dissMatrix)
-                if dia > maxDiameter:
-                    maxDiameter = dia
-                    maxCluster = cluster
-        else:
-            maxDiameter = diameter(clusterTree.structures, dissMatrix)
-            maxCluster = clusterTree
-        
-        return maxDiameter, maxCluster
+    maxDiameter = -1
+    maxCluster = None
+    if len(clusterTree.childNodes) > 0:
+        for cn in clusterTree.childNodes:
+            dia, cluster = maxDiameterInLeafNodes(cn, dissMatrix)
+            if dia > maxDiameter:
+                maxDiameter = dia
+                maxCluster = cluster
+    else:
+        maxDiameter = diameter(clusterTree.structures, dissMatrix)
+        maxCluster = clusterTree
+    
+    return maxDiameter, maxCluster
 
+def averageDiameterInLeafNodes(clusterTree, dissMatrix):
+    """
+    also known as Divisive Coefficient (DC).
+    """
+    sumDiameters = 0
+    numberOfClusters = 0
+    stackChildNodes = []
+    stackChildNodes.append(clusterTree)
+    while(len(stackChildNodes) > 0):
+        cn = stackChildNodes.pop()
+        if len(cn.childNodes) == 0:
+            #is leaf node/cluster --> sum
+            sumDiameters += diameter(cn.structures, dissMatrix)
+            numberOfClusters += 1
+        else:    
+            for c in cn.childNodes:
+                stackChildNodes.append(c)
+                
+    averageDiameter = sumDiameters / float(numberOfClusters)
+    return averageDiameter
 
-def createClusterTree(c_root, dissMatrix, threshold):
+def createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiameterThreshold):
     """
     The core of the diana algorithm (recursive function).
     c_root = the rootnode of the clusterTree. It contains the main cluster as childnode.
     """
     # 1. select cluster with the largest diameter from all leafnodes.
     maxDiameter, c_m = maxDiameterInLeafNodes(c_root, dissMatrix)
-    
-    if threshold >= 0:
-        if maxDiameter <= threshold:
+    dc = averageDiameterInLeafNodes(c_root, dissMatrix)
+    if dc < maxAverageDiameterThreshold:
+        return
+    if maxDiameterThreshold >= 0:
+        if maxDiameter <= maxDiameterThreshold:
             return      
             
     if c_m == None:
@@ -165,7 +187,7 @@ def createClusterTree(c_root, dissMatrix, threshold):
         c_m.childNodes.append(c_newA)
             
         # build the subtrees for each child
-        createClusterTree(c_root, dissMatrix, threshold)
+        createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiameterThreshold)
 
 
 def convertTreeToListOfClusters(clusterTree, structs, clusterList=[]):
@@ -176,14 +198,17 @@ def convertTreeToListOfClusters(clusterTree, structs, clusterList=[]):
         else:
             cluster = [ structs[c] for c in clusterTree.structures]
             clusterList.append(cluster)
-            
+    
+         
 class DIANA:
     @staticmethod
-    def doClustering(structs, threshold=0):
+    def doClustering(structs, maxDiameter, maxAverageDiameter):
         """
         Computes the DIANA clustering
         
-        threshold = minimal basepairdistance for belonging to a cluster.
+        Args:
+            maxDiameter = threshold for clustering
+            maxAverageDiameter = "
         """
     
         structs = list(structs)
@@ -194,13 +219,24 @@ class DIANA:
         c_root.structures.extend([x for x in range(0, len(structs))])
         
         # start the real DIANA algorithm.
-        createClusterTree(c_root, dissMatrix, threshold)
+        createClusterTree(c_root, dissMatrix, maxDiameter, maxAverageDiameter)
         # end DIANA
               
         clusters = convertTreeToListOfClusters(c_root, structs)
         
         return clusters
-
+    
+    @staticmethod
+    def printClusters(clusters):
+        """
+        print a list of lists.
+        """
+        cid = 0
+        for c in clusters:
+            cid +=1
+            print "ClusterID:",cid
+            for s in c:
+                print s
 
 
 
