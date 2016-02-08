@@ -15,7 +15,7 @@ class Matrix2D:
         """
         Args:
             sequence: rna sequence [ACGTacgt]
-            samples: list with entries of the form [bpdist to ref1, pbdist to ref2, free energy, secondary strucutre]
+            samples: list with entries of the form [bpdist to ref_one, pbdist to ref_two, free energy, secondary strucutre]
             ss1: first reference structure
             ss2: second reference structure
         """
@@ -132,12 +132,14 @@ def getInterestingClusters(seq, clusters):
     s1 = mfeStructure(seq, b1)
     s2 = mfeStructure(seq, b2)
     
+    #try basins on the diagonal
+    
     return [s1, s2]
 
 
-def get2DBasins(samples, sequence, ref1, ref2):
+def get2DBasins(samples, sequence, ref_one, ref_two):
     """
-    Given two reference structures ref1, and ref2, generate
+    Given two reference structures ref_one, and ref_two, generate
     the 2D projection of the provided sample set of structures.
     Using the MFE representatives of each distance class,
     determine the basins of attraction in this projection,
@@ -159,7 +161,7 @@ def uniq_list(seq):
     return [x for x in seq if not (x in seen or seen_add(x))]
 
 
-def generateSamples(seq, reference_stack, maxXplorerSamles):
+def generateSamples(seq, reference_stack, maxXplorerSamples):
     """
     Generate a diverse structure sample set by calling
     RNAxplorer for each pair of reference structures
@@ -185,19 +187,29 @@ def generateSamples(seq, reference_stack, maxXplorerSamles):
         new_ref2 = reference_stack.pop()
 
         # call RNAxplorer with our reference structures
-        xplorerData = callRNAxplorer(seq, new_ref1, new_ref2, maxXplorerSamles)
+        xplorerData = callRNAxplorer(seq, new_ref1, new_ref2, maxXplorerSamples)
         new_samples = xplorerData.samples
 
         # determine which structures belong to the same region
         # of interest, according to current 2D projection.
-        basins_2D = get2DBasins(new_samples, seq, new_ref1, new_ref2)
-
+        """   
+         basins_2D = get2DBasins(new_samples, seq, new_ref1, new_ref2)
+        """
         # cluster the structures within each basin to
         # obtain potentially interesting new reference
         # structures
+        """
         nextClusters = getInterestingClusters(seq, basins_2D)
+        """
+        nextClusters = WatershedFlooder.doFloodingAndExtractInterestingClusters(new_samples)
+        ref1 = mfeStructure(seq, nextClusters[0])
+        ref2 = mfeStructure(seq, nextClusters[1])
+        new_reference_stack.append(ref1)
+        new_reference_stack.append(ref2)
+        """
         for c in nextClusters:
             new_reference_stack.append(c)    
+        """
                   
             # basin_clusters = getClusters(b)
             # s = getInterestingClusters(basin_clusters)
@@ -233,11 +245,11 @@ def mainloop(twoDsamplingParameters):
     ref_structs.append(twoDsamplingParameters.Reference_two)
     iterations = twoDsamplingParameters.SamplingIterations
     seq = twoDsamplingParameters.Sequence
-    maxXplorerSamles = twoDsamplingParameters.MaxXplorerSamples
+    maxXplorerSamples = twoDsamplingParameters.MaxXplorerSamples
 
     while iterations >= 0 and len(ref_structs) > 0:
         # get new samples and potentially new reference structures
-        samples, new_ref_structs = generateSamples(seq, ref_structs, maxXplorerSamles)
+        samples, new_ref_structs = generateSamples(seq, ref_structs, maxXplorerSamples)
         
         # add new samples to set of global structures
         global_structures.update(samples)

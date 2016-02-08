@@ -1,40 +1,28 @@
 import re
 from samplegenerator import Matrix2D
 
-class Fasta:
+class FastaFileReader:
     @staticmethod
     def readFile(filename):
         """
-        Read a FASTA file and extract records as pairs of
-        id, and sequence
+        Read a FASTA file and extract the sequence and two reference structures
         """
-        res = []
-        counter = 0
-        is_fasta = 0
-        record_id = "seq_" + `counter`
         sequence = ""
+        ref_one = ""
+        ref_two = ""
         for l in open(filename):
             l.rstrip('\n')
-    
             # start actual parsing
-            if l.startswith(">"):
-                match = re.search('>\s*(\S+)', l)
-                if match:
-                    is_fasta = 1
-                    record_id = match.group(1)
-                    sequence = ""
-            elif not l.startswith("#")  and not l.startswith(";"):
-                match = re.search('([ACGUTacgutnN]+)', l)
-                if match:
-                    sequence += match.group(1)
-    
-            if not is_fasta:
-                res.append((record_id, sequence))
-                sequence = ""
-                counter += 1
-                record_id = "seq_" + `counter`
-    
-        return res
+            match = re.search('([ACGUTacgutnN]+)', l)
+            if match:
+                sequence += match.group(1)
+            match = re.search('([\.\)\(]+)', l)
+            if match:
+                if not ref_one:
+                    ref_one = match.group(1)
+                elif not ref_two:
+                    ref_two = match.group(1)
+        return sequence, ref_one, ref_two
 
 class xplorerFileReader:
     @staticmethod
