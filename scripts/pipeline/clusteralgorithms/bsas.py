@@ -115,11 +115,12 @@ class BSAS:
     @staticmethod             
     def doClustering(structs, threshold, maxClusters):
         """
-        Computes the basic sequential algoritmic scheme clustering
+        Computes the basic sequential algorithmic scheme clustering
         
         @param structs - list - secondary structures in dot-bracket notation
         @param threshold - int - minimal basepairdistance for belonging to a cluster.
         @param maxClusters - int - maximum number of clusters, that the algorithm will create.
+        @return list of lists - clusters
         """
         #1. m = 1; Cm = {x1}; // Init first cluster = first sample     
         #2. for every sample x from 2 to N      

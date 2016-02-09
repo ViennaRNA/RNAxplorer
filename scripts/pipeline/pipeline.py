@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("-I", "--infile", action="store", type=str, required=False, help="Input file with a sequence in FASTA format and to initial reference structures in dot-bracket format.")
     
     parser.add_argument("--samplingIterations", action="store", type=int, default=5, required=False, help="2D-sampling iterations.")
-    parser.add_argument("--maxRNAxplorerSamples", action="store", type=int, default=10, required=False, help="The maximal number of samples produced by RNAxplorer")
+    parser.add_argument("--maxRNAxplorerSamples", action="store", type=int, default=500, required=False, help="The maximal number of samples produced by RNAxplorer")
     
     parser.add_argument("--maxDiameterThreshold", action="store", type=int, default=0, required=False, help="Maximal allowed diameter for hierarchical clustering.")
     parser.add_argument("--maxAverageDiameterThreshold", action="store", type=int, default=6, required=False, help="Maximal allowed average diameter for hierarchical clustering.")
@@ -110,7 +110,8 @@ if __name__ == "__main__":
     structures = samplegenerator.mainloop(twoDSamplingParameters)
 
     # call final clusteralg.
-    clusters = DIANA.doClustering(structures, maxDiameterThreshold, maxAverageDiameterThreshold)
+    clusters = BSAS.doClustering(structures, 8, 20)
+    #clusters = DIANA.doClustering(structures, maxDiameterThreshold, maxAverageDiameterThreshold)
     DIANA.printClusters(clusters)
     representatives = selectRepresentatives(seq, clusters)
     

@@ -192,13 +192,13 @@ def generateSamples(seq, reference_stack, maxXplorerSamples):
 
         # determine which structures belong to the same region
         # of interest, according to current 2D projection.
-        """   
-         basins_2D = get2DBasins(new_samples, seq, new_ref1, new_ref2)
-        """
+         
+        basins_2D = get2DBasins(new_samples, seq, new_ref1, new_ref2)
+        
         # cluster the structures within each basin to
         # obtain potentially interesting new reference
         # structures
-        """
+        
         nextClusters = getInterestingClusters(seq, basins_2D)
         """
         nextClusters = WatershedFlooder.doFloodingAndExtractInterestingClusters(new_samples)
@@ -209,7 +209,7 @@ def generateSamples(seq, reference_stack, maxXplorerSamples):
         """
         for c in nextClusters:
             new_reference_stack.append(c)    
-        """
+        
                   
             # basin_clusters = getClusters(b)
             # s = getInterestingClusters(basin_clusters)
