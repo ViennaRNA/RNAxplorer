@@ -96,7 +96,7 @@ def callRNAxplorer(seq, ref_struct1, ref_struct2, n=100):
     """
     structures = []
 
-    RNAxplorer="./RNAxplorer -M SM -e \"MSF\" --betaScale=1.2 -i "+str(n)
+    RNAxplorer="./RNAxplorer -M SM -e \"MBSF\" --betaScale=1.2 -i "+str(n)
     #Unique=" | sort -k5 | uniq"
     sequenceAndStructures=seq+"\n"+ref_struct1+"\n"+ref_struct2
     # Run RNAxplorer
