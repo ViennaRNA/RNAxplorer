@@ -1,0 +1,23 @@
+# ignore autotools managed files
+.deps
+*.in
+Makefile
+
+m4
+stamp-h1
+missing
+compile
+config.h*
+config.log
+config.status
+config
+configure
+depcomp
+install-sh
+libtool
+ltmain.sh
+aclocal.m4
+autom4te.cache
+
+# compiled python code
+*.pyc
