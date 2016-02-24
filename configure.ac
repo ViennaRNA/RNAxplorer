@@ -54,7 +54,9 @@ AC_FUNC_REALLOC
 AC_FUNC_STRTOD
 AC_CHECK_FUNCS([floor strdup strstr strchr strrchr strstr strtol strtoul pow rint sqrt erand48 memset memmove erand48])
 
-AC_CONFIG_FILES([Makefile src/Makefile])
+AC_RXP_INIT
 
 AC_OUTPUT
+
+AC_RXP_NOTICE
 

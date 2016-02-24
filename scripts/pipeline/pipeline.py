@@ -3,7 +3,6 @@
 import RNA
 import samplegenerator
 from clusteralgorithms.diana import DIANA
-from clusteralgorithms.bsas import BSAS
 from rates import Rates
 import filewriter
 from filereader import FastaFileReader
@@ -13,7 +12,6 @@ import sys
 import math
 import argparse
 from parameters import Parameters, TwoDSamplingParameters
-from clusteralgorithms.bsas import BSAS
 
 def mfeStructure(seq, cluster):
     mfe = sys.float_info.max
@@ -110,8 +108,7 @@ if __name__ == "__main__":
     structures = samplegenerator.mainloop(twoDSamplingParameters)
 
     # call final clusteralg.
-    clusters = BSAS.doClustering(structures, 8, 20)
-    #clusters = DIANA.doClustering(structures, maxDiameterThreshold, maxAverageDiameterThreshold)
+    clusters = DIANA.doClustering(structures, maxDiameterThreshold, maxAverageDiameterThreshold)
     DIANA.printClusters(clusters)
     representatives = selectRepresentatives(seq, clusters)
     
