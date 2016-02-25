@@ -34,6 +34,12 @@ AC_PROG_LIBTOOL
 LT_INIT([pic-only, static])
 AC_SUBST(LIBTOOL_DEPS)
 
+dnl Check for OpenMP and prepare flags
+AC_OPENMP
+AC_SUBST(OPENMP_CFLAGS)
+CPPFLAGS="$CPPFLAGS $OPENMP_CFLAGS"
+LDFLAGS="$LDFLAGS $OPENMP_CFLAGS"
+
 #Search for the RNAlib2 and set variables for Makefiles if found.  _CFLAGS and _LIBS can be overriden with the modue Name from PKG_CHECK_MODULES
 PKG_CHECK_MODULES([RNALIB], [RNAlib2 >= 2.2.0],
                   [ AC_SUBST([RNALIB_CFLAGS])
