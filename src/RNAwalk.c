@@ -2,15 +2,7 @@
 /* this must be included first due to the dependency of pair_mat.h from fold_vars.h */
 
 
-#include <ViennaRNA/data_structures.h>
-#include <ViennaRNA/fold.h>
-#include <ViennaRNA/utils.h>
-#include <ViennaRNA/structure_utils.h>
-#include <ViennaRNA/energy_const.h>
-
 #include "RNAwalk.h"
-#include "meshpoint.h"
-
 
 
 int         simulatedAnnealing = 1;
@@ -27,13 +19,9 @@ static vrna_fold_compound_t *vc = NULL;
 
 void
 initRNAWalk(char *seq,
-            int circ){
+		vrna_md_t *md){
 
-  vrna_md_t md;
-  vrna_md_set_default(&md);
-  md.circ = circ;
-
-  vc = vrna_fold_compound(seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_EVAL_ONLY);
+  vc = vrna_fold_compound(seq, md, VRNA_OPTION_MFE | VRNA_OPTION_EVAL_ONLY);
 
   vrna_init_rand();
 

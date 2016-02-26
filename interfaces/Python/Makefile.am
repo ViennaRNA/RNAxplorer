@@ -13,12 +13,12 @@ pkgpyexec_PYTHON = RNAxplorer/__init__.py
 _RNAxplorer_la_SOURCES = $(top_srcdir)/interfaces/RNAxplorer.i $(SWIG_wrapper)
 
 _RNAxplorer_la_CPPFLAGS = -I$(top_srcdir)/src $(PYTHON_CPPFLAGS) $(SWIG_PYTHON_CPPFLAGS)
-_RNAxplorer_la_LIBADD = $(LDADD) $(RNALIB_LIBS) $(top_builddir)/src/libRNAxplorer_conv.la $(PYTHON_LIBS) $(PYTHON_EXTRA_LIBS)
+_RNAxplorer_la_LIBADD = $(LDADD) $(top_builddir)/src/libRNAxplorer_conv.la $(PYTHON_LIBS) $(PYTHON_EXTRA_LIBS)
 #if WITH_LIBSVM
 #_RNAxplorer_la_LIBADD += -lstdc++
 #endif
 
-_RNAxplorer_la_LDFLAGS = -avoid-version -module -shared -export-dynamic $(PYTHON_EXTRA_LDFLAGS)
+_RNAxplorer_la_LDFLAGS =  -Wc,-Bstatic -Wc,$(RNALIB_LIBS) -Wc,-Bdynamic -avoid-version -module -shared -export-dynamic $(PYTHON_EXTRA_LDFLAGS)
 #if WITH_LTO
 #_RNAxplorer_la_LDFLAGS += -Wc,$(LTO_LDFLAGS)
 #endif

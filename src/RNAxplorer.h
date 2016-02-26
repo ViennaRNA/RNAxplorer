@@ -1,5 +1,5 @@
-#ifndef __PATHFINDER__
-#define __PATHFINDER__
+#ifndef __RNAXPLORER__
+#define __RNAXPLORER__
 
 #define FIND_BEST_FOLDINGPATH           0
 #define FIND_BASIN_STRUCTURE            1

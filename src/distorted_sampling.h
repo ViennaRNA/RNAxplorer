@@ -3,7 +3,18 @@
 
 #include <ViennaRNA/data_structures.h>
 
-void estimate_landscape( vrna_fold_compound_t *vc,
+
+typedef struct {
+  int k;
+  int l;
+  int num_structs;
+  int max_structs;
+  char **structures;
+  double pf;
+  double mfe;
+} gridpointT;
+
+gridpointT** estimate_landscape( vrna_fold_compound_t *vc,
                     const char *s1,
                     const char *s2,
                     int maxIterations,

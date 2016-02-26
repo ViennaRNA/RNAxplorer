@@ -186,20 +186,7 @@ FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, char decomp, void *d
   return exp((-10.*(double)kl_pseudo_energy(i,j,k,l,decomp,data))/kT);
 }
 
-
-
-typedef struct {
-  int k;
-  int l;
-  int num_structs;
-  int max_structs;
-  char **structures;
-  double pf;
-  double mfe;
-} gridpointT;
-
-
-void
+gridpointT**
 estimate_landscape( vrna_fold_compound_t *vc,
                     const char *s1,
                     const char *s2,
@@ -639,6 +626,7 @@ estimate_landscape( vrna_fold_compound_t *vc,
 #endif
       }
     }
+  return landscape;
 }
 
 

@@ -147,7 +147,14 @@ void GetBasinStructure(void){
   char *s1;
   seq = get_line(stdin);
   s1 = get_line(stdin);
-  initRNAWalk(seq, circ);
+
+  vrna_md_t md;
+  vrna_md_set_default(&md);
+  /* set user-defined model details */
+  md.circ     = circ;
+  md.uniq_ML  = 1;
+
+  initRNAWalk(seq, &md);
   char *basinStructure = structureWalk(seq, s1, GRADIENT_WALK, circ);
   fprintf(stdout, "%s\n", basinStructure);
 }
@@ -225,7 +232,7 @@ void RNAxplorer(){
     curr_iteration = 0;
     switch(whatToDo){
       case FIND_2D_BARRIER_ESTIMATE:      {
-                                            barrier_estimate_2D(seq, s1, s2, maximum_distance1, maximum_distance2);
+                                            barrier_estimate_2D(seq, &md, s1, s2, maximum_distance1, maximum_distance2);
                                           }
                                           break;
 
@@ -290,7 +297,14 @@ void levelSaddlePoint(char *s1, char *s2){
   init_meshpoint_list(&bestMeshPoints);
   fprintf(stdout, "\nsearching for alternative paths...");
   fflush(stdout);
-  initRNAWalk(seq, circ);
+
+
+  vrna_md_t md;
+  vrna_md_set_default(&md);
+  /* set user-defined model details */
+  md.circ     = circ;
+  md.uniq_ML  = 1;
+  initRNAWalk(seq, &md);
   while(iterator > 0){
     char *newSaddle = structureWalk(seq, Saddle->s, method, circ);
     path_left = get_path(seq, s1, newSaddle, maxKeep/*, &steps1, circ*/);

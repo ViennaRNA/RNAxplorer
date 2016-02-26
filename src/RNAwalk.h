@@ -6,6 +6,13 @@
 #include <string.h>
 #include <math.h>
 #include <ViennaRNA/fold_vars.h>
+#include <ViennaRNA/data_structures.h>
+#include <ViennaRNA/fold.h>
+#include <ViennaRNA/utils.h>
+#include <ViennaRNA/structure_utils.h>
+#include <ViennaRNA/energy_const.h>
+#include <ViennaRNA/model.h>
+#include "meshpoint.h"
 
 #define DEBUG
 //#define _DEBUG_LOOPIDX
@@ -28,7 +35,7 @@ extern int backWalkPenalty;
 *  and also constructs the S and S1 sequence encoding arrays
 *  and the pair table for further usage
 */
-void initRNAWalk(char *seq, int circ);
+void initRNAWalk(char *seq, vrna_md_t *md);
 
 /* free all arrays that were allocated by the init function
 */

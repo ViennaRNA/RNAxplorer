@@ -23,9 +23,6 @@
 #include <ViennaRNA/2Dpfold.h>
 #include <ViennaRNA/mm.h>
 */
-#include <ViennaRNA/utils.h>
-#include <ViennaRNA/structure_utils.h>
-#include <ViennaRNA/2Dfold.h>
 
 #include "barrier_lower_bound.h"
 
@@ -55,7 +52,7 @@ void printBarrier(float B, float E, char *s){
 }
 
 
-void barrier_estimate_2D(char *seq,char *s1, char *s2, int maximum_distance1, int maximum_distance2){
+void barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maximum_distance1, int maximum_distance2){
   short *pt1, *pt2;
   pt1 = vrna_ptable(s1);
   pt2 = vrna_ptable(s2);
@@ -76,13 +73,8 @@ void barrier_estimate_2D(char *seq,char *s1, char *s2, int maximum_distance1, in
   printf("%d:%d ... %d:%d\n", a+c, a+maximum_distance1, b+c, b+maximum_distance2);
   int maxD1 = (a+c < a+maximum_distance1) ? a+maximum_distance1 : a+c;
   int maxD2 = (b+c < b+maximum_distance2) ? b+maximum_distance2 : a+c;
-  
-  vrna_md_t md;
-  vrna_md_set_default(&md);
-  md.circ     = circ;
-  md.uniq_ML  = 1;
 
-  vrna_fold_compound_t *vc = vrna_fold_compound_TwoD(seq, s1, s2, &md, VRNA_OPTION_MFE);
+  vrna_fold_compound_t *vc = vrna_fold_compound_TwoD(seq, s1, s2, md, VRNA_OPTION_MFE);
   vrna_sol_TwoD_t *mfe_s = vrna_mfe_TwoD(vc, maxD1, maxD2);
 
   nb_t **neighbors = (nb_t **)vrna_alloc((maxD1+1) * sizeof(nb_t *));
