@@ -2,7 +2,7 @@
 SWIG_main_src = $(srcdir)/../RNAxplorer.i
 
 #SWIG_tmaps = \
-#  $(srcdir)/../tmaps.i \
+#  $(srcdir)/../typemaps.i
 #  $(srcdir)/../ptr2array.i \
 #  $(srcdir)/../md_globals_tmaps.i
 

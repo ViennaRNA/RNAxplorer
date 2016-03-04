@@ -14,7 +14,13 @@ typedef struct {
   double mfe;
 } gridpointT;
 
-gridpointT** estimate_landscape( vrna_fold_compound_t *vc,
+typedef struct {
+  size_t size1;
+  size_t size2;
+  gridpointT **landscape;
+} gridLandscapeT;
+
+gridLandscapeT* estimate_landscape( vrna_fold_compound_t *vc,
                     const char *s1,
                     const char *s2,
                     int maxIterations,

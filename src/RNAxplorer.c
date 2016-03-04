@@ -269,7 +269,9 @@ void RNAxplorer(){
                                           levelSaddlePoint(s1, s2);
                                           break;
     }
-  
+
+    vrna_fold_compound_free(vc);
+
     free(seq);
     free(s1);
     free(s2);
