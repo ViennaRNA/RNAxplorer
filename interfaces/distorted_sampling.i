@@ -45,13 +45,8 @@
 				PyObject* pK = PyInt_FromLong($1->landscape[i][j].k);
 				PyObject* pL = PyInt_FromLong($1->landscape[i][j].l);
 				
-				//do float conversion via string conversion, because "PyFloat_FromDouble" is worse.
-				char charray[20];
 				double num = $1->landscape[i][j].mfe;
-				sprintf(charray, "%.2f", num);
-				PyObject* tmp = PyString_FromString((const char*)&charray);
-				PyObject* pMFE = PyFloat_FromString(tmp,NULL);
-				free(tmp);
+				PyObject* pMFE = PyFloat_FromDouble(num);
 				
 				PyObject* structureList = PyList_New($1->landscape[i][j].num_structs);
 				for(int k = 0; k < $1->landscape[i][j].num_structs; k++){

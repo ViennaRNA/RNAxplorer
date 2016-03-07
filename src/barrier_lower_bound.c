@@ -52,7 +52,7 @@ void printBarrier(float B, float E, char *s){
 }
 
 
-void barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maximum_distance1, int maximum_distance2){
+float barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maximum_distance1, int maximum_distance2){
   short *pt1, *pt2;
   pt1 = vrna_ptable(s1);
   pt2 = vrna_ptable(s2);
@@ -70,6 +70,10 @@ void barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maxim
       if(i < pt2[i]) b++;
     }  
   }
+
+  free(pt1);
+  free(pt2);
+
   printf("%d:%d ... %d:%d\n", a+c, a+maximum_distance1, b+c, b+maximum_distance2);
   int maxD1 = (a+c < a+maximum_distance1) ? a+maximum_distance1 : a+c;
   int maxD2 = (b+c < b+maximum_distance2) ? b+maximum_distance2 : a+c;
@@ -77,13 +81,9 @@ void barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maxim
   vrna_fold_compound_t *vc = vrna_fold_compound_TwoD(seq, s1, s2, md, VRNA_OPTION_MFE);
   vrna_sol_TwoD_t *mfe_s = vrna_mfe_TwoD(vc, maxD1, maxD2);
 
-  nb_t **neighbors = (nb_t **)vrna_alloc((maxD1+1) * sizeof(nb_t *));
-  int number_of_states = 0;
 
   /* make a lucky guess for the real max distancies */
-  for(i=0;i<(maxD1+1);i++){
-    neighbors[i] = (nb_t *)vrna_alloc((maxD2+1) * sizeof(nb_t));
-  }
+
   float mfe_s1, mfe_s2;
   int map_s1, map_s2;
 
@@ -101,6 +101,7 @@ void barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maxim
   }
 
   /* get some statistics of the 2D fold output */
+  int number_of_states = 0;
   for(i = number_of_states = 0; mfe_s[i].k != INF; i++){
     int k = mfe_s[i].k;
     int l = mfe_s[i].l;
@@ -158,6 +159,10 @@ void barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maxim
       }
     }
   }
+
+  free(mfe_s);
+  free(max_l);
+  free(min_l);
 
   nb_t *vertices = nodes;
   int vertex_count = number_of_states;
@@ -283,10 +288,15 @@ void barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maxim
   printBarrier(B, E_saddle, s_saddle);
 
   vrna_fold_compound_free(vc);
+  for(i=0;i<number_of_states;i++){
+  	free(nodes[i].s);
+  }
   free(nodes);
   for(i=0;i<(maxD1+1);i++){
     free(mapping[i]);
   }
   free(mapping);
+
+  return B;
 }
 
