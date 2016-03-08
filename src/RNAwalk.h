@@ -35,7 +35,7 @@ extern int backWalkPenalty;
 *  and also constructs the S and S1 sequence encoding arrays
 *  and the pair table for further usage
 */
-void initRNAWalk(char *seq, vrna_md_t *md);
+void initRNAWalk(const char *seq, vrna_md_t *md);
 
 /* free all arrays that were allocated by the init function
 */
@@ -49,7 +49,7 @@ void freeRNAWalkArrays(void);
 */
 #define GRADIENT_WALK   0
 #define MC_METROPOLIS   1
-char *structureWalk(char *seq, char *structure, int method, int circ);
+char *structureWalk(const char *seq, char *structure, int method);
 
 /* a simple position finding function that searches
 *  for the first entry in a sorted array of floats

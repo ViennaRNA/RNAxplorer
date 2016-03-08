@@ -26,4 +26,7 @@ gridLandscapeT* estimate_landscape( vrna_fold_compound_t *vc,
                     int maxIterations,
                     char *extended_options);
 
+void gridLandscape_free(gridLandscapeT* grid);
+void printLandscape(gridLandscapeT *grid,vrna_fold_compound_t *vc);
+
 #endif

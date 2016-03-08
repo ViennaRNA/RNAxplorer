@@ -40,8 +40,8 @@ typedef struct {
 	short *reference_pt2;
 } kl_soft_constraints;
 
-kl_soft_constraints *kl_init_datastructures(vrna_fold_compound_t *vc,
-		const char *s1, const char *s2, double x, double y) {
+kl_soft_constraints *kl_init_datastructures(vrna_fold_compound_t *vc, const char *s1, const char *s2, double x,
+		double y) {
 	kl_soft_constraints *data;
 	unsigned int n;
 	char *s = vc->sequence;
@@ -125,10 +125,8 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
 		break;
 
 	case VRNA_DECOMP_ML_ML_ML:
-		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k]
-				- referenceBPs1[idx[l] - j];
-		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k]
-				- referenceBPs2[idx[l] - j];
+		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k] - referenceBPs1[idx[l] - j];
+		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k] - referenceBPs2[idx[l] - j];
 		break;
 
 	case VRNA_DECOMP_ML_UP:
@@ -137,10 +135,8 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
 		break;
 
 	case VRNA_DECOMP_ML_ML_STEM:
-		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k]
-				- referenceBPs1[idx[l] - j];
-		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k]
-				- referenceBPs2[idx[l] - j];
+		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k] - referenceBPs1[idx[l] - j];
+		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k] - referenceBPs2[idx[l] - j];
 		break;
 
 	case VRNA_DECOMP_ML_COAXIAL: /* (i,j) stacks onto (k,l), lets ignore this case for now */
@@ -159,10 +155,8 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
 		break;
 
 	case VRNA_DECOMP_EXT_EXT_EXT:
-		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k]
-				- referenceBPs1[idx[l] - j];
-		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k]
-				- referenceBPs2[idx[l] - j];
+		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k] - referenceBPs1[idx[l] - j];
+		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k] - referenceBPs2[idx[l] - j];
 		break;
 
 	case VRNA_DECOMP_EXT_STEM:
@@ -172,17 +166,13 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
 
 	case VRNA_DECOMP_EXT_EXT_STEM: /* fall through */
 	case VRNA_DECOMP_EXT_STEM_EXT:
-		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k]
-				- referenceBPs1[idx[l] - j];
-		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k]
-				- referenceBPs2[idx[l] - j];
+		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k] - referenceBPs1[idx[l] - j];
+		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k] - referenceBPs2[idx[l] - j];
 		break;
 
 	case VRNA_DECOMP_EXT_EXT_STEM1:
-		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k]
-				- referenceBPs1[idx[l] - (j - 1)];
-		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k]
-				- referenceBPs2[idx[l] - (j - 1)];
+		d1 = referenceBPs1[ij] - referenceBPs1[idx[i] - k] - referenceBPs1[idx[l] - (j - 1)];
+		d2 = referenceBPs2[ij] - referenceBPs2[idx[i] - k] - referenceBPs2[idx[l] - (j - 1)];
 		break;
 
 	case VRNA_DECOMP_EXT_STEM_OUTSIDE:
@@ -206,17 +196,14 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
 	return (x * d1 + y * d2) * 100;
 }
 
-FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, char decomp,
-		void *data) {
+FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, char decomp, void *data) {
 
 	double kT = ((kl_soft_constraints *) data)->kT;
-	return exp(
-			(-10. * (double) kl_pseudo_energy(i, j, k, l, decomp, data)) / kT);
+	return exp((-10. * (double) kl_pseudo_energy(i, j, k, l, decomp, data)) / kT);
 }
 
 gridLandscapeT*
-estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
-		int maxIterations, char *extended_options) {
+estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int maxIterations, char *extended_options) {
 
 	unsigned int *mm1, *mm2;
 	int i, j, MAX_k, MAX_l, length, *my_iindx;
@@ -303,14 +290,12 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 	bp_dist_mfe_ref1 = vrna_bp_distance(mfe_struct, s1);
 	bp_dist_mfe_ref2 = vrna_bp_distance(mfe_struct, s2);
 
-
 	free(mfe_struct);
 	free(mm1);
 	free(mm2);
 	free(pt_mfe);
 	free(pt_ref1);
 	free(pt_ref2);
-
 
 	if (!plain) {
 		//if(mmfe == e_ref1)
@@ -322,8 +307,7 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 			 */
 			distortion_x = 0;
 			if (bp_dist_mfe_ref2 != 0) {
-				distortion_y = (distortion_x * bp_dist_mfe_ref2 - mmfe + e_ref2)
-						/ bp_dist_mfe_ref2;
+				distortion_y = (distortion_x * bp_dist_mfe_ref2 - mmfe + e_ref2) / bp_dist_mfe_ref2;
 			}
 		}
 
@@ -336,8 +320,7 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 			 */
 			distortion_y = 0;
 			if (bp_dist_mfe_ref1 != 0) {
-				distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - mmfe)
-						/ bp_dist_mfe_ref1;
+				distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - mmfe) / bp_dist_mfe_ref1;
 			}
 		}
 
@@ -350,14 +333,11 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 			 distortion_y = ((e_ref2 * bp_dist_mfe_ref1) / (bp_dist * bp_dist_mfe_ref2)) - (mmfe / bp_dist_mfe_ref2);
 			 we use the Wolfram alpha solution below ;)
 			 */
-			double nenner = bp_dist
-					* (bp_dist_mfe_ref1 + bp_dist_mfe_ref2 - bp_dist);
-			distortion_x = (bp_dist_mfe_ref2 * e_ref1
-					- bp_dist_mfe_ref2 * e_ref2 - bp_dist * mmfe
-					+ bp_dist * e_ref2) / nenner;
-			distortion_y = (-bp_dist_mfe_ref1 * e_ref1
-					+ bp_dist_mfe_ref1 * e_ref2 - bp_dist * mmfe
-					+ bp_dist * e_ref1) / nenner;
+			double nenner = bp_dist * (bp_dist_mfe_ref1 + bp_dist_mfe_ref2 - bp_dist);
+			distortion_x = (bp_dist_mfe_ref2 * e_ref1 - bp_dist_mfe_ref2 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref2)
+					/ nenner;
+			distortion_y = (-bp_dist_mfe_ref1 * e_ref1 + bp_dist_mfe_ref1 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref1)
+					/ nenner;
 		}
 
 		printf("d_x = %1.10f, d_y = %1.10f\n", distortion_x, distortion_y);
@@ -368,21 +348,18 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 	gridpointT **landscape;
 	landscape = (gridpointT **) vrna_alloc(sizeof(gridpointT) * (MAX_k + 1));
 	for (i = 0; i <= MAX_k; i++)
-		landscape[i] = (gridpointT *) vrna_alloc(
-				sizeof(gridpointT) * (MAX_l + 1));
+		landscape[i] = (gridpointT *) vrna_alloc(sizeof(gridpointT) * (MAX_l + 1));
 
 	/* alloc memory for 1000 structures per partition in the landscape */
 	for (i = 0; i <= MAX_k; i++)
 		for (j = 0; j <= MAX_l; j++) {
 			landscape[i][j].max_structs = 1000;
-			landscape[i][j].structures = (char **) vrna_alloc(
-					sizeof(char *) * landscape[i][j].max_structs);
+			landscape[i][j].structures = (char **) vrna_alloc(sizeof(char *) * landscape[i][j].max_structs);
 		}
 
 	/* prepare pf fold */
 	if (!plain) {
-		rescale = mmfe + (bp_dist_mfe_ref1 * distortion_x)
-				+ (bp_dist_mfe_ref2 * distortion_y);
+		rescale = mmfe + (bp_dist_mfe_ref1 * distortion_x) + (bp_dist_mfe_ref2 * distortion_y);
 	} else {
 		rescale = mmfe;
 	}
@@ -391,8 +368,7 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 	if (!plain) {
 		/* apply distortion soft constraints */
 		vrna_sc_init(vc);
-		data = kl_init_datastructures(vc, (const char *) s1, (const char *) s2,
-				distortion_x, distortion_y);
+		data = kl_init_datastructures(vc, (const char *) s1, (const char *) s2, distortion_x, distortion_y);
 
 		vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints);
 		vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy);
@@ -413,8 +389,7 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 		/* check if we have sufficient memory allocated and alloc more if necessary */
 		if (landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs) {
 			landscape[k][l].max_structs *= 2;
-			landscape[k][l].structures = (char **) vrna_realloc(
-					landscape[k][l].structures,
+			landscape[k][l].structures = (char **) vrna_realloc(landscape[k][l].structures,
 					sizeof(char *) * landscape[k][l].max_structs);
 		}
 
@@ -444,8 +419,7 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 					}
 
 					if (verbose)
-						fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x,
-								data->y);
+						fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
 					(void) vrna_pf(vc, NULL);
 					for (i = 0; i < maxIterations; i++) {
 						char *sample = vrna_pbacktrack(vc);
@@ -455,18 +429,14 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 						double fe = (double) vrna_eval_structure(vc, sample);
 
 						/* check if we have sufficient memory allocated and alloc more if necessary */
-						if (landscape[k][l].num_structs + 2
-								>= landscape[k][l].max_structs) {
+						if (landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs) {
 							landscape[k][l].max_structs *= 2;
-							landscape[k][l].structures = (char **) vrna_realloc(
-									landscape[k][l].structures,
-									sizeof(char *)
-											* landscape[k][l].max_structs);
+							landscape[k][l].structures = (char **) vrna_realloc(landscape[k][l].structures,
+									sizeof(char *) * landscape[k][l].max_structs);
 						}
 
 						/* insert structure */
-						landscape[k][l].structures[landscape[k][l].num_structs] =
-								sample;
+						landscape[k][l].structures[landscape[k][l].num_structs] = sample;
 						landscape[k][l].num_structs++;
 						if (landscape[k][l].mfe > fe)
 							landscape[k][l].mfe = fe;
@@ -483,8 +453,7 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 						data->y += RELAX_FACTOR * bla_y / bp_dist;
 					}
 					if (verbose)
-						fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x,
-								data->y);
+						fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
 					(void) vrna_pf(vc, NULL);
 					for (i = 0; i < maxIterations; i++) {
 						char *sample = vrna_pbacktrack(vc);
@@ -494,18 +463,14 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 						double fe = (double) vrna_eval_structure(vc, sample);
 
 						/* check if we have sufficient memory allocated and alloc more if necessary */
-						if (landscape[k][l].num_structs + 2
-								>= landscape[k][l].max_structs) {
+						if (landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs) {
 							landscape[k][l].max_structs *= 2;
-							landscape[k][l].structures = (char **) vrna_realloc(
-									landscape[k][l].structures,
-									sizeof(char *)
-											* landscape[k][l].max_structs);
+							landscape[k][l].structures = (char **) vrna_realloc(landscape[k][l].structures,
+									sizeof(char *) * landscape[k][l].max_structs);
 						}
 
 						/* insert structure */
-						landscape[k][l].structures[landscape[k][l].num_structs] =
-								sample;
+						landscape[k][l].structures[landscape[k][l].num_structs] = sample;
 						landscape[k][l].num_structs++;
 						if (landscape[k][l].mfe > fe)
 							landscape[k][l].mfe = fe;
@@ -534,8 +499,7 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 				}
 
 				if (verbose)
-					fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x,
-							data->y);
+					fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->x, data->y);
 				(void) vrna_pf(vc, NULL);
 				for (i = 0; i < maxIterations; i++) {
 					char *sample = vrna_pbacktrack(vc);
@@ -545,17 +509,14 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 					double fe = (double) vrna_eval_structure(vc, sample);
 
 					/* check if we have sufficient memory allocated and alloc more if necessary */
-					if (landscape[k][l].num_structs + 2
-							>= landscape[k][l].max_structs) {
+					if (landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs) {
 						landscape[k][l].max_structs *= 2;
-						landscape[k][l].structures = (char **) vrna_realloc(
-								landscape[k][l].structures,
+						landscape[k][l].structures = (char **) vrna_realloc(landscape[k][l].structures,
 								sizeof(char *) * landscape[k][l].max_structs);
 					}
 
 					/* insert structure */
-					landscape[k][l].structures[landscape[k][l].num_structs] =
-							sample;
+					landscape[k][l].structures[landscape[k][l].num_structs] = sample;
 					landscape[k][l].num_structs++;
 					if (landscape[k][l].mfe > fe)
 						landscape[k][l].mfe = fe;
@@ -573,17 +534,14 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 			printf("d_x = %1.10f, d_y = %1.10f\n", distortion_x, distortion_y);
 
 			/* prepare pf fold */
-			rescale = mmfe + (bp_dist_mfe_ref1 * distortion_x)
-					+ (bp_dist_mfe_ref2 * distortion_y);
+			rescale = mmfe + (bp_dist_mfe_ref1 * distortion_x) + (bp_dist_mfe_ref2 * distortion_y);
 			vrna_exp_params_rescale(vc, &rescale);
 
-			printf("pf_scale = %6.10f (%6.10f)\n", vc->exp_params->pf_scale,
-					rescale);
+			printf("pf_scale = %6.10f (%6.10f)\n", vc->exp_params->pf_scale, rescale);
 
 			/* apply distortion soft constraints */
 			vrna_sc_remove(vc);
-			kl_soft_constraints *data = kl_init_datastructures(vc,
-					(const char *) s1, (const char *) s2, distortion_x,
+			kl_soft_constraints *data = kl_init_datastructures(vc, (const char *) s1, (const char *) s2, distortion_x,
 					distortion_y);
 			vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints);
 			vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy);
@@ -598,17 +556,14 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 				double fe = (double) vrna_eval_structure(vc, sample);
 
 				/* check if we have sufficient memory allocated and alloc more if necessary */
-				if (landscape[k][l].num_structs + 2
-						>= landscape[k][l].max_structs) {
+				if (landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs) {
 					landscape[k][l].max_structs *= 2;
-					landscape[k][l].structures = (char **) vrna_realloc(
-							landscape[k][l].structures,
+					landscape[k][l].structures = (char **) vrna_realloc(landscape[k][l].structures,
 							sizeof(char *) * landscape[k][l].max_structs);
 				}
 
 				/* insert structure */
-				landscape[k][l].structures[landscape[k][l].num_structs] =
-						sample;
+				landscape[k][l].structures[landscape[k][l].num_structs] = sample;
 				landscape[k][l].num_structs++;
 				if (landscape[k][l].mfe > fe)
 					landscape[k][l].mfe = fe;
@@ -671,57 +626,51 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2,
 
 #endif
 
-	/* debug output */
-	for (i = 0; i <= MAX_k; i++)
-		for (j = 0; j <= MAX_l; j++) {
-			if (landscape[i][j].num_structs > 0) {
-				int k;
-#if 0
-				printf("%d\t%d\t%6.2f\t(%d) %s\n", i, j, landscape[i][j].mfe, landscape[i][j].num_structs, landscape[i][j].structures[0]);
-#else
-				for (k = 0; k < landscape[i][j].num_structs; k++)
-					printf("%d\t%d\t%6.2f\t(%d) %s\n", i, j,
-							vrna_eval_structure(vc,
-									landscape[i][j].structures[k]),
-							landscape[i][j].num_structs,
-							landscape[i][j].structures[k]);
-#endif
-			}
-		}
-
-	//TODO: clean up if not used as pythonlibrary.
-	/*
-	for (i = 0; i <= MAX_k; i++) {
-		for (j = 0; j <= MAX_l; j++) {
-
-			for(int k = 0; k < landscape[i][j].num_structs; k++)
-			{
-				free(landscape[i][j].structures[k]);
-			}
-			free(landscape[i][j].structures);
-		}
-		free(landscape[i]);
-	}
-	free(landscape);
-	*/
-
 	// evaluate structures, set properties.
-	for (i = 0; i <= MAX_k; i++){
+	for (i = 0; i <= MAX_k; i++) {
 		for (j = 0; j <= MAX_l; j++) {
 			if (landscape[i][j].num_structs > 0) {
 				int k;
 				for (k = 0; k < landscape[i][j].num_structs; k++)
 					landscape[i][j].mfe = vrna_eval_structure(vc, landscape[i][j].structures[k]);
-					landscape[i][j].k = i;
-					landscape[i][j].l = j;
+				landscape[i][j].k = i;
+				landscape[i][j].l = j;
 			}
 		}
 	}
 	gridLandscapeT* grid = malloc(sizeof(gridLandscapeT));
-	grid->size1 = MAX_k+1;
-	grid->size2 = MAX_l+1;
+	grid->size1 = MAX_k + 1;
+	grid->size2 = MAX_l + 1;
 	grid->landscape = landscape;
-	printf("%d %d",grid->size1,grid->size2);
+	printf("%d %d", grid->size1, grid->size2);
 	return grid;
+}
+
+void printLandscape(gridLandscapeT *grid, vrna_fold_compound_t *vc) {
+	for (int i = 0; i < grid->size1; i++) {
+		for (int j = 0; j < grid->size2; j++) {
+			if (grid->landscape[i][j].num_structs > 0) {
+				int k;
+				for (k = 0; k < grid->landscape[i][j].num_structs; k++)
+					printf("%d\t%d\t%6.2f\t(%d) %s\n", i, j, vrna_eval_structure(vc, grid->landscape[i][j].structures[k]),
+							grid->landscape[i][j].num_structs, grid->landscape[i][j].structures[k]);
+			}
+		}
+	}
+}
+
+void gridLandscape_free(gridLandscapeT *grid) {
+	for (int i = 0; i < grid->size1; i++) {
+		for (int j = 0; j < grid->size2; j++) {
+
+			for (int k = 0; k < grid->landscape[i][j].num_structs; k++) {
+				free(grid->landscape[i][j].structures[k]);
+			}
+			free(grid->landscape[i][j].structures);
+		}
+		free(grid->landscape[i]);
+	}
+	free(grid->landscape);
+	free(grid);
 }
 

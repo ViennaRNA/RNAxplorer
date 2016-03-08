@@ -18,7 +18,7 @@ _RNAxplorer_la_LIBADD = $(LDADD) $(top_builddir)/src/libRNAxplorer_conv.la $(PYT
 #_RNAxplorer_la_LIBADD += -lstdc++
 #endif
 
-_RNAxplorer_la_LDFLAGS =  -Wc,-Bstatic -Wc,$(RNALIB_LIBS) -Wc,-Bdynamic -avoid-version -module -shared -export-dynamic $(PYTHON_EXTRA_LDFLAGS)
+_RNAxplorer_la_LDFLAGS = $(RNALIB_LIBS) -avoid-version -module -shared -export-dynamic $(PYTHON_EXTRA_LDFLAGS)
 #if WITH_LTO
 #_RNAxplorer_la_LDFLAGS += -Wc,$(LTO_LDFLAGS)
 #endif

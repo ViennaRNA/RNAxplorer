@@ -18,7 +18,7 @@ int         backWalkPenalty = 0;
 static vrna_fold_compound_t *vc = NULL;
 
 void
-initRNAWalk(char *seq,
+initRNAWalk(const char *seq,
 		vrna_md_t *md){
 
   vc = vrna_fold_compound(seq, md, VRNA_OPTION_MFE | VRNA_OPTION_EVAL_ONLY);
@@ -35,10 +35,9 @@ freeRNAWalkArrays(void){
 }
 
 char *
-structureWalk(char *seq,
+structureWalk(const char *seq,
               char *structure,
-              int method,
-              int circ){
+              int method){
 
 
   vrna_md_t *md;
@@ -249,7 +248,8 @@ structureWalk(char *seq,
     if(ThisIsTheEnd) break;
   }
   if(rememberStructures > 0){
-    clear_structure_queue(lastStructures);  
+    clear_structure_queue(lastStructures);
+    free(lastStructures);
   }
   return minStruct;
 }

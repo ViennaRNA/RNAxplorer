@@ -6,7 +6,7 @@ bin_PROGRAMS = RNAxplorer
 # convenience library
 noinst_LTLIBRARIES = libRNAxplorer_conv.la
 
-LDADD = $(RNALIB_LIBS) $(top_builddir)/src/libRNAxplorer_conv.la
+LDADD = $(top_builddir)/src/libRNAxplorer_conv.la $(RNALIB_LIBS)
 
 GENGETOPT_CMDL =  RNAxplorer_cmdl.c RNAxplorer_cmdl.h
 GENGETOPT_FILES =  RNAxplorer.ggo
@@ -29,6 +29,8 @@ libRNAxplorer_conv_la_SOURCES = \
   distorted_sampling.c \
   distorted_sampling.h \
   barrier_lower_bound.c \
-  barrier_lower_bound.h
+  barrier_lower_bound.h \
+  paths.c \
+  paths.h
 
 RNAxplorer_SOURCES = ${GENGETOPT_CMDL} RNAxplorer.c
