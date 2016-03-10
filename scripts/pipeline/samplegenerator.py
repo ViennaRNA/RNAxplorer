@@ -7,6 +7,8 @@ import sys, re, RNA, subprocess, operator
 from clusteralgorithms.two_d_flooder import WatershedFlooder
 from parameters import TwoDSamplingParameters
 
+import RNAxplorer
+
 class Matrix2D:
     """
     contains all the information about an rna_xplorer call.
@@ -25,6 +27,43 @@ class Matrix2D:
         self.samples = samples
 
 def callRNAxplorer(seq, ref_struct1, ref_struct2, n=500):
+    """
+    Call RNAxplorer using ref_struct1, ref_struct2 as
+    structures that are made equally probable within
+    the ensemble. Tell RNAxplorer to generate n samples
+
+    returns a Matrix2D object which contains all unique samples and the inputdata of the xplorer call.
+    """
+    md = RNA.md()
+    md.circ     = 0
+    md.uniq_ML  = 1
+    md.compute_bpp = 0
+    md.betaScale = 1
+
+    vc = RNA.fold_compound(seq,md,RNA.VRNA_OPTION_MFE | RNA.VRNA_OPTION_PF)
+    extended_options=""
+
+    # samples = list (k,l,energy,[strucutres])
+    tmpSamples = RNAxplorer.estimate_landscape(vc, ref_struct1, ref_struct2, n, extended_options)
+ 
+    #convert tmpSamples to a list with one structure per k,l-cell (min. energy for example).
+    xplorerSamples = []
+    for s in tmpSamples:
+        uniqueStructures = list(set(s[3]))
+        minEnergy = sys.float_info.max
+        minStructure = ""
+        for structure in uniqueStructures:
+            energy = RNA.energy_of_struct(seq, structure)
+            if energy < minEnergy:
+                minStructure = structure
+                minEnergy = energy
+        xplorerSamples.append((s[0],s[1],minEnergy,minStructure))
+
+    x = Matrix2D(seq, xplorerSamples, ref_struct1, ref_struct2)
+    return x
+
+
+def callRNAxplorerOld(seq, ref_struct1, ref_struct2, n=500):
     """
     Call RNAxplorer using ref_struct1, ref_struct2 as
     structures that are made equally probable within
@@ -189,7 +228,7 @@ def generateSamples(seq, reference_stack, maxXplorerSamples):
         # call RNAxplorer with our reference structures
         xplorerData = callRNAxplorer(seq, new_ref1, new_ref2, maxXplorerSamples)
         new_samples = xplorerData.samples
-
+        print new_samples
         # determine which structures belong to the same region
         # of interest, according to current 2D projection.
          

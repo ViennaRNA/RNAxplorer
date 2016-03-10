@@ -51,7 +51,16 @@ void printBarrier(float B, float E, char *s){
     printf("Estimated energy barrier is %6.2f\n", B);
 }
 
-
+/**
+ * Compute a shortest path via Dijkstra algorithm trough the 2D-Landscape.
+ * @param seq - the RNA sequence
+ * @param md - model details
+ * @param s1 - dot-bracket structure
+ * @param s2 - dot-bracket structure
+ * @param maximum_distance1 - initial value for space allocation. Will be computed within this method.
+ * @param maximum_distance2 - initial value for space allocation. Will be computed within this method.
+ * @return the energybarrier of the path.
+ */
 float barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maximum_distance1, int maximum_distance2){
   short *pt1, *pt2;
   pt1 = vrna_ptable(s1);
@@ -82,7 +91,7 @@ float barrier_estimate_2D(char *seq, vrna_md_t *md, char *s1, char *s2, int maxi
   vrna_sol_TwoD_t *mfe_s = vrna_mfe_TwoD(vc, maxD1, maxD2);
 
 
-  /* make a lucky guess for the real max distancies */
+  /* make a lucky guess for the real max distances */
 
   float mfe_s1, mfe_s2;
   int map_s1, map_s2;

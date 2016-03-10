@@ -10,9 +10,9 @@
 
 
 /**
- * ! Computes the direct folding path between the given structures. This path is used as template for an alternative path search.
- * ! The alternative path consists of meshpoints. The first meshpoint is the saddlepoint on the direct path. All other meshpoints are
- * ! computed depending on the number of maxIterations.
+ * Computes the direct folding path between the given structures. This path is used as template for an alternative path search.
+ * The alternative path consists of meshpoints. The first meshpoint is the saddlepoint on the direct path. All other meshpoints are
+ * computed depending on the number of maxIterations.
  * @param seq - the RNA sequence (ACGU)
  * @param s1 - first structure in dot-bracket format.
  * @param s2 - second structure in dot-bracket format.
@@ -96,7 +96,7 @@ void levelSaddlePoint(const char *seq, const char *s1, const char *s2, int maxIt
 }
 
 /**
- * ! Compute a path between structure s1 and s2.
+ * Compute a path between structure s1 and s2.
  * @param seq - the RNA sequence (ACGU)
  * @param s1 - first structure in dot-bracket format.
  * @param s2 - second structure in dot-bracket format.
