@@ -32,7 +32,8 @@ details="Available options are:\n GW        Gradient Walk             (default)\
  MC        Monte Carlo walk\n\
  MC-SA     Monte Carlo Walk\n             with simulated Annealing\n\
  DB-MFE    Distance based MFE structure\n             meshpoints\n\
- TRATES    Transition rate computation\n\n"
+ TRATES    Transition rate computation\n
+ SM        Stochastic sampling method with 2D mapping\n\n"
 string
 typestr="<method>"
 optional
@@ -139,4 +140,6 @@ option  "temp"  T
 "Rescale energy parameters to a temperature of temp C. Default is 37C.\n\n"
 double
 optional
+
+
 

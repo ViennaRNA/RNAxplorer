@@ -14,9 +14,6 @@
 #include <ViennaRNA/model.h>
 #include "meshpoint.h"
 
-#define DEBUG
-//#define _DEBUG_LOOPIDX
-
 #define MIN2(A, B)        ((A) < (B) ? (A) : (B))
 #define MAX2(A, B)        ((A) > (B) ? (A) : (B))
 

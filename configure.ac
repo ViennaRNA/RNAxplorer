@@ -10,6 +10,30 @@ AM_SILENT_RULES([yes])
 
 AM_INIT_AUTOMAKE(-Wall -Werror foreign)
 
+
+#Create debug conditional
+# prevent setting xFLAGS to default of -g -O2
+if test x"$CFLAGS" = x""; then
+  AC_SUBST(CFLAGS, [ ])
+fi
+if test x"$CPPFLAGS" = x""; then
+  AC_SUBST(CPPFLAGS, [ ])
+fi
+
+AC_ARG_ENABLE([debug],
+              AC_HELP_STRING([--enable-debug],
+              [compile with debug symbols @<:@default=no@:>@]),
+              [want_debug="$enableval"], [want_debug=no])
+
+if test "x$want_debug" = "xyes"; then
+  CFLAGS="$CFLAGS -O0 -ggdb"
+  CPPFLAGS="$CPPFLAGS -O0 -ggdb"
+  AC_DEFINE([DEBUG], 1, [Define for debugging])
+else
+  CFLAGS="$CFLAGS -O2"
+  CPPFLAGS="$CPPFLAGS -O2"
+fi
+
 AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
