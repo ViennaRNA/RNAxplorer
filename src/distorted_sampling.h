@@ -107,6 +107,19 @@ void fillGridStepwiseSecondRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, f
  */
 gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2);
 
+
+/**
+ * computes the distortion for both references. The probability of both references is set to the probability of structure s0.
+ * @param vc - the foldcompound which contains energy parameters (model details).
+ * @param s0 - the structure which is the center of the distortion.
+ * @param s1 - the first structure in dot-bracket notation
+ * @param s2 - the second structure in dot-bracket notation
+ * @param distortion_x - pointer to one value which receives the output
+ * @param distortion_y - pointer to one value which receives the output
+ */
+void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1, const char *s2,
+		double *dist_x, double *dist_y);
+
 /**
  * computes the distortion for both references. The probability of both references is set to the probability of the mfe.
  * @param vc - the foldcompound which contains energy parameters (model details).
@@ -117,6 +130,17 @@ gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2);
  */
 void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const char *s2, double *distortion_x,
 		double *distortion_y);
+
+/**
+ * add the distortion softconstraints (data and functionpointer)to the foldcompound.
+ * @param vc - the foldcompound which contains energy parameters (model details).
+ * @param s1 - the first structure in dot-bracket notation
+ * @param s2 - the second structure in dot-bracket notation
+ * @param distortion_x - pointer to one value which receives the output
+ * @param distortion_y - pointer to one value which receives the output
+ */
+void addSoftconstraints(vrna_fold_compound_t *vc, const char *s1, const char *s2, double distortion_x,
+		double distortion_y);
 
 /**
  * generate a stochastically sampled 2D map via distortion of the energy landscape

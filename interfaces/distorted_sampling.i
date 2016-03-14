@@ -2,29 +2,14 @@
 /* BEGIN interface for distorted_sampling functions   */
 /**********************************************/
 
-//no default constructor
-//%nodefaultdtor gridLandscapeT;
+%include typemaps.i
 
-/*
-%extend gridLandscapeT {
-	~gridLandscapeT(){
-	  	for(int i = 0; i < $self->size1; i++){
-	  		free($self->landscape[i]);
-	  	}
-		free($self->landscape);		
-	  	free($self);
-	}
-}
-*/
+%apply double *OUTPUT { double *result };
+void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const char *s2, double *OUTPUT, double *OUTPUT);
 
-%typemap(out) gridLandscapeT* estimate_landscape %{
-	/*
-	int ownership = 1; // 1 == python.
-	gridLandscapeT* gp = $1;
-	PyObject* res = SWIG_NewPointerObj(gp, SWIGTYPE_p_gridLandscapeT, ownership);
-	$result = res;
-	*/
-	
+void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1, const char *s2, double *OUTPUT, double *OUTPUT);
+
+%typemap(out) gridLandscapeT* estimate_landscape, gridLandscapeT* convertGrid_toList %{
 	//get number of cells
 	int numberOfCells = 0;
 	for(int i = 0; i < $1->size1;i++){
@@ -71,27 +56,19 @@
 	$result=res;
 %}
 
-/*
-%typemap(freearg) char ** {
-  free($1);
-}
 
-%typemap(out) char ** {
-  int len,i;
-  len = 0;
-  while ($1[len]) len++;
-  $result = PyList_New(len);
-  for (i = 0; i < len; i++) {
-    PyList_SetItem($result,i,PyString_FromString($1[i]));
-    free($1[i]);
-  }
-}
-*/
 
 %{
 #include "../src/distorted_sampling.h"
 %}
 
 %include "../src/distorted_sampling.h"
+
+//define only the conversion method and map the output via %typemap.
+%inline %{
+gridLandscapeT* convertGrid_toList(gridLandscapeT* grid) {
+    return grid;
+}
+%}
 
 

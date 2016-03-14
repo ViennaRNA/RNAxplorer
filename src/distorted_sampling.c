@@ -257,6 +257,9 @@ void fillGridStepwiseBothRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, flo
 		}
 		fillGridWithSamples(vc, grid, s1, s2, maxIterations);
 	}
+	//reset to initial distortion
+	data->x = orig_x;
+	data->y = orig_y;
 }
 
 void fillGridStepwiseFirstRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax, int verbose,
@@ -284,6 +287,8 @@ void fillGridStepwiseFirstRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, fl
 		}
 		fillGridWithSamples(vc, grid, s1, s2, maxIterations);
 	}
+	//reset to initial distortion
+	data->x = orig_x;
 }
 
 void fillGridStepwiseSecondRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax,
@@ -309,6 +314,8 @@ void fillGridStepwiseSecondRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, f
 		}
 		fillGridWithSamples(vc, grid, s1, s2, maxIterations);
 	}
+	//reset to initial distortion
+	data->y = orig_y;
 }
 
 gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2) {
@@ -316,6 +323,8 @@ gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2) {
 	short *encodedString = encode_sequence(s, 0);
 	int *iindx = vrna_idx_row_wise((unsigned) encodedString[0]);
 	int idx_1n = iindx[1] - length;
+	free(iindx);
+	free(encodedString);
 
 	short *pt_ref1 = vrna_ptable(s1);
 	short *pt_ref2 = vrna_ptable(s2);
@@ -359,11 +368,11 @@ gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2) {
 	return grid;
 }
 
-void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const char *s2, double *dist_x, double *dist_y) {
+void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1, const char *s2,
+		double *dist_x, double *dist_y) {
 	double distortion_x;
 	double distortion_y;
-	char * mfe_struct = (char *) vrna_alloc(sizeof(char) * (vc->length + 1));
-	double mmfe = (double) vrna_mfe(vc, mfe_struct);
+	double s0fe = (double) vrna_mfe(vc, s0);
 
 	/* get free energies of the reference structures */
 	float e_ref1 = vrna_eval_structure(vc, s1);
@@ -371,8 +380,8 @@ void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const ch
 
 	/* get base pair distance between both references */
 	int bp_dist = vrna_bp_distance(s1, s2);
-	int bp_dist_mfe_ref1 = vrna_bp_distance(mfe_struct, s1);
-	int bp_dist_mfe_ref2 = vrna_bp_distance(mfe_struct, s2);
+	int bp_dist_mfe_ref1 = vrna_bp_distance(s0, s1);
+	int bp_dist_mfe_ref2 = vrna_bp_distance(s0, s2);
 
 	//if(mmfe == e_ref1)
 	if (bp_dist_mfe_ref1 == 0) {
@@ -383,7 +392,7 @@ void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const ch
 		 */
 		distortion_x = 0;
 		if (bp_dist_mfe_ref2 != 0) {
-			distortion_y = (distortion_x * bp_dist_mfe_ref2 - mmfe + e_ref2) / bp_dist_mfe_ref2;
+			distortion_y = (distortion_x * bp_dist_mfe_ref2 - s0fe + e_ref2) / bp_dist_mfe_ref2;
 		}
 	}
 
@@ -396,7 +405,7 @@ void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const ch
 		 */
 		distortion_y = 0;
 		if (bp_dist_mfe_ref1 != 0) {
-			distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - mmfe) / bp_dist_mfe_ref1;
+			distortion_x = (distortion_y * bp_dist_mfe_ref1 + e_ref1 - s0fe) / bp_dist_mfe_ref1;
 		}
 	}
 
@@ -410,14 +419,29 @@ void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const ch
 		 we use the Wolfram alpha solution below ;)
 		 */
 		double nenner = bp_dist * (bp_dist_mfe_ref1 + bp_dist_mfe_ref2 - bp_dist);
-		distortion_x = (bp_dist_mfe_ref2 * e_ref1 - bp_dist_mfe_ref2 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref2) / nenner;
-		distortion_y = (-bp_dist_mfe_ref1 * e_ref1 + bp_dist_mfe_ref1 * e_ref2 - bp_dist * mmfe + bp_dist * e_ref1)
+		distortion_x = (bp_dist_mfe_ref2 * e_ref1 - bp_dist_mfe_ref2 * e_ref2 - bp_dist * s0fe + bp_dist * e_ref2) / nenner;
+		distortion_y = (-bp_dist_mfe_ref1 * e_ref1 + bp_dist_mfe_ref1 * e_ref2 - bp_dist * s0fe + bp_dist * e_ref1)
 				/ nenner;
 	}
 
 	*dist_x = distortion_x;
 	*dist_y = distortion_y;
 	printf("d_x = %1.10f, d_y = %1.10f\n", distortion_x, distortion_y);
+}
+
+void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const char *s2, double *dist_x, double *dist_y) {
+	char * mfe_struct = (char *) vrna_alloc(sizeof(char) * (vc->length + 1));
+	computeDistortion(vc, mfe_struct, s1, s2, dist_x, dist_y);
+	free(mfe_struct);
+}
+
+void addSoftconstraints(vrna_fold_compound_t *vc, const char *s1, const char *s2, double distortion_x,
+		double distortion_y) {
+	vrna_sc_init(vc);
+	kl_soft_constraints *data = kl_init_datastructures(vc, s1, s2, distortion_x, distortion_y);
+
+	vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints);
+	vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy);
 }
 
 gridLandscapeT*
@@ -470,11 +494,7 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int
 		vrna_exp_params_rescale(vc, &rescale);
 
 		/* apply distortion soft constraints */
-		vrna_sc_init(vc);
-		kl_soft_constraints *data = kl_init_datastructures(vc, s1, s2, distortion_x, distortion_y);
-
-		vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints);
-		vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy);
+		addSoftconstraints(vc, s1, s2, distortion_x, distortion_y);
 
 		float relaxFactor = 1.5; /* if set to 1. final relaxation sets x and/or y to 0. */
 		int bp_dist = vrna_bp_distance(s1, s2);
