@@ -22,13 +22,13 @@ int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_
             /* so we allocate memory for our new meshpoint and connect it into the list */
             else{
               meshpoint *tmp = cur;
-              meshpoint *new = (meshpoint *)vrna_alloc(sizeof(meshpoint));
+              meshpoint *newMP = (meshpoint *)vrna_alloc(sizeof(meshpoint));
               if(prev == NULL){
-                list->first = new;
+                list->first = newMP;
                 cur = list->first;
               }
               else{
-                prev->next = new;
+                prev->next = newMP;
                 cur = prev->next;
               }
               cur->s = strdup(s);
@@ -63,14 +63,14 @@ int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_
         else{
           /* else we just insert our new meshpoint right before the next worse meshpoint */
           meshpoint *tmp = cur;
-          meshpoint *new = (meshpoint *)vrna_alloc(sizeof(meshpoint));
+          meshpoint *newMP = (meshpoint *)vrna_alloc(sizeof(meshpoint));
           /* if we are at the beginning of our list, we have to do smth. different... */
           if(prev == NULL){
-            list->first = new;
+            list->first = newMP;
             cur = list->first;
           }
           else{
-            prev->next = new;
+            prev->next = newMP;
             cur = prev->next;
           }
           cur->s = strdup(s);
@@ -112,14 +112,14 @@ int insert_meshpoint_hidden(char *s, float en, float structureEnergy, meshpoint_
       else{
         /* else we just insert our new meshpoint right before the next worse meshpoint */
         meshpoint *tmp = cur;
-        meshpoint *new = (meshpoint *)vrna_alloc(sizeof(meshpoint));
+        meshpoint *newMP = (meshpoint *)vrna_alloc(sizeof(meshpoint));
         /* if we are at the beginning of our list, we have to do smth. different... */
         if(prev == NULL){
-          list->first = new;
+          list->first = newMP;
           cur = list->first;
         }
         else{
-          prev->next = new;
+          prev->next = newMP;
           cur = prev->next;
         }
         cur->s = strdup(s);
@@ -210,22 +210,22 @@ void clear_structure_queue(structure_queue *queue){
 
 void insert_structure_in_queue(structure_queue *queue, char *s, float en, neighbor *neighbor_list, int neighbor_cnt, float bestNeighborEn, int bestNeighborIdx, int maxStructs){
   //fprintf(stdout, "inserting %s\n", s);
-  meshpoint *new = (meshpoint *)vrna_alloc(sizeof(meshpoint));
-  new->s = strdup(s);
-  new->en = en;
-  new->neighbor_cnt = neighbor_cnt;
-  new->bestNeighborEn = bestNeighborEn;
-  new->bestNeighborIdx = bestNeighborIdx;
-  new->neighbor_list = neighbor_list;
-  new->next = NULL;
+  meshpoint *newMP = (meshpoint *)vrna_alloc(sizeof(meshpoint));
+  newMP->s = strdup(s);
+  newMP->en = en;
+  newMP->neighbor_cnt = neighbor_cnt;
+  newMP->bestNeighborEn = bestNeighborEn;
+  newMP->bestNeighborIdx = bestNeighborIdx;
+  newMP->neighbor_list = neighbor_list;
+  newMP->next = NULL;
   if(queue->count < maxStructs){
     if(queue->first != NULL){
-      (queue->last)->next = new;
-      queue->last = new;
+      (queue->last)->next = newMP;
+      queue->last = newMP;
     }
     else{
-      queue->first = new;
-      queue->last = new;
+      queue->first = newMP;
+      queue->last = newMP;
     }
     queue->count++;
   }
@@ -237,8 +237,8 @@ void insert_structure_in_queue(structure_queue *queue, char *s, float en, neighb
     queue->first = tmp->next;
     
     /* insert new state */
-    (queue->last)->next = new;
-    queue->last = new;
+    (queue->last)->next = newMP;
+    queue->last = newMP;
     /* completely delete the removed element */
     /* only remove the neighbor list, if there is no other
     *  state in the queue using this neighbor list

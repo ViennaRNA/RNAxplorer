@@ -14,18 +14,14 @@ _RNAxplorer_la_SOURCES = $(top_srcdir)/interfaces/RNAxplorer.i $(SWIG_wrapper)
 
 _RNAxplorer_la_CPPFLAGS = -I$(top_srcdir)/src $(PYTHON_CPPFLAGS) $(SWIG_PYTHON_CPPFLAGS)
 _RNAxplorer_la_LIBADD = $(LDADD) $(top_builddir)/src/libRNAxplorer_conv.la $(PYTHON_LIBS) $(PYTHON_EXTRA_LIBS)
-#if WITH_LIBSVM
-#_RNAxplorer_la_LIBADD += -lstdc++
-#endif
 
+AM_CXXFLAGS= -fpermissive
 _RNAxplorer_la_LDFLAGS = $(RNALIB_LIBS) -avoid-version -module -shared -export-dynamic $(PYTHON_EXTRA_LDFLAGS)
-#if WITH_LTO
-#_RNAxplorer_la_LDFLAGS += -Wc,$(LTO_LDFLAGS)
-#endif
 
+ 		
 $(SWIG_wrapper): $(SWIG_src)
 	$(AM_V_GEN)$(SWIG) -I$(top_srcdir)/src \
-                  $(AX_SWIG_PYTHON_OPT) \
+                  $(AX_SWIG_PYTHON_OPT) -c++ \
                   -o $(SWIG_wrapper) \
                   $(SWIG_main_src)
 

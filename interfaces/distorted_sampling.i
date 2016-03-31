@@ -59,10 +59,23 @@ void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1,
 
 
 %{
+extern "C" {
 #include "../src/distorted_sampling.h"
+}
 %}
 
 %include "../src/distorted_sampling.h"
+
+typedef float FLT_OR_DBL;
+
+%inline %{
+#include <ViennaRNA/params.h>
+
+void rescaleEnergy(vrna_fold_compound_t *vc, double rescale){
+	vrna_exp_params_rescale(vc, &rescale);
+}
+%}
+
 
 //define only the conversion method and map the output via %typemap.
 %inline %{

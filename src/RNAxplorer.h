@@ -11,7 +11,7 @@ void    RNAxplorer(void);
 
 void    GetBasinStructure(void);
 
-char    *pair_table_to_dotbracket(short *pt);
+//char    *pair_table_to_dotbracket(short *pt);
 
 void    print_structure(short* pt, int E);
 

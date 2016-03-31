@@ -3,8 +3,11 @@
 /**********************************************/
 
 %{
-#include "../src/paths.h"
+extern "C" {
+	#include "../src/paths.h"
+}
 %}
+
 %include "../src/paths.h"
 
 

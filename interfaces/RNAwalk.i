@@ -2,6 +2,9 @@
 /* BEGIN interface for RNAwalk functions   */
 /**********************************************/
 %{
-#include "../src/RNAwalk.h"
+extern "C" {
+	#include "../src/RNAwalk.h"
+}
 %}
+
 %include "../src/RNAwalk.h"

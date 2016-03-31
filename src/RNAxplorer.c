@@ -235,7 +235,7 @@ void RNAxplorer(){
       case FIND_2D_LANDSCAPE_ESTIMATE:    {
                                             gridLandscapeT* grid = estimate_landscape(vc, s1, s2, maxIterations, extended_options);
                                             printLandscape(grid,vc);
-                                            gridLandscape_free(grid);
+                                            free_gridLandscape(grid);
                                           }
                                           break;
 

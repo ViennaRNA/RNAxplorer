@@ -3,6 +3,9 @@
 /**********************************************/
 
 %{
+extern "C" {
 #include "../src/meshpoint.h"
+}
 %}
+
 %include "../src/meshpoint.h"

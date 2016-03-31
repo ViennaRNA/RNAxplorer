@@ -10,8 +10,7 @@
 #include <string.h>
 #include <math.h>
 #include <unistd.h>
-
-#include "distorted_sampling.h"
+#include <float.h>
 
 /*
  #include <ViennaRNA/fold_vars.h>
@@ -27,6 +26,7 @@
 #include <ViennaRNA/part_func.h>
 #include <ViennaRNA/mm.h>
 #include <ViennaRNA/pair_mat.h>
+#include "distorted_sampling.h"
 
 kl_soft_constraints *kl_init_datastructures(vrna_fold_compound_t *vc, const char *s1, const char *s2, double x,
 		double y) {
@@ -187,7 +187,8 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
 FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, char decomp, void *data) {
 
 	double kT = ((kl_soft_constraints *) data)->kT;
-	return exp((-10. * (double) kl_pseudo_energy(i, j, k, l, decomp, data)) / kT);
+	double result = exp((-10. * (double) kl_pseudo_energy(i, j, k, l, decomp, data)) / kT);
+	return result;
 }
 
 void fillGridWithSamples(vrna_fold_compound_t *vc, gridLandscapeT *grid, const char *s1, const char *s2,
@@ -224,7 +225,7 @@ void fillGridStepwiseBothRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, flo
 		return;
 	}
 
-	kl_soft_constraints *data = vc->sc->data;
+	kl_soft_constraints *data = (kl_soft_constraints*)vc->sc->data;
 	char *s1 = data->ref1;
 	char *s2 = data->ref2;
 	double orig_x = data->x;
@@ -269,7 +270,7 @@ void fillGridStepwiseFirstRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, fl
 		return;
 	}
 
-	kl_soft_constraints *data = vc->sc->data;
+	kl_soft_constraints *data = (kl_soft_constraints*)vc->sc->data;
 	char *s1 = data->ref1;
 	char *s2 = data->ref2;
 	double orig_x = data->x;
@@ -298,7 +299,7 @@ void fillGridStepwiseSecondRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, f
 		return;
 	}
 
-	kl_soft_constraints *data = vc->sc->data;
+	kl_soft_constraints *data = (kl_soft_constraints*)vc->sc->data;
 	char *s1 = data->ref1;
 	char *s2 = data->ref2;
 	double orig_y = data->y;
@@ -350,7 +351,7 @@ gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2) {
 	free(pt_ref2);
 
 	/* create the 2D landscape data structure */
-	gridLandscapeT *grid = malloc(sizeof(gridLandscapeT));
+	gridLandscapeT *grid = (gridLandscapeT*)malloc(sizeof(gridLandscapeT));
 	grid->size1 = MAX_k + 1;
 	grid->size2 = MAX_l + 1;
 	gridpointT **landscape;
@@ -372,7 +373,7 @@ void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1,
 		double *dist_x, double *dist_y) {
 	double distortion_x;
 	double distortion_y;
-	double s0fe = (double) vrna_mfe(vc, s0);
+	double s0fe = (double) vrna_mfe(vc, (char*)s0);
 
 	/* get free energies of the reference structures */
 	float e_ref1 = vrna_eval_structure(vc, s1);
@@ -437,7 +438,7 @@ void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const ch
 
 void addSoftconstraints(vrna_fold_compound_t *vc, const char *s1, const char *s2, double distortion_x,
 		double distortion_y) {
-	vrna_sc_init(vc);
+	vrna_sc_init(vc); //--not necessary?
 	kl_soft_constraints *data = kl_init_datastructures(vc, s1, s2, distortion_x, distortion_y);
 
 	vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints);
@@ -518,12 +519,18 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int
 	vc->sc = NULL;
 	vc->params->model_details.betaScale = 1;
 	vrna_exp_params_rescale(vc, &mmfe);
+	float mfe = FLT_MAX;
+	float tmpMFE = 0;
 	for (int i = 0; i < grid->size1; i++) {
 		for (int j = 0; j < grid->size2; j++) {
 			if (grid->landscape[i][j].num_structs > 0) {
 				int k;
-				for (k = 0; k < grid->landscape[i][j].num_structs; k++)
-					grid->landscape[i][j].mfe = vrna_eval_structure(vc, grid->landscape[i][j].structures[k]);
+				for (k = 0; k < grid->landscape[i][j].num_structs; k++){
+					tmpMFE = vrna_eval_structure(vc, grid->landscape[i][j].structures[k]);
+					if(tmpMFE < mfe){
+						grid->landscape[i][j].mfe = mfe;
+					}
+				}
 				grid->landscape[i][j].k = i;
 				grid->landscape[i][j].l = j;
 			}
@@ -546,7 +553,7 @@ void printLandscape(gridLandscapeT *grid, vrna_fold_compound_t *vc) {
 	}
 }
 
-void gridLandscape_free(gridLandscapeT *grid) {
+void free_gridLandscape(gridLandscapeT *grid) {
 	for (int i = 0; i < grid->size1; i++) {
 		for (int j = 0; j < grid->size2; j++) {
 
