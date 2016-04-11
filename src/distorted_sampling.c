@@ -540,6 +540,16 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int
 	return grid;
 }
 
+vrna_md_t createModelDetails(int circ, int uniq_ML, int compute_bpp, double betaScale){
+	vrna_md_t md;
+	vrna_md_set_default(&md);
+  md.circ     = circ;
+  md.uniq_ML  = uniq_ML; /* in case we need M1 arrays */
+  md.compute_bpp = compute_bpp;
+  md.betaScale = betaScale;
+  return md;
+}
+
 void printLandscape(gridLandscapeT *grid, vrna_fold_compound_t *vc) {
 	for (int i = 0; i < grid->size1; i++) {
 		for (int j = 0; j < grid->size2; j++) {

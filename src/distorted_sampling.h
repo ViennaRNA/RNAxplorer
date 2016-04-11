@@ -158,6 +158,11 @@ void addSoftconstraints(vrna_fold_compound_t *vc, const char *s1, const char *s2
 gridLandscapeT*
 estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int maxIterations, char *extended_options);
 
+/**
+ * create model details with all options. Not the trimmed md that you would get from the current RNAlib interface.
+ */
+vrna_md_t createModelDetails(int circ, int uniq_ML, int compute_bpp, double betaScale);
+
 void printLandscape(gridLandscapeT *grid, vrna_fold_compound_t *vc);
 
 void free_gridLandscape(gridLandscapeT* grid);

@@ -39,14 +39,17 @@ def mapGridToStructureList(gridlist):
     return structures
 
 def createFoldCompound(seq):
+    """
     RNA.cvar.uniq_ML =1 #use local var if available
     md = RNA.md("global")
+    md = RNA.md()
     md.circ     = 0
     #md.uniq_ML  = 1 #TODO: use this if available
     # in case we need M1 arrays
     md.compute_bpp = 0
     md.betaScale = args.betaScale
-
+    """
+    md = RNAxplorer.createModelDetails(0, 1, 0, args.betaScale)
     vc = RNA.fold_compound(seq, md, RNA.OPTION_MFE | RNA.OPTION_PF)
     return vc
 
@@ -98,7 +101,7 @@ if __name__ == "__main__":
     RNAxplorer.rescaleEnergy(vc, rescale) #TODO: use RNAlib rescale if available
     
     RNAxplorer.addSoftconstraints(vc, s1, s2, distortion_x, distortion_y)
-   
+
     print relaxFactor,relax,shift,shift_to_first,verbose,maxIterations,maxSteps
     if both:
         RNAxplorer.fillGridStepwiseBothRef(vc, grid, relaxFactor, relax, shift, shift_to_first, verbose, maxIterations, maxSteps)
@@ -115,13 +118,22 @@ if __name__ == "__main__":
         structs = mapGridToStructureList(gridlist)
         print "first ref",s1,len(structs.values())
         #print structs.keys()
-    else:
+    elif shift:
         grid = RNAxplorer.initLandscape(seq, s1, s2)
         RNAxplorer.fillGridStepwiseSecondRef(vc, grid, relaxFactor, relax, verbose, maxIterations, maxSteps)
         RNAxplorer.printLandscape(grid, vc)
         gridlist = RNAxplorer.convertGrid_toList(grid)
         structs = mapGridToStructureList(gridlist)
         print "second ref",s2,len(structs.values())
+    else:
+        # shift to first and to second
+        grid = RNAxplorer.initLandscape(seq, s1, s2)
+        RNAxplorer.fillGridStepwiseFirstRef(vc, grid, relaxFactor, relax, verbose, maxIterations, maxSteps)
+        RNAxplorer.fillGridStepwiseSecondRef(vc, grid, relaxFactor, relax, verbose, maxIterations, maxSteps)
+        RNAxplorer.printLandscape(grid, vc)
+        gridlist = RNAxplorer.convertGrid_toList(grid)
+        structs = mapGridToStructureList(gridlist)
+        print "first and second ref",s2,len(structs.values())
         #print structs.keys()
 
 
