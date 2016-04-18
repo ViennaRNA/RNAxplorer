@@ -62,9 +62,21 @@ void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1,
 extern "C" {
 #include "../src/distorted_sampling.h"
 }
+#include <vector>
+#include <string>
 %}
 
 %include "../src/distorted_sampling.h"
+%include "std_vector.i";
+%include "std_string.i";
+
+%template(StringVector) std::vector<std::string>;
+
+%extend gridLandscapeT {
+ void addStructure(char * structure){
+ 	addStructure($self, structure);
+ }
+};
 
 typedef float FLT_OR_DBL;
 
@@ -81,6 +93,14 @@ void rescaleEnergy(vrna_fold_compound_t *vc, double rescale){
 %inline %{
 gridLandscapeT* convertGrid_toList(gridLandscapeT* grid) {
     return grid;
+}
+%}
+
+%inline %{
+ void addStructuresToGrid(gridLandscapeT* grid, std::vector<std::string> structures) {
+    for(int i=0; i < structures.size();i++){
+ 		addStructure(grid,(char *)structures[i].c_str());
+ 	}
 }
 %}
 

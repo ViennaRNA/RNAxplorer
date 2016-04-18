@@ -16,6 +16,8 @@ typedef struct {
 typedef struct {
 	unsigned int size1;
 	unsigned int size2;
+	char *firstReference;
+	char *secondReference;
 	gridpointT **landscape;
 } gridLandscapeT;
 
@@ -157,6 +159,9 @@ void addSoftconstraints(vrna_fold_compound_t *vc, const char *s1, const char *s2
  */
 gridLandscapeT*
 estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int maxIterations, char *extended_options);
+
+
+void addStructure(gridLandscapeT *grid, char *structure);
 
 /**
  * create model details with all options. Not the trimmed md that you would get from the current RNAlib interface.

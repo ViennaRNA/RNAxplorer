@@ -225,7 +225,7 @@ void fillGridStepwiseBothRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, flo
 		return;
 	}
 
-	kl_soft_constraints *data = (kl_soft_constraints*)vc->sc->data;
+	kl_soft_constraints *data = (kl_soft_constraints*) vc->sc->data;
 	char *s1 = data->ref1;
 	char *s2 = data->ref2;
 	double orig_x = data->x;
@@ -270,7 +270,7 @@ void fillGridStepwiseFirstRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, fl
 		return;
 	}
 
-	kl_soft_constraints *data = (kl_soft_constraints*)vc->sc->data;
+	kl_soft_constraints *data = (kl_soft_constraints*) vc->sc->data;
 	char *s1 = data->ref1;
 	char *s2 = data->ref2;
 	double orig_x = data->x;
@@ -299,7 +299,7 @@ void fillGridStepwiseSecondRef(vrna_fold_compound_t *vc, gridLandscapeT *grid, f
 		return;
 	}
 
-	kl_soft_constraints *data = (kl_soft_constraints*)vc->sc->data;
+	kl_soft_constraints *data = (kl_soft_constraints*) vc->sc->data;
 	char *s1 = data->ref1;
 	char *s2 = data->ref2;
 	double orig_y = data->y;
@@ -351,7 +351,7 @@ gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2) {
 	free(pt_ref2);
 
 	/* create the 2D landscape data structure */
-	gridLandscapeT *grid = (gridLandscapeT*)malloc(sizeof(gridLandscapeT));
+	gridLandscapeT *grid = (gridLandscapeT*) malloc(sizeof(gridLandscapeT));
 	grid->size1 = MAX_k + 1;
 	grid->size2 = MAX_l + 1;
 	gridpointT **landscape;
@@ -366,14 +366,18 @@ gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2) {
 			landscape[i][j].structures = (char **) vrna_alloc(sizeof(char *) * landscape[i][j].max_structs);
 		}
 	grid->landscape = landscape;
+	grid->firstReference = (char*) vrna_alloc(length);
+	grid->secondReference = (char*) vrna_alloc(length);
+	strcpy(grid->firstReference, s1);
+	strcpy(grid->firstReference, s2);
 	return grid;
 }
 
-void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1, const char *s2,
-		double *dist_x, double *dist_y) {
+void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1, const char *s2, double *dist_x,
+		double *dist_y) {
 	double distortion_x;
 	double distortion_y;
-	double s0fe = (double) vrna_mfe(vc, (char*)s0);
+	double s0fe = (double) vrna_mfe(vc, (char*) s0);
 
 	/* get free energies of the reference structures */
 	float e_ref1 = vrna_eval_structure(vc, s1);
@@ -525,9 +529,9 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int
 		for (int j = 0; j < grid->size2; j++) {
 			if (grid->landscape[i][j].num_structs > 0) {
 				int k;
-				for (k = 0; k < grid->landscape[i][j].num_structs; k++){
+				for (k = 0; k < grid->landscape[i][j].num_structs; k++) {
 					tmpMFE = vrna_eval_structure(vc, grid->landscape[i][j].structures[k]);
-					if(tmpMFE < mfe){
+					if (tmpMFE < mfe) {
 						grid->landscape[i][j].mfe = mfe;
 					}
 				}
@@ -540,14 +544,38 @@ estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int
 	return grid;
 }
 
-vrna_md_t createModelDetails(int circ, int uniq_ML, int compute_bpp, double betaScale){
+void addStructure(gridLandscapeT *grid, char *structure) {
+	uint k = vrna_bp_distance(grid->firstReference, structure);
+	uint l = vrna_bp_distance(grid->secondReference, structure);
+
+	if (k <= grid->size1 && l <= grid->size2) {
+		uint numStructures = grid->landscape[k][l].num_structs;
+		char *newStruct = (char*) vrna_alloc(strlen(structure));
+		strcpy(newStruct, structure);
+		gridpointT **landscape = grid->landscape;
+		if (landscape[k][l].num_structs + 2 >= landscape[k][l].max_structs) {
+			landscape[k][l].max_structs *= 2;
+			landscape[k][l].structures = (char **) vrna_realloc(landscape[k][l].structures,
+					sizeof(char *) * landscape[k][l].max_structs);
+		}
+
+		/* insert structure */
+		landscape[k][l].structures[landscape[k][l].num_structs] = newStruct;
+		landscape[k][l].num_structs++;
+	}
+	else {
+		fprintf(stderr, "Error: the structure %s does not belong to the grid!", structure);
+	}
+}
+
+vrna_md_t createModelDetails(int circ, int uniq_ML, int compute_bpp, double betaScale) {
 	vrna_md_t md;
 	vrna_md_set_default(&md);
-  md.circ     = circ;
-  md.uniq_ML  = uniq_ML; /* in case we need M1 arrays */
-  md.compute_bpp = compute_bpp;
-  md.betaScale = betaScale;
-  return md;
+	md.circ = circ;
+	md.uniq_ML = uniq_ML; /* in case we need M1 arrays */
+	md.compute_bpp = compute_bpp;
+	md.betaScale = betaScale;
+	return md;
 }
 
 void printLandscape(gridLandscapeT *grid, vrna_fold_compound_t *vc) {
@@ -575,6 +603,8 @@ void free_gridLandscape(gridLandscapeT *grid) {
 		free(grid->landscape[i]);
 	}
 	free(grid->landscape);
+	free(grid->firstReference);
+	free(grid->secondReference);
 	free(grid);
 }
 
