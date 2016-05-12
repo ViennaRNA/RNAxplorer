@@ -280,11 +280,17 @@ vrna_path_t *levelSaddlePoint2(const char *seq, const char *s1, const char *s2/*
 }
 
 vrna_path_t *getSaddlePoint(vrna_path_t *foldingPath){
-  vrna_path_t *r, *saddle;
-  saddle = foldingPath;
-  for(r = foldingPath; r->s; r++)
-    if(saddle->en < r->en)
-      saddle = r;
+	vrna_path_t *r;
+	vrna_path_t *saddle = vrna_alloc(2*sizeof(vrna_path_t));
+  int length = strlen(foldingPath->s);
+  saddle->s = vrna_alloc(length*sizeof(char));
+  for(r = foldingPath; r->s; r++){
+    if(saddle->en < r->en){
+    	saddle->en = r->en;
+    	memcpy(saddle->s, r->s,length);
+    }
+  }
+  saddle[1].s = NULL; //terminator symbol.
   //if(saddle->en == foldingPath->en) return --r;
   return saddle;
 }
