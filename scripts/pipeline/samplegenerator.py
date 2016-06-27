@@ -34,13 +34,15 @@ def callRNAxplorer(seq, ref_struct1, ref_struct2, n=500):
 
     returns a Matrix2D object which contains all unique samples and the inputdata of the xplorer call.
     """
-    md = RNA.md()
+    RNA.cvar.uniq_ML=1;
+    RNA.cvar.betaScale=1;
+    md = RNA.md("global")
     md.circ     = 0
     md.uniq_ML  = 1
     md.compute_bpp = 0
     md.betaScale = 1
 
-    vc = RNA.fold_compound(seq,md,RNA.VRNA_OPTION_MFE | RNA.VRNA_OPTION_PF)
+    vc = RNA.fold_compound(seq,md,RNA.OPTION_MFE | RNA.OPTION_PF)
     extended_options=""
 
     # samples = list (k,l,energy,[strucutres])
