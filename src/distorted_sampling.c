@@ -366,8 +366,8 @@ gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2) {
 			landscape[i][j].structures = (char **) vrna_alloc(sizeof(char *) * landscape[i][j].max_structs);
 		}
 	grid->landscape = landscape;
-	grid->firstReference = (char*) vrna_alloc(length);
-	grid->secondReference = (char*) vrna_alloc(length);
+	grid->firstReference = (char*) vrna_alloc(sizeof(char)*(strlen(s1)+1));
+	grid->secondReference = (char*) vrna_alloc(sizeof(char)*(strlen(s2)+1));
 	strcpy(grid->firstReference, s1);
 	strcpy(grid->firstReference, s2);
 	return grid;
