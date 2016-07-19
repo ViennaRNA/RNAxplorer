@@ -34,6 +34,14 @@ else
   CPPFLAGS="$CPPFLAGS -O2"
 fi
 
+#add lapack, (needed for multidimensional sampling)
+AX_LAPACK([
+			#ACTION-IF-FOUND
+			CFLAGS="$CPPFLAGS -llapack"
+			LDFLAGS="$LDFLAGS -llapack" 
+			],[AC_MSG_ERROR(could not find required version of Lapack library)])
+   
+
 AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_CXX
@@ -63,7 +71,7 @@ dnl Check for OpenMP and prepare flags
 AC_OPENMP
 AC_SUBST(OPENMP_CFLAGS)
 CPPFLAGS="$CPPFLAGS $OPENMP_CFLAGS"
-LDFLAGS="$LDFLAGS $OPENMP_CFLAGS"
+LDFLAGS="$LDFLAGS $OPENMP_CFLAGS"        
 
 #Search for the RNAlib2 and set variables for Makefiles if found.  _CFLAGS and _LIBS can be overriden with the modue Name from PKG_CHECK_MODULES
 PKG_CHECK_MODULES([RNALIB], [RNAlib2 >= 2.2.0],

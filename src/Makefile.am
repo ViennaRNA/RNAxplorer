@@ -28,6 +28,8 @@ libRNAxplorer_conv_la_SOURCES = \
   meshpoint.h \
   distorted_sampling.c \
   distorted_sampling.h \
+  distorted_samplingMD.c \
+  distorted_samplingMD.h \
   barrier_lower_bound.c \
   barrier_lower_bound.h \
   paths.c \

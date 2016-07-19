@@ -351,7 +351,7 @@ gridLandscapeT *initLandscape(const char *s, const char *s1, const char *s2) {
 	free(pt_ref2);
 
 	/* create the 2D landscape data structure */
-	gridLandscapeT *grid = (gridLandscapeT*) malloc(sizeof(gridLandscapeT));
+	gridLandscapeT *grid = (gridLandscapeT*) vrna_alloc(sizeof(gridLandscapeT));
 	grid->size1 = MAX_k + 1;
 	grid->size2 = MAX_l + 1;
 	gridpointT **landscape;
@@ -442,7 +442,7 @@ void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const ch
 
 void addSoftconstraints(vrna_fold_compound_t *vc, const char *s1, const char *s2, double distortion_x,
 		double distortion_y) {
-	vrna_sc_init(vc); //--not necessary?
+	vrna_sc_init(vc); // to remove old soft constraints
 	kl_soft_constraints *data = kl_init_datastructures(vc, s1, s2, distortion_x, distortion_y);
 
 	vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints);
