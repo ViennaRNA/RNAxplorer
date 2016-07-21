@@ -455,7 +455,7 @@ void fillGridStepwiseBothRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, 
     }
 
     if(verbose){
-      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->distortions[0], data->distortions[1]);
+      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", tmp_x, tmp_y);
     }
     fillGridWithSamples(vc, grid, s1, s2, maxIterations);
   }
@@ -482,7 +482,7 @@ void fillGridStepwiseFirstRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid,
     }
 
     if(verbose){
-      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->distortions[0], data->distortions[1]);
+      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", tmp_x, data->distortions[1]);
     }
     fillGridWithSamples(vc, grid, s1, s2, maxIterations);
   }
@@ -507,7 +507,7 @@ void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid
       tmp_y += relaxFactor * tmp_y / maxSteps;
     }
     if(verbose){
-      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->distortions[0], data->distortions[1]);
+      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->distortions[0], tmp_y);
     }
     fillGridWithSamples(vc, grid, s1, s2, maxIterations);
   }
@@ -517,7 +517,7 @@ gridLandscapeT*
 estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size_t numberOfReferences,
     int maxIterations, char *extended_options) {
   /* parse extended options string */
-  int plain, do_more, both_at_once, relax, verbose, shift, shift_to_first;
+  int plain, normal, both_at_once, relax, verbose, shift, shift_to_first;
 
   both_at_once = 0;
   relax = 0;
@@ -525,9 +525,12 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
   verbose = 0;
   shift = 0;
   shift_to_first = 0;
+  normal = 0;
 
   if(extended_options){
     plain = 0;
+    if(strchr(extended_options, 'N')) /* normal distortion (no shift) */
+      normal = 1;
     if(strchr(extended_options, 'B')) /* alter both potentials at once */
       both_at_once = 1;
     if(strchr(extended_options, 'R')) /* relax potential instead of increasing it */
@@ -569,24 +572,30 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
     vrna_exp_params_rescale(vc, &rescale);
 
     /* apply distortion soft constraints */
-    kl_soft_constraints_MD* data =  kl_init_datastructures_MD(vc, refStructures, numberOfReferences, distortions);
+    kl_soft_constraints_MD* data = kl_init_datastructures_MD(vc, refStructures, numberOfReferences, distortions);
     vrna_sc_init(vc); // to remove old soft constraints
     vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints_MD);
     vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);
 
-    float relaxFactor = 1.5; /* if set to 1. final relaxation sets x and/or y to 0. */
-    int bp_dist = vrna_bp_distance(s1, s2);
-    if(!both_at_once){
-      /* change potential of first reference */
-      fillGridStepwiseFirstRef_MD(vc, grid, relaxFactor, relax, verbose, maxIterations, bp_dist);
-      /* change potential of second reference */
-      fillGridStepwiseSecondRef_MD(vc, grid, relaxFactor, relax, verbose, maxIterations, bp_dist);
-
+    if(normal){
+      //with distortion, but no shift.
+      fillGridWithSamples(vc, grid, s1, s2, maxIterations);
     }
-    else{ /* change potential of both references at the same time */
-      fillGridStepwiseBothRef_MD(vc, grid, relaxFactor, relax, shift, shift_to_first, verbose, maxIterations, bp_dist);
-    }
+    else{
+      float relaxFactor = 1.5; /* if set to 1. final relaxation sets x and/or y to 0. */
+      int bp_dist = vrna_bp_distance(s1, s2);
+      if(!both_at_once){
+        /* change potential of first reference */
+        fillGridStepwiseFirstRef_MD(vc, grid, relaxFactor, relax, verbose, maxIterations, bp_dist);
+        /* change potential of second reference */
+        fillGridStepwiseSecondRef_MD(vc, grid, relaxFactor, relax, verbose, maxIterations, bp_dist);
 
+      }
+      else{ /* change potential of both references at the same time */
+        fillGridStepwiseBothRef_MD(vc, grid, relaxFactor, relax, shift, shift_to_first, verbose, maxIterations,
+            bp_dist);
+      }
+    }
     free(distortions);
   }
 
