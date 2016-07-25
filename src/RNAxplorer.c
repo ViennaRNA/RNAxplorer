@@ -200,13 +200,13 @@ void RNAxplorer() {
       vrna_message_error("1st structure missing\n");
     else if(strlen(start_struct) != n)
       vrna_message_error("sequence and 1st structure have unequal length");
-    strcpy(s2, start_struct);
+    strcpy(s1, start_struct);
 
     if((target_struct = get_line(stdin)) == NULL)
       vrna_message_error("2nd structure missing\n");
     else if(strlen(target_struct) != n)
       vrna_message_error("sequence and 2nd et structure have unequal length");
-    strcpy(s1, target_struct);
+    strcpy(s2, target_struct);
     if(istty)
       printf("length = %d\n", n);
 

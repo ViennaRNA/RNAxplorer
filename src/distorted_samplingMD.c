@@ -33,7 +33,7 @@
 #include "distorted_samplingMD.h"
 #include <lapacke/lapacke.h>
 
-double * computeDistortions(vrna_fold_compound_t* fc, const char **structures, size_t numberOfStructures) {
+double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structures, size_t numberOfStructures) {
 
   char * sequence = fc->sequence;
   char * mfeStructure = vrna_alloc((fc->length + 1) * sizeof(char));
@@ -560,7 +560,7 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
   }
   else{
     //computeInitialDistortionMD(vc, s1, s2, &distortion_x, &distortion_y);
-    double* distortions = computeDistortions(vc, refStructures, numberOfReferences);
+    double* distortions = rxp_computeDistortions(vc, refStructures, numberOfReferences);
     double distortion_x = distortions[0];
     double distortion_y = distortions[1];
 
@@ -627,4 +627,16 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
 
   return grid;
 }
+
+void addSoftconstraintsMD(vrna_fold_compound_t *vc, const char ** structures, int numberOfReferences, double * distortions){
+  /* apply distortion soft constraints */
+  kl_soft_constraints_MD* data = kl_init_datastructures_MD(vc, structures, numberOfReferences, distortions);
+  vrna_sc_init(vc); // to remove old soft constraints
+  vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints_MD);
+  vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);
+}
+
+
+
+
 

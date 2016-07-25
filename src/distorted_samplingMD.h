@@ -25,7 +25,7 @@ typedef struct {
  * @param numberOfStructures - length of structures = length of the output
  * @return - float array with distortions (one for each structure)
  */
-double * computeDistortions(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures);
+double * rxp_computeDistortions(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures);
 
 void print_matrix(char* desc, int m, int n, double* a, int lda);
 
@@ -51,5 +51,13 @@ gridLandscapeT*
 estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size_t numberOfReferences,
     int maxIterations, char *extended_options);
 
+/**
+ * add the distortion softconstraints (data and functionpointer)to the foldcompound.
+ * @param vc - the foldcompound which contains energy parameters (model details).
+ * @param structures - the reference structures in dot-bracket notation
+ * @param numberOfReferences - size of structures / distortions.
+ * @param distortion - pointer to one value which receives the output
+ */
+void addSoftconstraintsMD(vrna_fold_compound_t *vc, const char ** structures, int numberOfReferences, double * distortions);
 
 #endif
