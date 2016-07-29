@@ -12,7 +12,7 @@ typedef struct {
   int *idx;
   int numberOfReferences;
   const char **references;
-  const double *distortions;
+  double *distortions;
   unsigned int ** referencesBPs;
   short ** referencesAsPairtaibles;
 } kl_soft_constraints_MD;

@@ -435,30 +435,33 @@ void fillGridStepwiseBothRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, 
   for(int j = 0; j < maxSteps; j++){
     if(shift){
       if(shift_to_first){
-        tmp_x += relaxFactor * tmp_x / maxSteps;
-        tmp_y -= relaxFactor * tmp_y / maxSteps;
+        data->distortions[0] += relaxFactor * data->distortions[0] / maxSteps;
+        data->distortions[1] -= relaxFactor * data->distortions[1] / maxSteps;
       }
       else{
-        tmp_x -= relaxFactor * tmp_x / maxSteps;
-        tmp_y += relaxFactor * tmp_y / maxSteps;
+        data->distortions[0] -= relaxFactor * data->distortions[0] / maxSteps;
+        data->distortions[1] += relaxFactor * data->distortions[1] / maxSteps;
       }
     }
     else{
       if(relax){
-        tmp_x -= relaxFactor * tmp_x / maxSteps;
-        tmp_y -= relaxFactor * tmp_y / maxSteps;
+        data->distortions[0] -= relaxFactor * data->distortions[0] / maxSteps;
+        data->distortions[1] -= relaxFactor * data->distortions[1] / maxSteps;
       }
       else{
-        tmp_x += relaxFactor * tmp_x / maxSteps;
-        tmp_y += relaxFactor * tmp_y / maxSteps;
+        data->distortions[0] += relaxFactor * data->distortions[0] / maxSteps;
+        data->distortions[1] += relaxFactor * data->distortions[1] / maxSteps;
       }
     }
 
     if(verbose){
-      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", tmp_x, tmp_y);
+      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->distortions[0], data->distortions[1]);
     }
     fillGridWithSamples(vc, grid, s1, s2, maxIterations);
   }
+
+  data->distortions[0] = tmp_x;
+  data->distortions[1] = tmp_y;
 }
 
 void fillGridStepwiseFirstRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax,
@@ -475,17 +478,19 @@ void fillGridStepwiseFirstRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid,
 
   for(int j = 0; j < maxSteps; j++){
     if(relax){
-      tmp_x -= relaxFactor * tmp_x / maxSteps;
+      data->distortions[0] -= relaxFactor * data->distortions[0] / maxSteps;
     }
     else{
-      tmp_x += relaxFactor * tmp_x / maxSteps;
+      data->distortions[0] += relaxFactor * data->distortions[0] / maxSteps;
     }
 
     if(verbose){
-      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", tmp_x, data->distortions[1]);
+      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->distortions[0], data->distortions[1]);
     }
     fillGridWithSamples(vc, grid, s1, s2, maxIterations);
   }
+
+  data->distortions[0] = tmp_x;
 }
 
 void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax,
@@ -501,16 +506,18 @@ void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid
   double tmp_y = data->distortions[1];
   for(int j = 0; j < maxSteps; j++){
     if(relax){
-      tmp_y -= relaxFactor * tmp_y / maxSteps;
+      data->distortions[1] -= relaxFactor * data->distortions[1] / maxSteps;
     }
     else{
-      tmp_y += relaxFactor * tmp_y / maxSteps;
+      data->distortions[1] += relaxFactor * data->distortions[1] / maxSteps;
     }
     if(verbose){
-      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->distortions[0], tmp_y);
+      fprintf(stderr, "d_x = %1.10f, d_y = %1.10f\n", data->distortions[0], data->distortions[1]);
     }
     fillGridWithSamples(vc, grid, s1, s2, maxIterations);
   }
+
+  data->distortions[1] = tmp_y;
 }
 
 gridLandscapeT*
