@@ -167,8 +167,8 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   int ldb = m;
   int rank;
 
-  print_matrix("a", lda, n, a, lda);
-  print_matrix("b", ldb, 1, b, ldb);
+ // print_matrix("a", lda, n, a, lda);
+ // print_matrix("b", ldb, 1, b, ldb);
 
   /* Negative rcond means using default (machine precision) value */
   double rcond = -1.0;
@@ -205,20 +205,21 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, work, &lwork, iwork, &info);
   //dgelsy_(&m, &n, &nrhs, a, &lda, b, &ldb, jpvt, &rcond, &rank, work, &lwork, &info);
 
-  printf("The linear system has rank %d;\n", rank);
+ // printf("The linear system has rank %d;\n", rank);
   /* Check for convergence */
   if(info > 0){
     printf("The algorithm computing SVD failed to converge;\n");
     printf("the least squares solution could not be computed.\n");
     exit(1);
   }
-  /* Print minimum norm solution */
+  /*
+  // Print minimum norm solution
   print_matrix("Minimum norm solution", n, nrhs, b, ldb);
-  /* Print effective rank */
+  // Print effective rank
   printf("\n Effective rank = %6i\n", rank);
-  /* Print singular values */
+  // Print singular values
   print_matrix("Singular values", 1, m, s, 1);
-
+  */
 
   //print_matrix("a_after", lda, n, a, lda);
   //  print_matrix("b_after", ldb, 1, b, ldb);
