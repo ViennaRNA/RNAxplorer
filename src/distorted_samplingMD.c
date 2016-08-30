@@ -123,20 +123,40 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
    * for 2 references + mfe: 1 - 2, 1 - 3, 2 - 3
    */
 
-  size_t lengthLGS = ((totalStructures * (totalStructures - 1)) / 2);
+  /*
+   size_t lengthLGS = ((totalStructures * (totalStructures - 1)) / 2);
+   //first dim is all combinations of equations and the second dim are the values x',y',...
+   double a[lengthLGS * (totalStructures - 1)]; // a is the right hand side of the lgs
+   double b[lengthLGS]; // b is the left hand side of the lgs, i.e. the energie difference energy(s) - energy(s')
+   int lgsIndex = 0;
+   for(int i = 0; i < totalStructures; i++){
+   equations[i][0] = energies[i];
+   for(int j = i + 1; j < totalStructures; j++){
+   for(int k = 1; k < totalStructures; k++){
+   a[(lgsIndex) + (lengthLGS) * (k - 1)] = (double) (equations[i][k] - equations[j][k]);
+   }
+   b[lgsIndex] = (double) (equations[i][0] - equations[j][0]);
+   lgsIndex++;
+   }
+   }
+   */
+
+  /**
+   * Correction: we need only as many equations as variables. 1 == 2, 2 == 3, 3 == mfe. Transitivity implies 1 == mfe. All other equations are redundant.
+   */
+  size_t lengthLGS = totalStructures-1;
   //first dim is all combinations of equations and the second dim are the values x',y',...
   double a[lengthLGS * (totalStructures - 1)]; // a is the right hand side of the lgs
   double b[lengthLGS]; // b is the left hand side of the lgs, i.e. the energie difference energy(s) - energy(s')
   int lgsIndex = 0;
-  for(int i = 0; i < totalStructures; i++){
-    equations[i][0] = energies[i];
-    for(int j = i + 1; j < totalStructures; j++){
-      for(int k = 1; k < totalStructures; k++){
-        a[(lgsIndex) + (lengthLGS) * (k - 1)] = (double) (equations[i][k] - equations[j][k]);
-      }
-      b[lgsIndex] = (double) (equations[i][0] - equations[j][0]);
-      lgsIndex++;
+  int i = 0;
+  equations[i][0] = energies[i];
+  for(int j = i + 1; j < totalStructures; j++,i++){
+    for(int k = 1; k < totalStructures; k++){
+      a[(lgsIndex) + (lengthLGS) * (k - 1)] = (double) (equations[i][k] - equations[j][k]);
     }
+    b[lgsIndex] = (double) (equations[i][0] - equations[j][0]);
+    lgsIndex++;
   }
 
   int info;
@@ -147,13 +167,13 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   int ldb = m;
   int rank;
 
-  //print_matrix("a", lda, n, a, lda);
-  //print_matrix("b", ldb, 1, b, ldb);
+  print_matrix("a", lda, n, a, lda);
+  print_matrix("b", ldb, 1, b, ldb);
 
   /* Negative rcond means using default (machine precision) value */
   double rcond = -1.0;
   double wkopt;
-  double* work;
+  double* work = NULL;
   /* Local arrays */
   /* iwork dimension should be at least 3*min(m,n)*nlvl + 11*min(m,n),
    where nlvl = max( 0, int( log_2( min(m,n)/(smlsiz+1) ) )+1 )
@@ -167,11 +187,25 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   //printf( " DGELSD Example Program Results\n" );
   /* Query and allocate the optimal workspace */
   int lwork = -1;
-  dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, &wkopt, &lwork, iwork, &info);
+  int jpvt[n];
+  for(int i = 0; i < n; i++){
+    jpvt[i] = 0;
+  }
+
+  //dgesv_(&m,&nrhs,a,&lda,jpvt,b,&ldb,&info);
+  //dgetrs_('N',&m,&nrhs,a,&lda,jpvt,b,&ldb,&info);
+
+  //dgels_('N',&m, &n, &nrhs, a, &lda, b, &ldb, &wkopt, &lwork, &info);
+  dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, &wkopt, &lwork, iwork, &info); //estimate workspace (=> lwork = -1).
+  //dgelsy_(&m, &n, &nrhs, a, &lda, b, &ldb, jpvt, &rcond, &rank, &wkopt, &lwork, &info);
   lwork = (int) wkopt;
   work = (double*) vrna_alloc(lwork * sizeof(double));
   /* Solve the equations A*X = B */
+  //dgels_('N',&m, &n, &nrhs, a, &lda, b, &ldb, work, &lwork, &info);
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, work, &lwork, iwork, &info);
+  //dgelsy_(&m, &n, &nrhs, a, &lda, b, &ldb, jpvt, &rcond, &rank, work, &lwork, &info);
+
+  printf("The linear system has rank %d;\n", rank);
   /* Check for convergence */
   if(info > 0){
     printf("The algorithm computing SVD failed to converge;\n");
@@ -179,11 +213,16 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
     exit(1);
   }
   /* Print minimum norm solution */
-  //print_matrix( "Minimum norm solution", n, nrhs, b, ldb );
+  print_matrix("Minimum norm solution", n, nrhs, b, ldb);
   /* Print effective rank */
-  //printf( "\n Effective rank = %6i\n", rank );
+  printf("\n Effective rank = %6i\n", rank);
   /* Print singular values */
-  //print_matrix( "Singular values", 1, m, s, 1 );
+  print_matrix("Singular values", 1, m, s, 1);
+
+
+  //print_matrix("a_after", lda, n, a, lda);
+  //  print_matrix("b_after", ldb, 1, b, ldb);
+
   /* Free workspace */
   free((void*) work);
 
@@ -635,15 +674,12 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
   return grid;
 }
 
-void addSoftconstraintsMD(vrna_fold_compound_t *vc, const char ** structures, int numberOfReferences, double * distortions){
+void addSoftconstraintsMD(vrna_fold_compound_t *vc, const char ** structures, int numberOfReferences,
+    double * distortions) {
   /* apply distortion soft constraints */
   kl_soft_constraints_MD* data = kl_init_datastructures_MD(vc, structures, numberOfReferences, distortions);
   vrna_sc_init(vc); // to remove old soft constraints
   vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints_MD);
   vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);
 }
-
-
-
-
 
