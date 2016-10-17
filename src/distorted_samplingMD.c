@@ -33,11 +33,8 @@
 #include "distorted_samplingMD.h"
 #include <lapacke/lapacke.h>
 
-double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structures, size_t numberOfStructures) {
-
-  char * sequence = fc->sequence;
-  char * mfeStructure = vrna_alloc((fc->length + 1) * sizeof(char));
-  float mfe = vrna_mfe(fc, mfeStructure);
+double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structures, size_t numberOfStructures, float mfe,
+    const char * mfeStructure) {
 
   int acceptedIndices[numberOfStructures];
   int numberAccepted = 0;
@@ -144,14 +141,14 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   /**
    * Correction: we need only as many equations as variables. 1 == 2, 2 == 3, 3 == mfe. Transitivity implies 1 == mfe. All other equations are redundant.
    */
-  size_t lengthLGS = totalStructures-1;
+  size_t lengthLGS = totalStructures - 1;
   //first dim is all combinations of equations and the second dim are the values x',y',...
   double a[lengthLGS * (totalStructures - 1)]; // a is the right hand side of the lgs
   double b[lengthLGS]; // b is the left hand side of the lgs, i.e. the energie difference energy(s) - energy(s')
   int lgsIndex = 0;
   int i = 0;
   equations[i][0] = energies[i];
-  for(int j = i + 1; j < totalStructures; j++,i++){
+  for(int j = i + 1; j < totalStructures; j++, i++){
     for(int k = 1; k < totalStructures; k++){
       a[(lgsIndex) + (lengthLGS) * (k - 1)] = (double) (equations[i][k] - equations[j][k]);
     }
@@ -167,8 +164,8 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   int ldb = m;
   int rank;
 
- // print_matrix("a", lda, n, a, lda);
- // print_matrix("b", ldb, 1, b, ldb);
+  // print_matrix("a", lda, n, a, lda);
+  // print_matrix("b", ldb, 1, b, ldb);
 
   /* Negative rcond means using default (machine precision) value */
   double rcond = -1.0;
@@ -205,7 +202,7 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, work, &lwork, iwork, &info);
   //dgelsy_(&m, &n, &nrhs, a, &lda, b, &ldb, jpvt, &rcond, &rank, work, &lwork, &info);
 
- // printf("The linear system has rank %d;\n", rank);
+  // printf("The linear system has rank %d;\n", rank);
   /* Check for convergence */
   if(info > 0){
     printf("The algorithm computing SVD failed to converge;\n");
@@ -213,17 +210,16 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
     exit(1);
   }
   /*
-  // Print minimum norm solution
-  print_matrix("Minimum norm solution", n, nrhs, b, ldb);
-  // Print effective rank
-  printf("\n Effective rank = %6i\n", rank);
-  // Print singular values
-  print_matrix("Singular values", 1, m, s, 1);
-  */
+   // Print minimum norm solution
+   print_matrix("Minimum norm solution", n, nrhs, b, ldb);
+   // Print effective rank
+   printf("\n Effective rank = %6i\n", rank);
+   // Print singular values
+   print_matrix("Singular values", 1, m, s, 1);
+   */
 
   //print_matrix("a_after", lda, n, a, lda);
   //  print_matrix("b_after", ldb, 1, b, ldb);
-
   /* Free workspace */
   free((void*) work);
 
@@ -249,9 +245,13 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   }
   printf("\n");
 
-  free(mfeStructure);
-
   return distortions;
+}
+
+double * rxp_computeDistortionsWithMFE(vrna_fold_compound_t* fc, const char **structures, size_t numberOfStructures) {
+  char * mfeStructure = (char *) vrna_alloc(sizeof(char) * (fc->length + 1));
+  double mfe = (double) vrna_mfe(fc, mfeStructure);
+  rxp_computeDistortions(fc, structures, numberOfStructures, mfe, mfeStructure);
 }
 
 /* Auxiliary routine: printing a matrix */
@@ -560,19 +560,69 @@ void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid
   data->distortions[1] = tmp_y;
 }
 
+int fillGridStepwiseMFEreduction_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, int stepsForMFEreduction,
+    int maxIterations) {
+  //computeInitialDistortionMD(vc, s1, s2, &distortion_x, &distortion_y);
+  kl_soft_constraints_MD *data = (kl_soft_constraints_MD*) vc->sc->data;
+  int numberOfReferences = data->numberOfReferences;
+  char ** references = vrna_alloc(sizeof(char*)*numberOfReferences);
+  size_t bytes = sizeof(char) * (vc->length+1);
+  for(int i = 0; i < numberOfReferences; i++){
+    references[i] = vrna_alloc(bytes);
+    memcpy(references[i], data->references[i],bytes);
+  }
+
+  char * s1 = references[0];
+  char * s2 = references[1];
+  /* get mfe for this sequence */
+  char * mfe_struct = (char *) vrna_alloc(sizeof(char) * (vc->length + 1));
+  double mmfe = (double) vrna_mfe(vc, mfe_struct);
+
+  double mfeStep = mmfe / (double) stepsForMFEreduction;
+  double reducedMFE = mmfe;
+  do{
+    double* distortions = rxp_computeDistortions(vc, references, numberOfReferences, reducedMFE, mfe_struct);
+
+    /* prepare pf fold */
+    double rescale = reducedMFE;
+    for(int i = 0; i < numberOfReferences; i++){
+      rescale += distortions[i] * vrna_bp_distance(mfe_struct, references[i]);
+    }
+    vrna_exp_params_rescale(vc, &rescale);
+
+    /* apply distortion soft constraints */
+    kl_soft_constraints_MD* data = kl_init_datastructures_MD(vc, references, numberOfReferences, distortions);
+    vrna_sc_init(vc); // to remove old soft constraints
+    vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints_MD);
+    vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);
+
+    //with energy and distortion, but no shift.
+    fillGridWithSamples(vc, grid, s1, s2, maxIterations);
+
+    reducedMFE -= mfeStep;
+    free(distortions);
+  }while(stepsForMFEreduction > 0 & abs(reducedMFE) > 0.0);
+
+  for(int i = 0; i < numberOfReferences; i++){
+    free(references[i]);
+    references[i] = NULL;
+  }
+  free(references);
+  references = NULL;
+  return 1;
+}
+
 gridLandscapeT*
 estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size_t numberOfReferences,
     int maxIterations, char *extended_options) {
   /* parse extended options string */
-  int plain, normal, both_at_once, relax, verbose, shift, shift_to_first;
-
-  both_at_once = 0;
-  relax = 0;
-  plain = 1; /* plain sampling, no distortion */
-  verbose = 0;
-  shift = 0;
-  shift_to_first = 0;
-  normal = 0;
+  int both_at_once = 0;
+  int relax = 0;
+  int plain = 1; /* plain sampling, no distortion */
+  int verbose = 0;
+  int shift = 0;
+  int shift_to_first = 0;
+  int normal = 0;
 
   if(extended_options){
     plain = 0;
@@ -607,7 +657,7 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
   }
   else{
     //computeInitialDistortionMD(vc, s1, s2, &distortion_x, &distortion_y);
-    double* distortions = rxp_computeDistortions(vc, refStructures, numberOfReferences);
+    double* distortions = rxp_computeDistortions(vc, refStructures, numberOfReferences, mmfe, mfe_struct);
     double distortion_x = distortions[0];
     double distortion_y = distortions[1];
 
@@ -643,6 +693,7 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
             bp_dist);
       }
     }
+
     free(distortions);
   }
 

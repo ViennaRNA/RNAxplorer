@@ -23,9 +23,20 @@ typedef struct {
  * @param sequence - the rna sequence
  * @param structures - the dot-bracket structures
  * @param numberOfStructures - length of structures = length of the output
+ * @param mfe - minimum free energy
+ * @param mfeStructure - structure with the given minimum free energy
  * @return - float array with distortions (one for each structure)
  */
-double * rxp_computeDistortions(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures);
+double * rxp_computeDistortions(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures, float mfe, const char * mfeStructure);
+/**
+ * Computes the distortions for a given set of structures.
+ * The structures should be unique!
+ * @param sequence - the rna sequence
+ * @param structures - the dot-bracket structures
+ * @param numberOfStructures - length of structures = length of the output
+ * @return - float array with distortions (one for each structure)
+ */
+double * rxp_computeDistortionsWithMFE(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures);
 
 void print_matrix(char* desc, int m, int n, double* a, int lda);
 
@@ -46,6 +57,15 @@ void fillGridStepwiseFirstRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid,
 
 void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax,
     int verbose, int maxIterations, int maxSteps);
+
+/**
+ * Computes distorted samples while stepwise reducing the energy for the mfe structure till zero. (like increasing the temperature, but with
+ * predefined steps and upper limit.
+ * @param stepsForMFEreduction - steps for reduction from mfe to zero. The partition function will be computed for each step!
+ * @param maxIterations - max iterations per mfeReduction step.
+ * @return - 1 for success.
+ */
+int fillGridStepwiseMFEreduction_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, int stepsForMFEreduction, int maxIterations);
 
 gridLandscapeT*
 estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size_t numberOfReferences,

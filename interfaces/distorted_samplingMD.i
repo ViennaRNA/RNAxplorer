@@ -110,7 +110,7 @@ extern "C" {
 
 %inline %{
 	std::vector<double> computeDistortions(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures){
-	 	double * tmp = rxp_computeDistortions(fc, structures, numberOfStructures);
+	 	double * tmp = rxp_computeDistortionsWithMFE(fc, structures, numberOfStructures);
 	 	std::vector<double> result;
 	    for(int i=0; i < numberOfStructures;i++){
 	 		result.push_back(tmp[i]);
