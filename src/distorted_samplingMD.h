@@ -13,9 +13,16 @@ typedef struct {
   int numberOfReferences;
   const char **references;
   double *distortions;
+  /* matrix containing number of basepairs of reference structure i in interval [i,j] */
   unsigned int ** referencesBPs;
   short ** referencesAsPairtaibles;
 } kl_soft_constraints_MD;
+
+
+unsigned int getMaximalPossibleBPdistance(const char * sequence,const char * structure);
+
+double * rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t* fc, const char **structures,
+    size_t numberOfStructures, double * maxDistances);
 
 /**
  * Computes the distortions for a given set of structures.
@@ -58,14 +65,6 @@ void fillGridStepwiseFirstRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid,
 void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax,
     int verbose, int maxIterations, int maxSteps);
 
-/**
- * Computes distorted samples while stepwise reducing the energy for the mfe structure till zero. (like increasing the temperature, but with
- * predefined steps and upper limit.
- * @param stepsForMFEreduction - steps for reduction from mfe to zero. The partition function will be computed for each step!
- * @param maxIterations - max iterations per mfeReduction step.
- * @return - 1 for success.
- */
-int fillGridStepwiseMFEreduction_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, int stepsForMFEreduction, int maxIterations);
 
 gridLandscapeT*
 estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size_t numberOfReferences,
