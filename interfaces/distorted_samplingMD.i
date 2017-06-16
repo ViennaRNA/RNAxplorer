@@ -44,7 +44,6 @@
   }
 }
 
-
 %typemap(out) gridLandscapeT* estimate_landscapeMD %{
 	//get number of cells
 	int numberOfCells = 0;
@@ -117,9 +116,19 @@ extern "C" {
 	 	}
 	 	return result;
     }
+    
+	std::vector<double> computeDistortionsMaxDist(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures,double *distances){
+	 	double * tmp = rxp_computeDistortionsWRTMaxDistance(fc, structures, numberOfStructures,distances);
+	 	std::vector<double> result;
+	    for(int i=0; i < numberOfStructures;i++){
+	 		result.push_back(tmp[i]);
+	 	}
+	 	return result;
+    }
 %}
 
-    
+
+ 
     
     
     

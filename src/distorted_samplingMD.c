@@ -39,19 +39,21 @@ unsigned int getMaximalPossibleBPdistance(const char * sequence, const char * st
   unsigned int length = strlen(sequence);
   int *iindx = vrna_idx_row_wise(length);
   int idx_1n = iindx[1] - length;
-  /* get number of bp in reference structures */
-  unsigned int i, bp_ref1;
-  for(bp_ref1 = 0, i = 1; i < length; i++){
+  /* get number of bp in structure */
+  unsigned int i, bp_structure;
+  for(bp_structure = 0, i = 1; i < length; i++){
     if(pt_structure[i] > i)
-      bp_ref1++;
+      bp_structure++;
   }
-  /* compute maximum d1 and maximum d2 */
-  unsigned int maxDistance = bp_ref1 + mm1[idx_1n];
+  /* compute maximum distance to this structure */
+  unsigned int maxDistance = bp_structure + mm1[idx_1n];
   return maxDistance;
 }
 
 double * rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t* fc, const char **structures,
     size_t numberOfStructures, double * maxDistances) {
+  char * mfeStructure = (char *) vrna_alloc(sizeof(char) * (fc->length + 1));
+  double mfe = (double) vrna_mfe(fc, mfeStructure);
 
   int acceptedIndices[numberOfStructures];
   int numberAccepted = 0;
@@ -59,12 +61,12 @@ double * rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t* fc, const ch
   for(int i = 0; i < numberOfStructures; i++){
     const char * s1 = structures[i];
     int acceptStructure = 1;
-    /*
-     if(strcmp(s1, mfeStructure) == 0){
-     acceptedIndices[i] = -1;
-     continue;
-     }
-     else*/{
+
+    if(strcmp(s1, mfeStructure) == 0){
+      acceptedIndices[i] = -1;
+      continue;
+    }
+    else{
       for(int j = i + 1; j < numberOfStructures; j++){
         const char * s2 = structures[j];
         if(strcmp(s1, s2) == 0){
@@ -81,7 +83,7 @@ double * rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t* fc, const ch
       acceptedIndices[i] = -1;
     }
   }
-
+  free(mfeStructure);
   if(numberAccepted < 1){
     //no distortion possible
     double * distortions = vrna_alloc(sizeof(double) * numberOfStructures);
@@ -91,7 +93,7 @@ double * rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t* fc, const ch
     return distortions;
   }
 
-  const char * uniqueStructures[numberAccepted]; //+1 for the mfe
+  const char * uniqueStructures[numberAccepted+1]; //+1 for the mfe
   int uniqueInd = 0;
   for(int i = 0; i < numberOfStructures; i++){
     if(acceptedIndices[i] != -1){
@@ -99,10 +101,10 @@ double * rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t* fc, const ch
       uniqueInd++;
     }
   }
-  //uniqueStructures[numberAccepted] = mfeStructure;
+  uniqueStructures[numberAccepted] = mfeStructure;
 
-  float energies[numberAccepted]; //+1 for the mfe
-  // energies[numberAccepted] = mfe;
+  float energies[numberAccepted+1]; //+1 for the mfe
+  energies[numberAccepted] = mfe;
 
   for(int i = 0; i < numberAccepted; i++){
     const char *structure = uniqueStructures[i];
@@ -111,7 +113,7 @@ double * rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t* fc, const ch
 
   //structures + mfeStr
   //energies + mfe
-  size_t totalStructures = numberAccepted;  // + 1;
+  size_t totalStructures = numberAccepted+1;  // + 1 (with and without mfe)
   /**
    * construct equations, which look like:
    * S1: E(s1) + x'*d(s1, s1) + y'*d(s1, s2) + z'*d(s1, s3)
@@ -132,11 +134,14 @@ double * rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t* fc, const ch
       equations[i][j + 1] = maxDistances[j] - distance;
     }
   }
+  //for(int j = 0; j < (totalStructures - 1); j++){
+   // equations[(totalStructures - 1)][j + 1] = 0;
+  //}
 
   /**
    * Correction: we need only as many equations as variables. 1 == 2, 2 == 3, 3 == mfe. Transitivity implies 1 == mfe. All other equations are redundant.
    */
-  size_t lengthLGS = totalStructures - 1;
+  size_t lengthLGS = totalStructures-1; //
   //first dim is all combinations of equations and the second dim are the values x',y',...
   double a[lengthLGS * (totalStructures - 1)]; // a is the right hand side of the lgs
   double b[lengthLGS]; // b is the left hand side of the lgs, i.e. the energie difference energy(s) - energy(s')
@@ -352,8 +357,8 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc, const char **structure
   int ldb = m;
   int rank;
 
-  // print_matrix("a", lda, n, a, lda);
-  // print_matrix("b", ldb, 1, b, ldb);
+  //  print_matrix("a", lda, n, a, lda);
+  //  print_matrix("b", ldb, 1, b, ldb);
 
   /* Negative rcond means using default (machine precision) value */
   double rcond = -1.0;
@@ -456,7 +461,7 @@ void print_matrix(char* desc, int m, int n, double* a, int lda) {
 }
 
 kl_soft_constraints_MD *kl_init_datastructures_MD(vrna_fold_compound_t *vc, const char **referenceStructures,
-    int numberOfReferenceStructures, double *distortions) {
+    int numberOfReferenceStructures, double *distortions, int repel) {
   kl_soft_constraints_MD *data;
   unsigned int n;
   char *s = vc->sequence;
@@ -480,6 +485,11 @@ kl_soft_constraints_MD *kl_init_datastructures_MD(vrna_fold_compound_t *vc, cons
     data->referencesBPs[i] = vrna_refBPcnt_matrix(data->referencesAsPairtaibles[i], TURN);
   }
 
+  data->maxDistances = vrna_alloc(sizeof(size_t *) * numberOfReferenceStructures);
+  for(int i = 0; i < numberOfReferenceStructures; i++){
+    data->maxDistances[i] = getMaximalPossibleBPdistance(s, data->references[i]);
+  }
+  data->repel = repel;
   return data;
 }
 
@@ -634,8 +644,15 @@ FLT_OR_DBL kl_pseudo_energy_MD(int i, int j, int k, int l, char decomp, void *da
   }
 
   double result = 0;
-  for(int r = 0; r < numberOfRefs; r++){
-    result += distortions[r] * distances[r];
+  if(!distData->repel){
+    for(int r = 0; r < numberOfRefs; r++){
+      result += distortions[r] * distances[r];
+    }
+  }
+  else{
+    for(int r = 0; r < numberOfRefs; r++){
+      result += distortions[r] * (distData->maxDistances[r] - distances[r]);
+    }
   }
   result = result * 100;
 
@@ -750,7 +767,6 @@ void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid
   data->distortions[1] = tmp_y;
 }
 
-
 gridLandscapeT*
 estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size_t numberOfReferences,
     int maxIterations, char *extended_options) {
@@ -808,7 +824,7 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
     vrna_exp_params_rescale(vc, &rescale);
 
     /* apply distortion soft constraints */
-    kl_soft_constraints_MD* data = kl_init_datastructures_MD(vc, refStructures, numberOfReferences, distortions);
+    kl_soft_constraints_MD* data = kl_init_datastructures_MD(vc, refStructures, numberOfReferences, distortions, 0);
     vrna_sc_init(vc); // to remove old soft constraints
     vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints_MD);
     vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);
@@ -866,9 +882,9 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
 }
 
 void addSoftconstraintsMD(vrna_fold_compound_t *vc, const char ** structures, int numberOfReferences,
-    double * distortions) {
+    double * distortions, int repel) {
   /* apply distortion soft constraints */
-  kl_soft_constraints_MD* data = kl_init_datastructures_MD(vc, structures, numberOfReferences, distortions);
+  kl_soft_constraints_MD* data = kl_init_datastructures_MD(vc, structures, numberOfReferences, distortions, repel);
   vrna_sc_init(vc); // to remove old soft constraints
   vrna_sc_add_data(vc, (void *) data, &free_kl_soft_constraints_MD);
   vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);

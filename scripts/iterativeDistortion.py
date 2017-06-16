@@ -95,9 +95,9 @@ if __name__ == "__main__":
     
     #rescale
     mfe_struct, mmfe = RNA.fold(seq) #TODO: use extended fold with modelDetails in release
-    bp_dist_mfe_ref1 = RNA.bp_distance(mfe_struct, s1);
-    bp_dist_mfe_ref2 = RNA.bp_distance(mfe_struct, s2);
-    rescale = mmfe + (bp_dist_mfe_ref1 * distortion_x) + (bp_dist_mfe_ref2 * distortion_y);
+    bp_dist_mfe_ref1 = RNA.bp_distance(mfe_struct, s1)
+    bp_dist_mfe_ref2 = RNA.bp_distance(mfe_struct, s2)
+    rescale = mmfe + (bp_dist_mfe_ref1 * distortion_x) + (bp_dist_mfe_ref2 * distortion_y)
     RNAxplorer.rescaleEnergy(vc, rescale) #TODO: use RNAlib rescale if available
     
     RNAxplorer.addSoftconstraints(vc, s1, s2, distortion_x, distortion_y)

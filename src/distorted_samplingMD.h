@@ -16,6 +16,8 @@ typedef struct {
   /* matrix containing number of basepairs of reference structure i in interval [i,j] */
   unsigned int ** referencesBPs;
   short ** referencesAsPairtaibles;
+  size_t *maxDistances; //maximal distance to each reference.
+  int repel;
 } kl_soft_constraints_MD;
 
 
@@ -48,7 +50,7 @@ double * rxp_computeDistortionsWithMFE(vrna_fold_compound_t* fc,const char **str
 void print_matrix(char* desc, int m, int n, double* a, int lda);
 
 kl_soft_constraints_MD *kl_init_datastructures_MD(vrna_fold_compound_t *vc, const char **referenceStructures,
-    int numberOfReferenceStructures, double *distortions);
+    int numberOfReferenceStructures, double *distortions,int repel);
 
 void free_kl_soft_constraints_MD(void *data);
 
@@ -76,7 +78,8 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
  * @param structures - the reference structures in dot-bracket notation
  * @param numberOfReferences - size of structures / distortions.
  * @param distortion - pointer to one value which receives the output
+ * @param repel - use this together with rxp_computeDistortionsWRTMaxDistance(), 1 = enable.
  */
-void addSoftconstraintsMD(vrna_fold_compound_t *vc, const char ** structures, int numberOfReferences, double * distortions);
+void addSoftconstraintsMD(vrna_fold_compound_t *vc, const char ** structures, int numberOfReferences, double * distortions,int repel);
 
 #endif
