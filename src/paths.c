@@ -134,7 +134,7 @@ levelSaddlePoint(const char *seq, const char *s1, const char *s2, int maxIterati
 }
 
 /**
- * Compute a path between structure s1 and s2.
+ * Compute a distance based path between structure s1 and s2.
  * @param seq - the RNA sequence (ACGU)
  * @param s1 - first structure in dot-bracket format.
  * @param s2 - second structure in dot-bracket format.

@@ -654,6 +654,7 @@ FLT_OR_DBL kl_pseudo_energy_MD(int i, int j, int k, int l, char decomp, void *da
       result += distortions[r] * (distData->maxDistances[r] - distances[r]);
     }
   }
+
   result = result * 100;
 
   return result;
@@ -769,7 +770,7 @@ void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid
 
 gridLandscapeT*
 estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size_t numberOfReferences,
-    int maxIterations, char *extended_options) {
+    int maxIterations, char *extended_options, double *indicesAndPercentages, size_t lengthIndices) {
   /* parse extended options string */
   int both_at_once = 0;
   int relax = 0;
@@ -813,6 +814,22 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
   else{
     //computeInitialDistortionMD(vc, s1, s2, &distortion_x, &distortion_y);
     double* distortions = rxp_computeDistortions(vc, refStructures, numberOfReferences, mmfe, mfe_struct);
+
+    // recompute distortions with user-specified weights.
+    if(lengthIndices > 0){
+      int valueIndex = 2;
+      int indexIndex = 1;
+      int referenceIndex;
+      double percentage;
+      for(int i = 1; i <= lengthIndices; i++, valueIndex+=2, indexIndex+=2){
+        referenceIndex = (int)indicesAndPercentages[indexIndex] -1;
+        percentage = indicesAndPercentages[valueIndex];
+        distortions[referenceIndex] *= percentage;
+        if(verbose)
+          printf("p0: %d %f\n", referenceIndex, percentage);
+      }
+    }
+
     double distortion_x = distortions[0];
     double distortion_y = distortions[1];
 
@@ -830,22 +847,21 @@ estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size
     vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);
 
     if(normal){
-      //with distortion, but no shift.
-      fillGridWithSamples(vc, grid, s1, s2, maxIterations);
+        //with distortion, but no shift.
+        fillGridWithSamples(vc, grid, s1, s2, maxIterations);
     }
-    else{
+    else {
       float relaxFactor = 1.5; /* if set to 1. final relaxation sets x and/or y to 0. */
       int bp_dist = vrna_bp_distance(s1, s2);
-      if(!both_at_once){
+      if(both_at_once){ /* change potential of both references at the same time */
+        fillGridStepwiseBothRef_MD(vc, grid, relaxFactor, relax, shift, shift_to_first, verbose, maxIterations,
+            bp_dist);
+      }
+      else{
         /* change potential of first reference */
         fillGridStepwiseFirstRef_MD(vc, grid, relaxFactor, relax, verbose, maxIterations, bp_dist);
         /* change potential of second reference */
         fillGridStepwiseSecondRef_MD(vc, grid, relaxFactor, relax, verbose, maxIterations, bp_dist);
-
-      }
-      else{ /* change potential of both references at the same time */
-        fillGridStepwiseBothRef_MD(vc, grid, relaxFactor, relax, shift, shift_to_first, verbose, maxIterations,
-            bp_dist);
       }
     }
 

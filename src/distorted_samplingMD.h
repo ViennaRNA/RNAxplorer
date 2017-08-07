@@ -70,7 +70,7 @@ void fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid
 
 gridLandscapeT*
 estimate_landscapeMD(vrna_fold_compound_t *vc, const char ** refStructures, size_t numberOfReferences,
-    int maxIterations, char *extended_options);
+    int maxIterations, char *extended_options, double *indicesAndPercentages, size_t lengthIndices);
 
 /**
  * add the distortion softconstraints (data and functionpointer)to the foldcompound.

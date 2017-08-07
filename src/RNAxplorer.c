@@ -51,6 +51,10 @@ static char scale2[] = "....,....5....,....6....,....7....,....8";
 
 static char *extended_options = NULL;
 
+//percentage of distortion per reference.
+size_t length_indicesAndPercentages=0;
+double *indicesAndPercentages=NULL;
+
 int
 main(int argc, char *argv[])
 {
@@ -132,6 +136,31 @@ main(int argc, char *argv[])
 
   if (args_info.betaScale_given)
     betascale = args_info.betaScale_arg;
+
+
+  if (args_info.p0_given) {
+      int i, j=1, lmintmp;
+      double poptmp = 0.;
+
+      length_indicesAndPercentages = args_info.p0_given;
+      indicesAndPercentages = (double *)calloc(2*args_info.p0_given+1, sizeof(double));
+      *indicesAndPercentages = 1;
+      for (i=0; i<args_info.p0_given; i++) {
+        if (sscanf(args_info.p0_arg[i], "%d=%lg",&lmintmp, &poptmp) == 0)
+          exit(EXIT_FAILURE);
+        if(lmintmp <1) {
+          fprintf(stderr, "States in --p0 must be >=1\n");
+          exit (EXIT_FAILURE);
+        }
+        else {
+          *(indicesAndPercentages + j)     = (double) lmintmp;
+          *(indicesAndPercentages + j + 1) = poptmp;
+          *indicesAndPercentages += 2;
+          j+=2;
+        }
+      }
+    }
+
 
   /* free allocated memory of command line data structure */
   RNAxplorer_cmdline_parser_free (&args_info);
@@ -271,7 +300,7 @@ RNAxplorer()
 
       case FIND_2D_LANDSCAPE_ESTIMATE: {
         //gridLandscapeT* grid = estimate_landscape(vc, totalReferences, numberOfReferences, maxIterations, extended_options);
-        gridLandscapeT* grid = estimate_landscapeMD (vc, totalReferences, numberOfReferences, maxIterations, extended_options);
+        gridLandscapeT* grid = estimate_landscapeMD (vc, (const char **)totalReferences, numberOfReferences, maxIterations, extended_options, indicesAndPercentages, length_indicesAndPercentages);
         printLandscape (grid, vc);
         free_gridLandscape (grid);
       }
