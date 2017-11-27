@@ -1,25 +1,7 @@
 #ifndef   _RNAXPLORER_DISTORTED_SAMPLINGMD_H_
 #define   _RNAXPLORER_DISTORTED_SAMPLINGMD_H_
 
-//#include <ViennaRNA/data_structures.h>
 #include "distorted_sampling.h"
-
-#define max(x, y) (((x) > (y)) ? (x) : (y))
-#define min(x, y) (((x) < (y)) ? (x) : (y))
-
-typedef struct {
-  double kT;
-  int *idx;
-  int numberOfReferences;
-  const char **references;
-  double *distortions;
-  /* matrix containing number of basepairs of reference structure i in interval [i,j] */
-  unsigned int ** referencesBPs;
-  short ** referencesAsPairtaibles;
-  size_t *maxDistances; //maximal distance to each reference.
-  int repel;
-} kl_soft_constraints_MD;
-
 
 unsigned int getMaximalPossibleBPdistance(const char * sequence,const char * structure);
 
@@ -48,18 +30,6 @@ double * rxp_computeDistortions(vrna_fold_compound_t* fc,const char **structures
 double * rxp_computeDistortionsWithMFE(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures);
 
 void print_matrix(char* desc, int m, int n, double* a, int lda);
-
-kl_soft_constraints_MD *kl_init_datastructures_MD(vrna_fold_compound_t *vc, const char **referenceStructures,
-    int numberOfReferenceStructures, double *distortions,int repel);
-
-void free_kl_soft_constraints_MD(void *data);
-
-FLT_OR_DBL kl_pseudo_energy_MD(int i, int j, int k, int l, char decomp, void *data);
-
-FLT_OR_DBL kl_exp_pseudo_energy_MD(int i, int j, int k, int l, char decomp, void *data);
-
-void fillGridStepwiseBothRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax, int shift,
-    int shift_to_first, int verbose, int maxIterations, int maxSteps);
 
 void fillGridStepwiseFirstRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax, int verbose,
     int maxIterations, int maxSteps);
