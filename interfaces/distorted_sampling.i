@@ -2,8 +2,6 @@
 /* BEGIN interface for distorted_sampling functions   */
 /**********************************************/
 
-%include typemaps.i
-
 %apply double *OUTPUT { double *result };
 void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const char *s2, double *OUTPUT, double *OUTPUT);
 
@@ -59,18 +57,10 @@ void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1,
 
 
 %{
-extern "C" {
-#include "../src/distorted_sampling.h"
-}
 #include <vector>
 #include <string>
 %}
 
-%include "../src/distorted_sampling.h"
-%include "std_vector.i";
-%include "std_string.i";
-
-%template(StringVector) std::vector<std::string>;
 
 %extend gridLandscapeT {
  void addStructure(char * structure){
@@ -105,3 +95,4 @@ gridLandscapeT* convertGrid_toList(gridLandscapeT* grid) {
 %}
 
 
+%include "../src/distorted_sampling.h"

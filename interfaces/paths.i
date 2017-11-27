@@ -2,14 +2,6 @@
 /* BEGIN interface for paths functions   */
 /**********************************************/
 
-%{
-extern "C" {
-	#include "../src/paths.h"
-}
-%}
-
-%include "../src/paths.h"
-
 
 %typemap(out) vrna_path_t* convertVRNA_PATH_toList {
 	int len = 0;
@@ -36,3 +28,5 @@ vrna_path_t* convertVRNA_PATH_toList(vrna_path_t* path) {
     return path;
 }
 %}
+
+%include "../src/paths.h"

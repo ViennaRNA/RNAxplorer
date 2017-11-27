@@ -1,7 +1,6 @@
 /**********************************************/
 /* BEGIN interface for distorted_sampling functions   */
 /**********************************************/
-%include "typemaps.i"
 
 
 // Map a Python sequence into any sized C double array
@@ -93,19 +92,10 @@
 
 
 %{
-extern "C" {
-#include "../src/distorted_samplingMD.h"
-}
 #include <vector>
 #include <string>
 %}
 
-%include "../src/distorted_samplingMD.h"
-%include "std_vector.i";
-%include "std_string.i";
-
-%template(StringVector) std::vector<std::string>;
-%template(DoubleVector) std::vector<double>;
 
 %inline %{
 	std::vector<double> computeDistortions(vrna_fold_compound_t* fc,const char **structures, size_t numberOfStructures){
@@ -128,10 +118,4 @@ extern "C" {
 %}
 
 
- 
-    
-    
-    
-    
-
-
+%include "../src/distorted_samplingMD.h"
