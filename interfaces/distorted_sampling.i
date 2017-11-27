@@ -68,8 +68,6 @@ void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1,
  }
 };
 
-typedef float FLT_OR_DBL;
-
 %inline %{
 #include <ViennaRNA/params.h>
 
