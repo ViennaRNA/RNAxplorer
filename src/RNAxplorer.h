@@ -6,6 +6,7 @@
 #define FIND_DISTANCE_BASED_MFE_PATH    2
 #define FIND_2D_BARRIER_ESTIMATE        3
 #define FIND_2D_LANDSCAPE_ESTIMATE      4
+#define DISTORTED_SAMPLING              5
 
 void    RNAxplorer(void);
 
