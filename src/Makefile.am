@@ -9,6 +9,8 @@ libRNAxplorer_conv_la_SOURCES = \
   RNAwalk.h \
   meshpoint.c \
   meshpoint.h \
+  dist_class_sc.c \
+  dist_class_sc.h \
   distorted_sampling.c \
   distorted_sampling.h \
   distorted_samplingMD.c \
