@@ -22,6 +22,7 @@
 #include "barrier_lower_bound.h"
 #include "distorted_sampling.h"
 #include "distorted_samplingMD.h"
+#include "repellant_sampling.h"
 #include "paths.h"
 #include "RNAxplorer.h"
 
@@ -89,6 +90,8 @@ main(int argc, char *argv[])
       whatToDo = FIND_2D_BARRIER_ESTIMATE;
     else if (!strcmp (m, "SM"))
       whatToDo = FIND_2D_LANDSCAPE_ESTIMATE;
+    else if (!strcmp (m, "RS")) /* Repellant Sampling */
+      whatToDo = DISTORTED_SAMPLING;
   }
 
   /* maximum number of simulations / iterations */
@@ -230,33 +233,37 @@ RNAxplorer()
 
     s1 = (char *) vrna_alloc (sizeof(char) * (n + 1));
     s2 = (char *) vrna_alloc (sizeof(char) * (n + 1));
+    size_t numberOfReferences = 0;
 
-    if ((start_struct = get_line (stdin)) == NULL) {
-      vrna_message_error ("1st structure missing\n");
-    }
-    else {
-      char * start_structure = strtok (start_struct, " \0");
-      if (strlen (start_structure) != n) {
-        vrna_message_error ("sequence and 1st structure have unequal length");
+    if (whatToDo != DISTORTED_SAMPLING) {
+      if ((start_struct = get_line (stdin)) == NULL) {
+        vrna_message_error ("1st structure missing\n");
       }
-      strcpy (s1, start_structure);
-    }
+      else {
+        char * start_structure = strtok (start_struct, " \0");
+        if (strlen (start_structure) != n) {
+          vrna_message_error ("sequence and 1st structure have unequal length");
+        }
+        strcpy (s1, start_structure);
+        numberOfReferences++;
+      }
 
-    if ((target_struct = get_line (stdin)) == NULL) {
-      vrna_message_error ("2nd structure missing\n");
-    }
-    else {
-      char * target_structure = strtok (target_struct, " \0");
-      if (strlen (target_structure) != n) {
-        vrna_message_error ("sequence and 2nd et structure have unequal length");
+      if ((target_struct = get_line (stdin)) == NULL) {
+        vrna_message_error ("2nd structure missing\n");
       }
-      strcpy (s2, target_structure);
+      else {
+        char * target_structure = strtok (target_struct, " \0");
+        if (strlen (target_structure) != n) {
+          vrna_message_error ("sequence and 2nd et structure have unequal length");
+        }
+        strcpy (s2, target_structure);
+        numberOfReferences++;
+      }
     }
 
     if (istty)
       printf ("length = %d\n", n);
 
-    size_t numberOfReferences = 2;
     char ** totalReferences = (char**) vrna_alloc (numberOfReferences * sizeof(char*) + 1);
     totalReferences[0] = s1;
     totalReferences[1] = s2;
@@ -283,7 +290,7 @@ RNAxplorer()
     md.compute_bpp = 0;
     md.betaScale = betascale;
 
-    vrna_fold_compound_t *vc = vrna_fold_compound (seq, &md, VRNA_OPTION_MFE | VRNA_OPTION_PF);
+    vrna_fold_compound_t *vc = vrna_fold_compound (seq, &md, VRNA_OPTION_PF);
 
     fprintf (stdout, "%s\n", seq);
     for (int i = 0; i < numberOfReferences; i++) {
@@ -293,9 +300,12 @@ RNAxplorer()
     vrna_path_t *foldingPath, *Saddle, *r;
 
     switch (whatToDo) {
-      case FIND_2D_BARRIER_ESTIMATE: {
+      case DISTORTED_SAMPLING:
+        repellant_sampling(vc);
+        break;
+
+      case FIND_2D_BARRIER_ESTIMATE:
         barrier_estimate_2D (seq, &md, s1, s2, maximum_distance1, maximum_distance2);
-      }
         break;
 
       case FIND_2D_LANDSCAPE_ESTIMATE: {

@@ -15,6 +15,8 @@ libRNAxplorer_conv_la_SOURCES = \
   distorted_sampling.h \
   distorted_samplingMD.c \
   distorted_samplingMD.h \
+  repellant_sampling.c \
+  repellant_sampling.h \
   barrier_lower_bound.c \
   barrier_lower_bound.h \
   paths.c \
