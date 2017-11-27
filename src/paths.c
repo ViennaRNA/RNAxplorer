@@ -157,7 +157,7 @@ levelSaddlePoint2(const char *seq, const char *s1, const char *s2/*, int *num_en
   vrna_path_t *path_left = NULL;
   vrna_path_t *path_right = NULL;
   vrna_path_t *newPath = NULL;
-  int steps1, steps2;
+  unsigned int steps1, steps2;
   float newSaddleEn = oldSaddleEn;
   meshpoint_list bestMeshPoints;
   init_meshpoint_list (&bestMeshPoints);
@@ -249,7 +249,7 @@ levelSaddlePoint2(const char *seq, const char *s1, const char *s2/*, int *num_en
 
     if (iteration < maxIterations) {
       meshpoint *cur;
-      int t_steps1, t_steps2;
+      /* int t_steps1, t_steps2; */
       vrna_path_t *t_path_left = NULL, *t_path_right = NULL;
       path_left = NULL;
       path_right = NULL;
@@ -271,8 +271,8 @@ levelSaddlePoint2(const char *seq, const char *s1, const char *s2/*, int *num_en
           if (path_right)
             free_path (path_right);
           path_right = t_path_right;
-          steps1 = t_steps1;
-          steps2 = t_steps2;
+          /* steps1 = t_steps1; */
+          /* steps2 = t_steps2; */
           oldSaddleEn = newSaddleEn;
         }
         else {
@@ -305,8 +305,8 @@ levelSaddlePoint2(const char *seq, const char *s1, const char *s2/*, int *num_en
       ;
     newPath = (vrna_path_t *) vrna_alloc ((steps1 + steps2) * sizeof(vrna_path_t));
     memcpy ((vrna_path_t *) newPath, (vrna_path_t *) path_left, steps1 * sizeof(vrna_path_t));
-    memcpy (((vrna_path_t *) newPath) + (steps1), ((vrna_path_t *) path_right) + 1, (steps2 - 1) * sizeof(vrna_path_t));
     if (steps2 > 0) {
+      memcpy (((vrna_path_t *) newPath) + (steps1), ((vrna_path_t *) path_right) + 1, (steps2 - 1) * sizeof(vrna_path_t));
       free (path_right[0].s); /* since we skipped this entry and it never would be free'd */
     }
   }
