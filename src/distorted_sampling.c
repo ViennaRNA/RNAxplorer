@@ -21,6 +21,7 @@
 #include <ViennaRNA/utils.h>
 #include <ViennaRNA/structure_utils.h>
 #include <ViennaRNA/constraints.h>
+#include <ViennaRNA/constraints_soft.h>
 #include <ViennaRNA/mfe.h>
 #include <ViennaRNA/eval.h>
 #include <ViennaRNA/part_func.h>
@@ -65,7 +66,7 @@ void free_kl_soft_constraints(void *data) {
 	free(dat);
 }
 
-FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data) {
+FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, unsigned char decomp, void *data) {
 
 	int d1, d2, ij, kl;
 	int *idx = ((kl_soft_constraints *) data)->idx;
@@ -184,7 +185,7 @@ FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data)
 	return (x * d1 + y * d2) * 100;
 }
 
-FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, char decomp, void *data) {
+FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, unsigned char decomp, void *data) {
 
 	double kT = ((kl_soft_constraints *) data)->kT;
 	double result = exp((-10. * (double) kl_pseudo_energy(i, j, k, l, decomp, data)) / kT);

@@ -39,9 +39,9 @@ kl_soft_constraints *kl_init_datastructures(vrna_fold_compound_t *vc, const char
 
 void free_kl_soft_constraints(void *data);
 
-FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, char decomp, void *data);
+FLT_OR_DBL kl_pseudo_energy(int i, int j, int k, int l, unsigned char decomp, void *data);
 
-FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, char decomp, void *data);
+FLT_OR_DBL kl_exp_pseudo_energy(int i, int j, int k, int l, unsigned char decomp, void *data);
 
 /**
  * computes samples with stochastic backtracking and maps them to the 2D grid.
