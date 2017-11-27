@@ -10,6 +10,7 @@ extern "C" {
 #include "../src/barrier_lower_bound.h"
 #include "../src/distorted_sampling.h"
 #include "../src/distorted_samplingMD.h"
+#include "../src/dist_class_sc.h"
 #include "../src/meshpoint.h"
 #include "../src/paths.h"
 #include "../src/RNAwalk.h"
