@@ -7,7 +7,7 @@ void computeInitialDistortion(vrna_fold_compound_t *vc, const char *s1, const ch
 
 void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1, const char *s2, double *OUTPUT, double *OUTPUT);
 
-%typemap(out) gridLandscapeT* estimate_landscape, gridLandscapeT* convertGrid_toList %{
+%typemap(out) gridLandscapeT* estimate_landscape, gridLandscapeT* convertGrid_toList {
 	//get number of cells
 	int numberOfCells = 0;
 	for(int i = 0; i < $1->size1;i++){
@@ -52,7 +52,7 @@ void computeDistortion(vrna_fold_compound_t *vc, const char *s0, const char *s1,
 	free($1->landscape);
 	free($1);
 	$result=res;
-%}
+}
 
 
 

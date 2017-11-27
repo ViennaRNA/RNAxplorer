@@ -43,7 +43,7 @@
   }
 }
 
-%typemap(out) gridLandscapeT* estimate_landscapeMD %{
+%typemap(out) gridLandscapeT* estimate_landscapeMD {
 	//get number of cells
 	int numberOfCells = 0;
 	for(int i = 0; i < $1->size1;i++){
@@ -88,7 +88,7 @@
 	free($1->landscape);
 	free($1);
 	$result=res;
-%}
+}
 
 
 %{
