@@ -4,22 +4,33 @@ EXTRA_DIST = \
   $(SWIG_wrapper) \
   $(SWIG_module_name).py
 
+INTERFACE_FILES = $(top_srcdir)/interfaces/RNAxplorer.i
 
-pkgpyexecdir = $(pyexecdir)/RNAxplorer
+pkgpy2execdir = $(py2execdir)/RNAxplorer
+pkgpy2cmoddir = $(py2execdir)
 
-pkgpyexec_LTLIBRARIES = _RNAxplorer.la
-pkgpyexec_PYTHON = RNAxplorer/__init__.py
+pkgpy2cmod_LTLIBRARIES = _RNAxplorer.la
+pkgpy2exec_DATA = RNAxplorer/__init__.py
 
-_RNAxplorer_la_SOURCES = $(top_srcdir)/interfaces/RNAxplorer.i $(SWIG_wrapper)
+_RNAxplorer_la_SOURCES = $(INTERFACE_FILES) \
+                         $(SWIG_wrapper)
 
-_RNAxplorer_la_CPPFLAGS = -I$(top_srcdir)/src $(PYTHON_CPPFLAGS) $(SWIG_PYTHON_CPPFLAGS)
-_RNAxplorer_la_LIBADD = $(LDADD) $(top_builddir)/src/libRNAxplorer_conv.la $(PYTHON_LIBS) $(PYTHON_EXTRA_LIBS)
+BUILT_SOURCES = _RNAxplorer$(PYTHON2_SO)
 
-_RNAxplorer_la_LDFLAGS = $(RNALIB_LIBS) -avoid-version -module -shared -export-dynamic $(PYTHON_EXTRA_LDFLAGS)
+
+_RNAxplorer_la_CFLAGS = $(RNAxplorer_CFLAGS) $(PYTHON2_CFLAGS)
+_RNAxplorer_la_CXXFLAGS = $(RNAxplorer_CXXFLAGS)
+_RNAxplorer_la_CPPFLAGS =  $(PYTHON2_CPPFLAGS) -I$(top_srcdir)/src $(PYTHON2_INCLUDES)
+
+_RNAxplorer_la_LIBADD = $(LDADD) $(top_builddir)/src/libRNAxplorer_conv.la $(PYTHON2_LDFLAGS)
+
+_RNAxplorer_la_LDFLAGS = $(RNALIB_LIBS) -avoid-version -module -shared -export-dynamic -shrext $(PYTHON2_SO)
+
 
 $(SWIG_wrapper): $(SWIG_src)
-	$(AM_V_GEN)$(SWIG) -I$(top_srcdir)/src \
-                  $(AX_SWIG_PYTHON_OPT) -modern -c++ \
+	$(swig_verbose)$(SWIG) -I$(top_srcdir)/src \
+                  -I$(srcdir) -I$(builddir) \
+                  -python -modern  -c++ \
                   -o $(SWIG_wrapper) \
                   $(SWIG_main_src)
 
@@ -31,20 +42,25 @@ RNAxplorer/__init__.py: $(SWIG_module_name).py
 	-test -d RNAxplorer || $(MKDIR_P) RNAxplorer
 	cp `test -f RNAxplorer.py || echo '$(srcdir)/'`RNAxplorer.py RNAxplorer/__init__.py
 
+_RNAxplorer$(PYTHON2_SO): _RNAxplorer.la
+	$(AM_V_GEN)( $(LIBTOOL) --config > libtoolconfig.tmp ) && \
+  ( . ./libtoolconfig.tmp; cp $$objdir/_RNAxplorer$(PYTHON2_SO) . ) && \
+  rm -f libtoolconfig.tmp
+
 clean-local:
-	-rm -rf RNAxplorer
+	-rm -rf RNAxplorer _RNAxplorer$(PYTHON2_SO)
 
 # Remove the .la file - RNAxplorer.la is never linked against (it's a module)
 # and Python doesn't use libltdl.  Note that the library gets installed by
 # install-data, so that's where we need to hook.
 install-data-hook:
-	rm -f $(DESTDIR)$(pkgpyexecdir)/_RNAxplorer.la
+	rm -f $(DESTDIR)$(pkgpy2cmoddir)/_RNAxplorer.la
 
 # Because we don't install the .la file, "make uninstall" doesn't work and
 # we need to remove the file ourselves.
 uninstall-local:
-	eval `grep '^dlname=' $(pyexec_LTLIBRARIES)` ; \
-	rm -f $(DESTDIR)$(pkgpyexecdir)/"$$dlname"
+	eval `grep '^dlname=' $(pkgpy2cmod_LTLIBRARIES)` ; \
+	rm -f $(DESTDIR)$(pkgpy2cmoddir)/"$$dlname"
 
 ## remove all generated content
 maintainer-clean-local:

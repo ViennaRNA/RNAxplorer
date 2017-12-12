@@ -3,7 +3,6 @@
 *.in
 Makefile
 
-m4
 stamp-h1
 missing
 compile

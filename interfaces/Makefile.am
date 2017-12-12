@@ -1,6 +1,6 @@
 AM_CPPFLAGS = -I$(top_srcdir)/src
 
-SUBDIRS = @PYTHON_INTERFACE@
+SUBDIRS = @PYTHON2_INTERFACE@
 
 SOURCES = RNAxplorer.i \
           generic.mk
