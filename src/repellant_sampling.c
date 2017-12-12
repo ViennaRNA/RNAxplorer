@@ -43,6 +43,41 @@ add_reference(vrna_fold_compound_t *fc,
               double               energy);
 
 
+
+void
+rnax_add_repulsion(vrna_fold_compound_t *fc,
+                   const char *structure,
+                   double     strength)
+{
+
+  if ((fc) && (fc->type == VRNA_FC_TYPE_SINGLE)) {
+    if (!fc->sc)
+      vrna_sc_init(fc);
+
+    /* init everything if this is the first call to this function */
+    if (fc->sc->exp_f != &sc_exp_f_dist_class) {
+      sc_dist_class_t *d  = sc_dist_class_init(fc);
+      repell_data     *rd = (repell_data *)vrna_alloc(sizeof(repell_data));
+
+      d->f_data = (void *)rd;
+      d->f_free = &destroy_repell_data;
+      d->f      = &compute_repulsion;
+
+      /* add soft constraints to fold compound */
+      vrna_sc_add_data(fc, (void *)d, &sc_dist_class_destroy);
+      vrna_sc_add_exp_f(fc, &sc_exp_f_dist_class);
+      vrna_sc_add_f(fc, &sc_f_dist_class);
+    }
+
+    /* add reference */
+    sc_dist_class_t *d = (sc_dist_class_t *)fc->sc->data;
+    sc_dist_class_add_ref(d, structure);
+    add_reference(fc, (repell_data *)d->f_data, structure, strength);
+  }
+}
+
+
+
 /* BEGIN interface for repulsive sampling */
 void
 repellant_sampling(vrna_fold_compound_t *vc)
@@ -71,22 +106,7 @@ repellant_sampling(vrna_fold_compound_t *vc)
   vrna_init_rand();
 
   /* add MFE struct as first structure to repell */
-  sc_dist_class_t *d  = sc_dist_class_init(fc);
-  sc_dist_class_add_ref(d, mfe_structure);
-
-  repell_data     *rd = (repell_data *)vrna_alloc(sizeof(repell_data));
-
-  /* add MFE structure as first reference (lift structure by -mfe kcal/mol) */
-  add_reference(fc, rd, mfe_structure, -mfe);
-
-  d->f_data = (void *)rd;
-  d->f_free = &destroy_repell_data;
-  d->f      = &compute_repulsion;
-
-  /* add soft constraints */
-  vrna_sc_add_data(fc, (void *)d, &sc_dist_class_destroy);
-  vrna_sc_add_exp_f(fc, &sc_exp_f_dist_class);
-  vrna_sc_add_f(fc, &sc_f_dist_class);
+  rnax_add_repulsion(fc, mfe_structure, -mfe);
 
   double mfe2 = (double)vrna_mfe(fc, NULL);
 
