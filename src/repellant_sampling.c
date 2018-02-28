@@ -36,7 +36,7 @@ compute_repulsion(int i,
                   sc_dist_class_t *d);
 
 
-static void
+static int
 add_reference(vrna_fold_compound_t *fc,
               repell_data          *d,
               const char           *structure,
@@ -44,11 +44,19 @@ add_reference(vrna_fold_compound_t *fc,
 
 
 
-void
+static int
+change_reference_energy(vrna_fold_compound_t *fc,
+                        repell_data          *d,
+                        int                  id,
+                        double               energy);
+
+
+int
 rnax_add_repulsion(vrna_fold_compound_t *fc,
                    const char *structure,
                    double     strength)
 {
+  int ret = -1;
 
   if ((fc) && (fc->type == VRNA_FC_TYPE_SINGLE)) {
     if (!fc->sc)
@@ -72,10 +80,27 @@ rnax_add_repulsion(vrna_fold_compound_t *fc,
     /* add reference */
     sc_dist_class_t *d = (sc_dist_class_t *)fc->sc->data;
     sc_dist_class_add_ref(d, structure);
-    add_reference(fc, (repell_data *)d->f_data, structure, strength);
+    ret = add_reference(fc, (repell_data *)d->f_data, structure, strength);
   }
+
+  return ret;
 }
 
+
+int
+rnax_change_repulsion(vrna_fold_compound_t *fc,
+                      int                  id,
+                      double     strength)
+{
+  int ret = -1;
+
+  if ((fc) && (fc->type == VRNA_FC_TYPE_SINGLE) && (fc->sc->data)) {
+    sc_dist_class_t *d = (sc_dist_class_t *)fc->sc->data;
+    ret = change_reference_energy(fc, (repell_data *)d->f_data, id, strength);
+  }
+
+  return ret;
+}
 
 
 /* BEGIN interface for repulsive sampling */
@@ -267,7 +292,7 @@ compute_repulsion(int i,
   return r;
 }
 
-static void
+static int
 add_reference(vrna_fold_compound_t *fc,
               repell_data          *d,
               const char           *structure,
@@ -294,9 +319,29 @@ add_reference(vrna_fold_compound_t *fc,
   /* prepare reference specific stuff */
   d->mm1[d->num_ref - 1]       = maximumMatchingConstraint(fc->sequence, pt);
   d->ref_bps[d->num_ref - 1]   = vrna_refBPcnt_matrix(pt, md->min_loop_size);
-  d->repulsion[d->num_ref - 1] = (int)((energy / (d->ref_bps[0][iidx[1] - n] + d->mm1[0][iidx[1] - n])) * 100.);/* in dekakal/mol, but what is a good repulsion???!!! */
+  d->repulsion[d->num_ref - 1] = (int)((energy / (d->ref_bps[d->num_ref - 1][iidx[1] - n] + d->mm1[d->num_ref - 1][iidx[1] - n])) * 100.);/* in dekakal/mol, but what is a good repulsion???!!! */
 
   free(pt);
+
+  return d->num_ref - 1;
+}
+
+
+static int
+change_reference_energy(vrna_fold_compound_t *fc,
+                        repell_data          *d,
+                        int                  id,
+                        double               energy)
+{
+  unsigned int n;
+  int          *iidx;
+
+  n    = fc->length;
+  iidx = fc->iindx;
+
+  d->repulsion[id] = (int)((energy / (d->ref_bps[id][iidx[1] - n] + d->mm1[id][iidx[1] - n])) * 100.);/* in dekakal/mol */
+
+  return id;
 }
 
 
