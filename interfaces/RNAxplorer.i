@@ -38,15 +38,23 @@ extern "C" {
 %rename (add_repulsion) rnax_add_repulsion;
 
 %{
-  void add_repulsion(vrna_fold_compound_t *fc,
-                   const char *structure,
-                   double     strength)
+  int add_repulsion(vrna_fold_compound_t *fc,
+                    const char *structure,
+                    double     strength)
   {
-    rnax_add_repulsion(fc, structure, strength);
+    return rnax_add_repulsion(fc, structure, strength);
+  }
+
+  int change_repulsion(vrna_fold_compound_t *fc,
+                       int                   id,
+                       double     strength)
+  {
+    return rnax_change_repulsion(fc, id, strength);
   }
 %}
 
-void add_repulsion(vrna_fold_compound_t *fc, const char *structure, double     strength);
+int add_repulsion(vrna_fold_compound_t *fc, const char *structure, double     strength);
+int change_repulsion(vrna_fold_compound_t *fc, int id, double     strength);
 
 %include "../src/repellant_sampling.h"
 
