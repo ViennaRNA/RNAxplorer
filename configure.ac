@@ -36,11 +36,13 @@ fi
 
 #add lapack, (needed for multidimensional sampling)
 AX_LAPACK([
-			#ACTION-IF-FOUND
-			CFLAGS="$CPPFLAGS -llapack"
-			LDFLAGS="$LDFLAGS -llapack" 
-			],[AC_MSG_ERROR(could not find required version of Lapack library)])
-   
+      AC_CHECK_HEADERS([openblas/lapacke.h lapacke/lapacke.h lapacke.h],[rx_lapacke_header=yes;break;],)
+      AS_IF([test "x$rx_lapacke_header" = "xyes"],[
+        LDFLAGS="$LDFLAGS -llapack"
+      ],[
+        AC_MSG_ERROR([could not find lapacke.h])
+      ])
+      ],[AC_MSG_ERROR([could not find required version of Lapack library])])
 
 AC_PROG_CC
 AC_PROG_CPP

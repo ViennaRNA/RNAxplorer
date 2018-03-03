@@ -5,6 +5,7 @@
  * (c) Gregor Entzian
  */
 
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,7 +32,18 @@
 #include <ViennaRNA/mm.h>
 #include <ViennaRNA/pair_mat.h>
 
-#include <lapacke/lapacke.h>
+#ifdef HAVE_LAPACKE_H
+# include <lapacke.h>
+#else
+# ifdef HAVE_LAPACKE_LAPACKE_H
+#   include <lapacke/lapacke.h>
+# else
+#   ifdef HAVE_OPENBLAS_LAPACKE_H
+#     include <openblas/lapacke.h>
+#   endif
+# endif
+#endif
+
 
 #include "dist_class_sc.h"
 #include "distorted_samplingMD.h"
