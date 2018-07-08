@@ -27,8 +27,8 @@ nonredundant_sample_file = False
 
 # this is SV11
 sequence = "GGGCACCCCCCUUCGGGGGGUCACCUCGCGUAGCUAGCUACGCGAGGGUUAAAGCGCCUUUCUCCCUCGCGUAGCUAACCACGCGAGGUGACCCCCCGAAAAGGGGGGUUUCCCA"
-sv11_mfe="(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))..)))."
-sv11_meta="(((((((((((...)))))))..((((((((((....))))))))))........)))).....((((((((........)))))))).((((((((.....))))))))....."
+structure1="(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))..)))."
+structure2="(((((((((((...)))))))..((((((((((....))))))))))........)))).....((((((((........)))))))).((((((((.....))))))))....."
 
 """
 Error print
@@ -77,6 +77,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--verbose", help="Be verbose", action="store_true")
 parser.add_argument("-d", "--debug", help="Be even more verbose", action="store_true")
 parser.add_argument("-s", "--sequence", type=str, help="Input sequence")
+parser.add_argument("--struc1", type=str, help="Input structure 1")
+parser.add_argument("--struc2", type=str, help="Input structure 2")
 parser.add_argument("-i", "--iterations", type=int, help="Number of iterations")
 parser.add_argument("-n", "--num-samples", type=int, help="Number of samples per iteration")
 parser.add_argument("-f", "--exploration-factor", type=float, help="Exploration factor")
@@ -96,6 +98,12 @@ if args.debug:
 
 if args.sequence:
     sequence = args.sequence
+
+if args.struc1:
+    structure1 = args.struc1
+
+if args.struc2:
+    structure2 = args.struc2
 
 if args.iterations:
     num_iter = args.iterations
@@ -234,13 +242,13 @@ if fake_2D_file:
     distances = [ [ None for j in range(0, 200) ] for i in range(0, 200) ];
 
     for s in minima.keys():
-        d1 = RNA.bp_distance(sv11_mfe, s)
-        d2 = RNA.bp_distance(sv11_meta, s)
+        d1 = RNA.bp_distance(structure1, s)
+        d2 = RNA.bp_distance(structure2, s)
         if not distances[d1][d2] or minima[s]['energy'] < distances[d1][d2]:
             distances[d1][d2] = minima[s]['energy']
 
     f = open("sv11_fake.2D.out", 'w')
-    f.write("%s\n%s (%6.2f)\n%s\n%s\n\n\n" % (sequence, sv11_mfe, mfe, sv11_mfe, sv11_meta))
+    f.write("%s\n%s (%6.2f)\n%s\n%s\n\n\n" % (sequence, structure1, mfe, structure1, structure2))
     for i in range(0, 200):
         for j in range(0, 200):
             if distances[i][j] != None:
@@ -281,13 +289,13 @@ if nonredundant_sample_file:
         distances = [ [ None for j in range(0, 200) ] for i in range(0, 200) ];
 
         for s in nonredundant_minima.keys():
-            d1 = RNA.bp_distance(sv11_mfe, s)
-            d2 = RNA.bp_distance(sv11_meta, s)
+            d1 = RNA.bp_distance(structure1, s)
+            d2 = RNA.bp_distance(structure2, s)
             if not distances[d1][d2] or nonredundant_minima[s]['energy'] < distances[d1][d2]:
                 distances[d1][d2] = nonredundant_minima[s]['energy']
 
         f = open("sv11_fake_nonred.2D.out", 'w')
-        f.write("%s\n%s (%6.2f)\n%s\n%s\n\n\n" % (sequence, sv11_mfe, mfe, sv11_mfe, sv11_meta))
+        f.write("%s\n%s (%6.2f)\n%s\n%s\n\n\n" % (sequence, structure1, mfe, structure1, structure2))
         for i in range(0, 200):
             for j in range(0, 200):
                 if distances[i][j] != None:
