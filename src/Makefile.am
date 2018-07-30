@@ -41,5 +41,5 @@ maintainer-clean-local:
 
 _cmdl.c_cmdl.h :
 
-RNAxplorer_SOURCES = ${GENGETOPT_CMDL} RNAxplorer.c
+RNAxplorer_SOURCES = ${GENGETOPT_CMDL} RNAxplorer.c RNAxplorer.h
 RNAxplorer_LDADD = libRNAxplorer_conv.la $(RNALIB_LIBS)
