@@ -15,7 +15,6 @@ num_iter = 100
 num_samples = 10000
 kt_fact = 1
 min_explore_min_percent = 10
-exploration_factor = 1.2
 do_clustering = False
 fake_2D_file = True
 # switch to select penalization of base pairs instead of computing complicated structure penalties
@@ -23,7 +22,10 @@ penalize_base_pairs = True
 verbose = False
 debug   = False
 lmin_file = "local_minima.txt"
+TwoD_file = "local_minima.2D.out"
 nonredundant_sample_file = False
+subopt_file = None
+nonredundant = False
 
 # this is SV11
 sequence = "GGGCACCCCCCUUCGGGGGGUCACCUCGCGUAGCUAGCUACGCGAGGGUUAAAGCGCCUUUCUCCCUCGCGUAGCUAACCACGCGAGGUGACCCCCCGAAAAGGGGGGUUUCCCA"
@@ -76,6 +78,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("-v", "--verbose", help="Be verbose", action="store_true")
 parser.add_argument("-d", "--debug", help="Be even more verbose", action="store_true")
+parser.add_argument("--subopt", type=str, help="Compute suboptimals")
 parser.add_argument("-s", "--sequence", type=str, help="Input sequence")
 parser.add_argument("--struc1", type=str, help="Input structure 1")
 parser.add_argument("--struc2", type=str, help="Input structure 2")
@@ -85,6 +88,8 @@ parser.add_argument("-f", "--exploration-factor", type=float, help="Exploration 
 parser.add_argument("--min-exploration-percent", type=float, help="Minimum exploration percentage before adding new repelled structures")
 parser.add_argument("-c", "--cluster", help="Cluster resulting local minima to reduce effective size", action="store_true")
 parser.add_argument("--lmin-file", type=str, help="Output filename for local minima")
+parser.add_argument("--TwoD-file", type=str, help="Output filename for pseudo-2D file")
+parser.add_argument("--nonred", help="Do sampling with non-redundant pbacktrack", action="store_true")
 parser.add_argument("--nonred-file", type=str, help="Input filename for nonredundant samples")
 
 
@@ -105,6 +110,9 @@ if args.struc1:
 if args.struc2:
     structure2 = args.struc2
 
+if args.subopt:
+    subopt_file = args.subopt
+
 if args.iterations:
     num_iter = args.iterations
 
@@ -115,7 +123,7 @@ if args.cluster:
     do_clustering = True
 
 if args.exploration_factor:
-    exploration_factor = args.exploration_factor
+    kt_fact = args.exploration_factor
 
 if args.min_exploration_percent:
     min_explore_min_percent = args.min_exploration_percent
@@ -123,8 +131,14 @@ if args.min_exploration_percent:
 if args.lmin_file:
     lmin_file = args.lmin_file
 
+if args.TwoD_file:
+    TwoD_file = args.TwoD_file
+
 if args.nonred_file:
     nonredundant_sample_file = args.nonred_file
+
+if args.nonred:
+    nonredundant = True
 
 
 
@@ -202,33 +216,62 @@ for it in range(0, num_iter):
 
     new_minima = 0
 
-    for i in range(0, num_samples):
-        # sample structure
-        s = fc.pbacktrack()
-        # perform gradient walk from sample to determine direct local minimum
-        pt = RNA.IntVector(RNA.ptable(s))
-        fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
-        ss = RNA.db_from_ptable(list(pt))
-        if ss not in minima:
-            minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
-            new_minima = new_minima + 1
-        else:
-            minima[ss]['count'] = minima[ss]['count'] + 1
-
-    if verbose:
-        eprint("new minima: %d vs. present minima: %d" % (new_minima, len(minima)))
-
-    if it < num_iter - 1:
-        # find out which local minima we've seen the most
-        repell_struct = max(minima.iterkeys(), key=(lambda a: minima[a] if a not in repulsed_structures else 0))
-        repell_en = kt_fact * kT / 1000.
+    if nonredundant:
+        for s in fc.pbacktrack_nr(num_samples):
+            # perform gradient walk from sample to determine direct local minimum
+            pt = RNA.IntVector(RNA.ptable(s))
+            fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
+            ss = RNA.db_from_ptable(list(pt))
+            if ss not in minima:
+                minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
+                new_minima = new_minima + 1
+            else:
+                minima[ss]['count'] = minima[ss]['count'] + 1
 
         if verbose:
-            eprint("repelling the following struct\n%s (%6.2f)" % (repell_struct, repell_en))
+            eprint("new minima (nonred): %d vs. present minima (nonred): %d" % (new_minima, len(minima)))
 
-        repulsed_structures[repell_struct] = 1
+        if it < num_iter - 1:
+            # find out which local minima we've seen the most
+            repell_struct = max(minima.iterkeys(), key=(lambda a: minima[a] if a not in repulsed_structures else 0))
+            repell_en = kt_fact * kT / 1000.
 
-        store_basepair_sc(sc_data, repell_struct, repell_en)
+            if verbose:
+                eprint("repelling the following struct\n%s (%6.2f)" % (repell_struct, repell_en))
+
+            repulsed_structures[repell_struct] = 1
+
+            store_basepair_sc(sc_data, repell_struct, repell_en)
+
+    else:
+        for i in range(0, num_samples):
+            # sample structure
+            s = fc.pbacktrack()
+            # perform gradient walk from sample to determine direct local minimum
+            pt = RNA.IntVector(RNA.ptable(s))
+            fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
+            ss = RNA.db_from_ptable(list(pt))
+            if ss not in minima:
+                minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
+                new_minima = new_minima + 1
+            else:
+                minima[ss]['count'] = minima[ss]['count'] + 1
+
+        if verbose:
+            eprint("new minima: %d vs. present minima: %d" % (new_minima, len(minima)))
+
+        if it < num_iter - 1:
+            # find out which local minima we've seen the most
+            repell_struct = max(minima.iterkeys(), key=(lambda a: minima[a] if a not in repulsed_structures else 0))
+            repell_en = kt_fact * kT / 1000.
+
+            if verbose:
+                eprint("repelling the following struct\n%s (%6.2f)" % (repell_struct, repell_en))
+
+            repulsed_structures[repell_struct] = 1
+
+            store_basepair_sc(sc_data, repell_struct, repell_en)
+
 
 
 # save local minima to file
@@ -237,6 +280,24 @@ f.write("     %s\n" % sequence)
 for i,s in enumerate(sorted(minima.keys(), key=lambda x: minima[x]['energy'])):
         f.write("%4d %s %6.2f %6d\n" % (i, s, minima[s]['energy'], minima[s]['count']))
 f.close()
+
+
+if subopt_file != None:
+    fc.sc_remove()
+    (ss, mfe) = fc.mfe()
+    # determine local minimum with highest energy from previous run
+    max_e = max(minima.keys(), key=lambda k: minima[k]['energy'])
+    delta = int((minima[max_e]['energy'] - mfe) * 100)
+    if delta > 500:
+        eprint("Warning, subopt delta is large: %d" % delta)
+
+    subopt_file = open(subopt_file, 'w')
+
+    sol = fc.subopt(delta, 0, subopt_file)
+    #for s in sol:
+    #    print("%s %g" % (s.structure, s.energy))
+
+    subopt_file.close()
 
 if fake_2D_file:
     distances = [ [ None for j in range(0, 200) ] for i in range(0, 200) ];
@@ -247,7 +308,7 @@ if fake_2D_file:
         if not distances[d1][d2] or minima[s]['energy'] < distances[d1][d2]:
             distances[d1][d2] = minima[s]['energy']
 
-    f = open("sv11_fake.2D.out", 'w')
+    f = open(TwoD_file, 'w')
     f.write("%s\n%s (%6.2f)\n%s\n%s\n\n\n" % (sequence, structure1, mfe, structure1, structure2))
     for i in range(0, 200):
         for j in range(0, 200):
