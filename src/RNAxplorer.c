@@ -19,13 +19,13 @@
 #include "RNAxplorer_cmdl.h"
 
 enum strategies_avail_e {
-  MOVE_GRADIENT_WALK,              
-  PATHFINDER_SADDLE_GRADIENT_WALK, 
-  PATHFINDER_SADDLE_MONTE_CARLO,   
-  PATHFINDER_SADDLE_MONTE_CARLO_SA,
-  PATHFINDER_TWO_D_REPRESENTATIVES,
-  FINDPATH,                        
-  TWO_D_LOWER_BOUND,               
+  MOVE_GRADIENT_WALK,
+  PATHFINDER_SADDLE_GRADIENT_WALK,  /* perform gradient walks from saddle point to find meshpoint(s) */
+  PATHFINDER_SADDLE_MONTE_CARLO,    /* perform rejection-less monte carlo (Gillespie) simulation away from saddle point */
+  PATHFINDER_SADDLE_MONTE_CARLO_SA, /* perform rejection-less monte carlo (Gillespie) simulation away from saddle point while cooling down the system (simulated annealing) */
+  PATHFINDER_TWO_D_REPRESENTATIVES, /* use 2D representatives as meshpoints */
+  FINDPATH,                         /* use findpath heuristic to obtain optimal refolding path */
+  TWO_D_LOWER_BOUND,                /* compute optimal folding path based on 2D representatives using Dijkstra algorithm on andscape projection */
   REPELLENT_SAMPLING,
   ATTRACTION_SAMPLING,
   TEMPERATURE_SCALING_SAMPLING
@@ -54,7 +54,6 @@ struct options_s {
   float                   t_start;
   float                   t_end;
   float                   cooling_rate;
-
 };
 
 typedef int (xplorer_func)(const char       *rec_id,
@@ -70,24 +69,29 @@ typedef struct {
 
 
 struct options_s *
-process_arguments(int argc, char *argv[]);
+process_arguments(int   argc,
+                  char  *argv[]);
 
 
 char **
-extract_structures(unsigned int n, int maybe_multiline, char **rec_rest);
+extract_structures(unsigned int n,
+                   int          maybe_multiline,
+                   char         **rec_rest);
 
 
 int
-moves_gradient_descent( const char        *rec_id,
-                        const char        *orig_sequence,
-                        char              **structures,
-                        struct options_s  *opt);
+moves_gradient_descent(const char       *rec_id,
+                       const char       *orig_sequence,
+                       char             **structures,
+                       struct options_s *opt);
+
 
 int
-paths_findpath( const char        *rec_id,
-                const char        *orig_sequence,
-                char              **structures,
-                struct options_s  *opt);
+paths_findpath(const char       *rec_id,
+               const char       *orig_sequence,
+               char             **structures,
+               struct options_s *opt);
+
 
 int
 paths_pathfinder_gd(const char        *rec_id,
@@ -95,11 +99,13 @@ paths_pathfinder_gd(const char        *rec_id,
                     char              **structures,
                     struct options_s  *opt);
 
+
 int
 paths_pathfinder_mc(const char        *rec_id,
                     const char        *orig_sequence,
                     char              **structures,
                     struct options_s  *opt);
+
 
 int
 paths_pathfinder_mcsa(const char        *rec_id,
@@ -107,11 +113,13 @@ paths_pathfinder_mcsa(const char        *rec_id,
                       char              **structures,
                       struct options_s  *opt);
 
+
 int
 paths_pathfinder_db(const char        *rec_id,
                     const char        *orig_sequence,
                     char              **structures,
                     struct options_s  *opt);
+
 
 int
 paths_pathfinder_dbba(const char        *rec_id,
@@ -119,11 +127,13 @@ paths_pathfinder_dbba(const char        *rec_id,
                       char              **structures,
                       struct options_s  *opt);
 
+
 int
-sampling_repulsion( const char        *rec_id,
-                    const char        *orig_sequence,
-                    char              **structures,
-                    struct options_s  *opt);
+sampling_repulsion(const char       *rec_id,
+                   const char       *orig_sequence,
+                   char             **structures,
+                   struct options_s *opt);
+
 
 int
 sampling_attraction(const char        *rec_id,
@@ -131,59 +141,95 @@ sampling_attraction(const char        *rec_id,
                     char              **structures,
                     struct options_s  *opt);
 
+
 int
-sampling_temperature( const char        *rec_id,
-                      const char        *orig_sequence,
-                      char              **structures,
-                      struct options_s  *opt);
+sampling_temperature(const char       *rec_id,
+                     const char       *orig_sequence,
+                     char             **structures,
+                     struct options_s *opt);
 
 
 /**
- *** \file RNAxplorer.c
- **/
+*** \file RNAxplorer.c
+**/
 
 
 #define NUM_STRATEGIES    10
 
 static strategies known_strategies[NUM_STRATEGIES] = {
   /* code, function, name */
-  {MOVE_GRADIENT_WALK,                &moves_gradient_descent,  "Gradient Descent Moves"},
-  /* perform gradient walks from saddle point to find meshpoint(s) */
-  {PATHFINDER_SADDLE_GRADIENT_WALK,   &paths_pathfinder_gd,     "PathFinder - Gradient Descent from Saddle"},
-  /* perform rejection-less monte carlo (Gillespie) simulation away from saddle point */
-  {PATHFINDER_SADDLE_MONTE_CARLO,     &paths_pathfinder_mc,     "PathFinder - MCMC from Saddle"},
-  /* perform rejection-less monte carlo (Gillespie) simulation away from saddle point while cooling down the system (simulated annealing) */
-  {PATHFINDER_SADDLE_MONTE_CARLO_SA,  &paths_pathfinder_mcsa,   "PathFinder - MCMC from Saddle (Simulated Annealing)"},
-  /* use 2D representatives as meshpoints */
-  {PATHFINDER_TWO_D_REPRESENTATIVES,  &paths_pathfinder_db,     "PathFinder - 2D Representatives"},
-  /* use findpath heuristic to obtain optimal refolding path */
-  {FINDPATH,                          &paths_findpath,          "Findpath"},
-  /* compute optimal folding path based on 2D representatives using Dijkstra algorithm on andscape projection */
-  {TWO_D_LOWER_BOUND,                 &paths_pathfinder_dbba,   "Energy Barrier Lower Bound from 2D Representation"},
-  {REPELLENT_SAMPLING,                &sampling_repulsion,      "Repellent Sampling Scheme"},
-  {ATTRACTION_SAMPLING,               &sampling_attraction,     "Directed Sampling Scheme"},
-  {TEMPERATURE_SCALING_SAMPLING,      &sampling_temperature,    "Temperature Scaling Sampling Scheme"}
+  {
+    MOVE_GRADIENT_WALK,
+    &moves_gradient_descent,
+    "Gradient Descent Moves"
+  },
+  {
+    PATHFINDER_SADDLE_GRADIENT_WALK,
+    &paths_pathfinder_gd,
+    "PathFinder - Gradient Descent from Saddle"
+  },
+  {
+    PATHFINDER_SADDLE_MONTE_CARLO,
+    &paths_pathfinder_mc,
+    "PathFinder - MCMC from Saddle"
+  },
+  {
+    PATHFINDER_SADDLE_MONTE_CARLO_SA,
+    &paths_pathfinder_mcsa,
+    "PathFinder - MCMC from Saddle (Simulated Annealing)"
+  },
+  {
+    PATHFINDER_TWO_D_REPRESENTATIVES,
+    &paths_pathfinder_db,
+    "PathFinder - 2D Representatives"
+  },
+  {
+    FINDPATH,
+    &paths_findpath,
+    "Findpath"
+  },
+  {
+    TWO_D_LOWER_BOUND,
+    &paths_pathfinder_dbba,
+    "Energy Barrier Lower Bound from 2D Representation"
+  },
+  {
+    REPELLENT_SAMPLING,
+    &sampling_repulsion,
+    "Repellent Sampling Scheme"
+  },
+  {
+    ATTRACTION_SAMPLING,
+    &sampling_attraction,
+    "Directed Sampling Scheme"
+  },
+  {
+    TEMPERATURE_SCALING_SAMPLING,
+    &sampling_temperature,
+    "Temperature Scaling Sampling Scheme"
+  }
 };
 
-static char *extended_options = NULL;
+static char       *extended_options = NULL;
 
 //percentage of distortion per reference.
-size_t length_indicesAndPercentages=0;
-double *indicesAndPercentages=NULL;
+size_t            length_indicesAndPercentages  = 0;
+double            *indicesAndPercentages        = NULL;
 
 
 /*
-#################################
-# BEGIN OF FUNCTION DEFINITIONS #
-#################################
-*/
+ #################################
+ # BEGIN OF FUNCTION DEFINITIONS #
+ #################################
+ */
 int
-main(int argc, char *argv[])
+main(int  argc,
+     char *argv[])
 {
-  FILE          *input_stream     = stdin;
-  xplorer_func  *processing_func  = NULL;
+  FILE              *input_stream     = stdin;
+  xplorer_func      *processing_func  = NULL;
 
-  struct options_s *options = process_arguments(argc, argv);
+  struct options_s  *options = process_arguments(argc, argv);
 
   for (int i = 0; i < NUM_STRATEGIES; i++)
     if (options->strategy == known_strategies[i].strategy) {
@@ -191,9 +237,8 @@ main(int argc, char *argv[])
       break;
     }
 
-
-  int istty_in  = isatty(fileno(input_stream));
-  int istty_out = isatty(fileno(stdout));
+  int           istty_in  = isatty(fileno(input_stream));
+  int           istty_out = isatty(fileno(stdout));
 
   unsigned int  read_opt = 0;
 
@@ -238,9 +283,9 @@ main(int argc, char *argv[])
       rec_id = memmove(rec_id, rec_id + 1, strlen(rec_id));
     }
 
-    unsigned int n = strlen(rec_sequence);
+    unsigned int  n = strlen(rec_sequence);
 
-    char **structures = extract_structures(n, maybe_multiline, rec_rest);
+    char          **structures = extract_structures(n, maybe_multiline, rec_rest);
 
     processing_func(rec_id, rec_sequence, structures, options);
 
@@ -258,7 +303,7 @@ main(int argc, char *argv[])
       vrna_message_input_seq("Input sequence (upper or lower case) followed by structures");
   } while (1);
 
-  return (EXIT_SUCCESS);
+  return EXIT_SUCCESS;
 }
 
 
@@ -275,18 +320,18 @@ default_options(void)
   options->md.uniq_ML = 1; /* we certainly require unique multibranch loop decomposition in any case */
 
   /* findpath option(s) */
-  options->max_keep             = 10;
+  options->max_keep = 10;
 
   /* common options to many methods */
-  options->samples              = 1000;
-  options->iterations           = 1;
+  options->samples    = 1000;
+  options->iterations = 1;
 
   /* PathFinder options */
-  options->max_storage          = 10;
+  options->max_storage = 10;
 
   /* 2D fold options */
-  options->max_d1               = 5;
-  options->max_d2               = 5;
+  options->max_d1 = 5;
+  options->max_d2 = 5;
 
   /* simulated annealing options */
   options->simulated_annealing  = 0;
@@ -299,19 +344,20 @@ default_options(void)
 
 
 struct options_s *
-process_arguments(int argc, char *argv[])
+process_arguments(int   argc,
+                  char  *argv[])
 {
   struct RNAxplorer_args_info args_info;
 
-  struct options_s *options = default_options();
+  struct options_s            *options = default_options();
 
   /*
    #############################################
    # check the command line parameters
    #############################################
    */
-  if (RNAxplorer_cmdline_parser (argc, argv, &args_info) != 0)
-    exit (1);
+  if (RNAxplorer_cmdline_parser(argc, argv, &args_info) != 0)
+    exit(1);
 
   /* temperature */
   if (args_info.temp_given)
@@ -320,27 +366,28 @@ process_arguments(int argc, char *argv[])
   /* method */
   if (args_info.method_given) {
     char *m = args_info.method_arg;
-    if (!strcmp (m, "MC"))
+    if (!strcmp(m, "MC")) {
       options->strategy = PATHFINDER_SADDLE_MONTE_CARLO;
-    else if (!strcmp (m, "MC-SA")) {
-      options->strategy = PATHFINDER_SADDLE_MONTE_CARLO_SA;
-      simulatedAnnealing = 1;
-    }
-    else if (!strcmp (m, "GW"))
+    } else if (!strcmp(m, "MC-SA")) {
+      options->strategy   = PATHFINDER_SADDLE_MONTE_CARLO_SA;
+      simulatedAnnealing  = 1;
+    } else if (!strcmp(m, "GW")) {
       options->strategy = PATHFINDER_SADDLE_GRADIENT_WALK;
-    else if (!strcmp (m, "DB-MFE"))
+    } else if (!strcmp(m, "DB-MFE")) {
       options->strategy = PATHFINDER_TWO_D_REPRESENTATIVES;
-    else if (!strcmp (m, "BLUBB"))
+    } else if (!strcmp(m, "BLUBB")) {
       options->strategy = TWO_D_LOWER_BOUND;
-    else if (!strcmp (m, "SM"))
+    } else if (!strcmp(m, "SM")) {
       options->strategy = ATTRACTION_SAMPLING;
-    else if (!strcmp (m, "RS")) /* Repellant Sampling */
+    } else if (!strcmp(m, "RS")) {
+      /* Repellant Sampling */
       options->strategy = REPELLENT_SAMPLING;
+    }
   }
 
   /* maximum number of simulations / iterations */
   if (args_info.extended_opt_given)
-    extended_options = strdup (args_info.extended_opt_arg);
+    extended_options = strdup(args_info.extended_opt_arg);
 
   /* maximum number of simulations / iterations */
   if (args_info.iterations_given)
@@ -384,49 +431,49 @@ process_arguments(int argc, char *argv[])
   if (args_info.betaScale_given)
     options->md.betaScale = args_info.betaScale_arg;
 
-
   if (args_info.p0_given) {
-      int i, j=1, lmintmp;
-      double poptmp = 0.;
+    int     i, j = 1, lmintmp;
+    double  poptmp = 0.;
 
-      length_indicesAndPercentages = args_info.p0_given;
-      indicesAndPercentages = (double *)calloc(2*args_info.p0_given+1, sizeof(double));
-      *indicesAndPercentages = 1;
-      for (i=0; i<args_info.p0_given; i++) {
-        if (sscanf(args_info.p0_arg[i], "%d=%lg",&lmintmp, &poptmp) == 0)
-          exit(EXIT_FAILURE);
-        if(lmintmp <1) {
-          fprintf(stderr, "States in --p0 must be >=1\n");
-          exit (EXIT_FAILURE);
-        }
-        else {
-          *(indicesAndPercentages + j)     = (double) lmintmp;
-          *(indicesAndPercentages + j + 1) = poptmp;
-          *indicesAndPercentages += 2;
-          j+=2;
-        }
+    length_indicesAndPercentages  = args_info.p0_given;
+    indicesAndPercentages         = (double *)calloc(2 * args_info.p0_given + 1, sizeof(double));
+    *indicesAndPercentages        = 1;
+    for (i = 0; i < args_info.p0_given; i++) {
+      if (sscanf(args_info.p0_arg[i], "%d=%lg", &lmintmp, &poptmp) == 0)
+        exit(EXIT_FAILURE);
+
+      if (lmintmp < 1) {
+        fprintf(stderr, "States in --p0 must be >=1\n");
+        exit(EXIT_FAILURE);
+      } else {
+        *(indicesAndPercentages + j)      = (double)lmintmp;
+        *(indicesAndPercentages + j + 1)  = poptmp;
+        *indicesAndPercentages            += 2;
+        j                                 += 2;
       }
     }
-
+  }
 
   /* free allocated memory of command line data structure */
-  RNAxplorer_cmdline_parser_free (&args_info);
+  RNAxplorer_cmdline_parser_free(&args_info);
 
   return options;
 }
 
 
 char **
-extract_structures(unsigned int n, int maybe_multiline, char **rec_rest)
+extract_structures(unsigned int n,
+                   int          maybe_multiline,
+                   char         **rec_rest)
 {
-  char    **structures    = NULL;
-  size_t  num_structures  = 0;
+  char    **structures = NULL;
+  size_t  num_structures = 0;
   size_t  size_structures = 10;
   size_t  l, l_prev;
   int     i, read_on;
 
   if ((rec_rest) && (rec_rest[0])) {
-    structures = (char **) vrna_alloc(sizeof(char *) * size_structures);
+    structures = (char **)vrna_alloc(sizeof(char *) * size_structures);
 
     read_on = 0;
     l_prev  = 0;
@@ -452,16 +499,18 @@ extract_structures(unsigned int n, int maybe_multiline, char **rec_rest)
             if (maybe_multiline) {
               read_on = 1;
             } else {
-              vrna_message_error("sequence and structure (at line %d) have unequal lengths (%u vs. %u)",
-                                 i,
-                                 n,
-                                 l + l_prev);
+              vrna_message_error(
+                "sequence and structure (at line %d) have unequal lengths (%u vs. %u)",
+                i,
+                n,
+                l + l_prev);
             }
           } else if (l + l_prev > n) {
-              vrna_message_error("sequence and structure (at line %d) have unequal lengths (%u vs. %u)",
-                                 i,
-                                 n,
-                                 l + l_prev);
+            vrna_message_error(
+              "sequence and structure (at line %d) have unequal lengths (%u vs. %u)",
+              i,
+              n,
+              l + l_prev);
           }
 
           if (l_prev == 0)
@@ -476,11 +525,12 @@ extract_structures(unsigned int n, int maybe_multiline, char **rec_rest)
             read_on = 0;
             if (num_structures == size_structures - 1) {
               size_structures *= 1.4;
-              structures = (char **)vrna_realloc(structures, sizeof(char *) * size_structures);
+              structures      = (char **)vrna_realloc(structures, sizeof(char *) * size_structures);
             }
           } else if (read_on) {
             l_prev = l;
           }
+
           break;
       }
 
@@ -490,8 +540,9 @@ extract_structures(unsigned int n, int maybe_multiline, char **rec_rest)
     free(rec_rest);
 
     if (num_structures > 0) {
-      structures                  = (char **)vrna_realloc(structures, sizeof(char *) * (num_structures + 1));
-      structures[num_structures]  = NULL;
+      structures =
+        (char **)vrna_realloc(structures, sizeof(char *) * (num_structures + 1));
+      structures[num_structures] = NULL;
     } else {
       free(structures);
       structures = NULL;
@@ -514,21 +565,21 @@ extract_structures(unsigned int n, int maybe_multiline, char **rec_rest)
  *  *******************
  */
 int
-moves_gradient_descent(const char *rec_id,
-                  const char *orig_sequence,
-                  char **structures,
-                  struct options_s *opt)
+moves_gradient_descent(const char       *rec_id,
+                       const char       *orig_sequence,
+                       char             **structures,
+                       struct options_s *opt)
 {
   char *rec_sequence = strdup(orig_sequence);
 
   vrna_seq_toRNA(rec_sequence);
   vrna_seq_toupper(rec_sequence);
 
-  initRNAWalk (rec_sequence, &(opt->md));
+  initRNAWalk(rec_sequence, &(opt->md));
 
   for (int i = 0; structures[i]; i++) {
     char *basinStructure = structureWalk(rec_sequence, structures[i], GRADIENT_WALK);
-    fprintf (stdout, "%4d\t%s\n", i, basinStructure);
+    fprintf(stdout, "%4d\t%s\n", i, basinStructure);
     free(basinStructure);
   }
 
@@ -544,12 +595,12 @@ moves_gradient_descent(const char *rec_id,
  *  ****************************
  */
 int
-paths_findpath( const char        *rec_id,
-                const char        *orig_sequence,
-                char              **structures,
-                struct options_s  *opt)
+paths_findpath(const char       *rec_id,
+               const char       *orig_sequence,
+               char             **structures,
+               struct options_s *opt)
 {
-  char *rec_sequence = strdup(orig_sequence);
+  char        *rec_sequence = strdup(orig_sequence);
   vrna_path_t *foldingPath, *Saddle, *r;
 
   vrna_seq_toRNA(rec_sequence);
@@ -568,15 +619,16 @@ paths_findpath( const char        *rec_id,
 
   Saddle = getSaddlePoint(foldingPath);
 
-  fprintf (stdout, "# direct Path:\n# barrier: %6.2f\n\n", Saddle->en);
+  fprintf(stdout, "# direct Path:\n# barrier: %6.2f\n\n", Saddle->en);
   for (r = foldingPath; r->s; r++)
-    fprintf (stdout, "%s %6.2f\n", r->s, r->en);
+    fprintf(stdout, "%s %6.2f\n", r->s, r->en);
 
-  free_path (foldingPath);
+  free_path(foldingPath);
   free(rec_sequence);
 
   return 1; /* success */
 }
+
 
 int
 paths_pathfinder_gd(const char        *rec_id,
@@ -595,13 +647,13 @@ paths_pathfinder_gd(const char        *rec_id,
   vrna_seq_toRNA(sequence);
   vrna_seq_toupper(sequence);
 
-  levelSaddlePoint( sequence,
-                    structures[0],
-                    structures[1],
-                    opt->iterations,
-                    opt->max_keep,
-                    GRADIENT_WALK,
-                    opt->max_storage);
+  levelSaddlePoint(sequence,
+                   structures[0],
+                   structures[1],
+                   opt->iterations,
+                   opt->max_keep,
+                   GRADIENT_WALK,
+                   opt->max_storage);
 
   free(sequence);
 
@@ -626,18 +678,19 @@ paths_pathfinder_mc(const char        *rec_id,
   vrna_seq_toRNA(sequence);
   vrna_seq_toupper(sequence);
 
-  levelSaddlePoint( sequence,
-                    structures[0],
-                    structures[1],
-                    opt->iterations,
-                    opt->max_keep,
-                    MC_METROPOLIS,
-                    opt->max_storage);
+  levelSaddlePoint(sequence,
+                   structures[0],
+                   structures[1],
+                   opt->iterations,
+                   opt->max_keep,
+                   MC_METROPOLIS,
+                   opt->max_storage);
 
   free(sequence);
 
   return 1; /* success */
 }
+
 
 int
 paths_pathfinder_mcsa(const char        *rec_id,
@@ -656,13 +709,13 @@ paths_pathfinder_mcsa(const char        *rec_id,
   vrna_seq_toRNA(sequence);
   vrna_seq_toupper(sequence);
 
-  levelSaddlePoint( sequence,
-                    structures[0],
-                    structures[1],
-                    opt->iterations,
-                    opt->max_keep,
-                    MC_METROPOLIS,
-                    opt->max_storage);
+  levelSaddlePoint(sequence,
+                   structures[0],
+                   structures[1],
+                   opt->iterations,
+                   opt->max_keep,
+                   MC_METROPOLIS,
+                   opt->max_storage);
 
   free(sequence);
 
@@ -676,7 +729,7 @@ paths_pathfinder_db(const char        *rec_id,
                     char              **structures,
                     struct options_s  *opt)
 {
-  char *sequence;
+  char        *sequence;
   vrna_path_t *foldingPath, *Saddle, *r;
 
   if ((!structures) || (!structures[0]) || (!structures[1])) {
@@ -703,11 +756,11 @@ paths_pathfinder_db(const char        *rec_id,
           getSaddlePoint(foldingPath)->en);
 
   for (r = foldingPath; r->s; r++)
-    fprintf (stdout, "%s %6.2f\n", r->s, r->en);
+    fprintf(stdout, "%s %6.2f\n", r->s, r->en);
 
   free_path(foldingPath);
   free(sequence);
-  fflush (stdout);
+  fflush(stdout);
 
   return 1; /* success */
 }
@@ -749,19 +802,19 @@ paths_pathfinder_dbba(const char        *rec_id,
  *  *********************
  */
 int
-sampling_repulsion( const char        *rec_id,
-                    const char        *orig_sequence,
-                    char              **structures,
-                    struct options_s  *opt)
+sampling_repulsion(const char       *rec_id,
+                   const char       *orig_sequence,
+                   char             **structures,
+                   struct options_s *opt)
 {
-  char *sequence = strdup(orig_sequence);
+  char                  *sequence = strdup(orig_sequence);
 
   vrna_seq_toRNA(sequence);
   vrna_seq_toupper(sequence);
 
-  vrna_fold_compound_t *fc = vrna_fold_compound(sequence,
-                                                &(opt->md),
-                                                VRNA_OPTION_DEFAULT);
+  vrna_fold_compound_t  *fc = vrna_fold_compound(sequence,
+                                                 &(opt->md),
+                                                 VRNA_OPTION_DEFAULT);
 
   repellant_sampling(fc);
 
@@ -815,9 +868,9 @@ sampling_attraction(const char        *rec_id,
                               indicesAndPercentages,
                               length_indicesAndPercentages);
 
-  printLandscape (grid, fc);
+  printLandscape(grid, fc);
 
-  free_gridLandscape (grid);
+  free_gridLandscape(grid);
 
   vrna_fold_compound_free(fc);
   free(sequence);
@@ -827,10 +880,10 @@ sampling_attraction(const char        *rec_id,
 
 
 int
-sampling_temperature( const char        *rec_id,
-                      const char        *orig_sequence,
-                      char              **structures,
-                      struct options_s  *opt)
+sampling_temperature(const char       *rec_id,
+                     const char       *orig_sequence,
+                     char             **structures,
+                     struct options_s *opt)
 {
   vrna_message_warning("Not implemented yet!");
   return 1; /* success */
