@@ -1,22 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <unistd.h>
 
-#include <ViennaRNA/fold_vars.h>
-#include <ViennaRNA/fold.h>
-#include <ViennaRNA/part_func.h>
-#include <ViennaRNA/utils.h>
-#include <ViennaRNA/structure_utils.h>
-#include <ViennaRNA/constraints.h>
-#include <ViennaRNA/energy_const.h>
-#include <ViennaRNA/findpath.h>
-#include <ViennaRNA/2Dfold.h>
-#include <ViennaRNA/2Dpfold.h>
-#include <ViennaRNA/mm.h>
+#include <ViennaRNA/model.h>
+#include <ViennaRNA/fold_compound.h>
+#include <ViennaRNA/utils/basic.h>
+#include <ViennaRNA/io/file_formats.h>
 
-#include "RNAxplorer_cmdl.h"
 #include "RNAwalk.h"
 #include "meshpoint.h"
 #include "barrier_lower_bound.h"
@@ -24,31 +15,155 @@
 #include "distorted_samplingMD.h"
 #include "repellant_sampling.h"
 #include "paths.h"
-#include "RNAxplorer.h"
 
-#ifdef WITH_DMALLOC
-#include "dmalloc.h"
-#endif
+#include "RNAxplorer_cmdl.h"
+
+enum strategies_avail_e {
+  MOVE_GRADIENT_WALK,              
+  PATHFINDER_SADDLE_GRADIENT_WALK, 
+  PATHFINDER_SADDLE_MONTE_CARLO,   
+  PATHFINDER_SADDLE_MONTE_CARLO_SA,
+  PATHFINDER_TWO_D_REPRESENTATIVES,
+  FINDPATH,                        
+  TWO_D_LOWER_BOUND,               
+  REPELLENT_SAMPLING,
+  ATTRACTION_SAMPLING,
+  TEMPERATURE_SCALING_SAMPLING
+};
+
+struct options_s {
+  enum strategies_avail_e strategy;
+  vrna_md_t               md;
+
+  /* findpath option(s) */
+  int                     max_keep;
+
+  /* common options */
+  int                     iterations;
+  int                     samples;
+
+  /* PathFinder options */
+  int                     max_storage;
+
+  /* 2D fold options */
+  int                     max_d1;
+  int                     max_d2;
+
+  /* simulated annealing options */
+  int                     simulated_annealing;
+  float                   t_start;
+  float                   t_end;
+  float                   cooling_rate;
+
+};
+
+typedef int (xplorer_func)(const char       *rec_id,
+                           const char       *orig_sequence,
+                           char             **structures,
+                           struct options_s *opt);
+
+typedef struct {
+  enum strategies_avail_e strategy;
+  xplorer_func            *f;
+  const char              *name;
+} strategies;
+
+
+struct options_s *
+process_arguments(int argc, char *argv[]);
+
+
+char **
+extract_structures(unsigned int n, int maybe_multiline, char **rec_rest);
+
+
+int
+moves_gradient_descent( const char        *rec_id,
+                        const char        *orig_sequence,
+                        char              **structures,
+                        struct options_s  *opt);
+
+int
+paths_findpath( const char        *rec_id,
+                const char        *orig_sequence,
+                char              **structures,
+                struct options_s  *opt);
+
+int
+paths_pathfinder_gd(const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt);
+
+int
+paths_pathfinder_mc(const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt);
+
+int
+paths_pathfinder_mcsa(const char        *rec_id,
+                      const char        *orig_sequence,
+                      char              **structures,
+                      struct options_s  *opt);
+
+int
+paths_pathfinder_db(const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt);
+
+int
+paths_pathfinder_dbba(const char        *rec_id,
+                      const char        *orig_sequence,
+                      char              **structures,
+                      struct options_s  *opt);
+
+int
+sampling_repulsion( const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt);
+
+int
+sampling_attraction(const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt);
+
+int
+sampling_temperature( const char        *rec_id,
+                      const char        *orig_sequence,
+                      char              **structures,
+                      struct options_s  *opt);
+
 
 /**
  *** \file RNAxplorer.c
  **/
 
-int whatToDo = FIND_BEST_FOLDINGPATH;
 
-static char *seq;
-int maxKeep = 100;
-int maxIterations = 1;
-int maxStorage = 10;
-int maximum_distance1 = 5;
-int maximum_distance2 = 5;
+#define NUM_STRATEGIES    10
 
-float betascale = 1.0;
-
-int method;
-extern int circ;
-static char scale1[] = "....,....1....,....2....,....3....,....4";
-static char scale2[] = "....,....5....,....6....,....7....,....8";
+static strategies known_strategies[NUM_STRATEGIES] = {
+  /* code, function, name */
+  {MOVE_GRADIENT_WALK,                &moves_gradient_descent,  "Gradient Descent Moves"},
+  /* perform gradient walks from saddle point to find meshpoint(s) */
+  {PATHFINDER_SADDLE_GRADIENT_WALK,   &paths_pathfinder_gd,     "PathFinder - Gradient Descent from Saddle"},
+  /* perform rejection-less monte carlo (Gillespie) simulation away from saddle point */
+  {PATHFINDER_SADDLE_MONTE_CARLO,     &paths_pathfinder_mc,     "PathFinder - MCMC from Saddle"},
+  /* perform rejection-less monte carlo (Gillespie) simulation away from saddle point while cooling down the system (simulated annealing) */
+  {PATHFINDER_SADDLE_MONTE_CARLO_SA,  &paths_pathfinder_mcsa,   "PathFinder - MCMC from Saddle (Simulated Annealing)"},
+  /* use 2D representatives as meshpoints */
+  {PATHFINDER_TWO_D_REPRESENTATIVES,  &paths_pathfinder_db,     "PathFinder - 2D Representatives"},
+  /* use findpath heuristic to obtain optimal refolding path */
+  {FINDPATH,                          &paths_findpath,          "Findpath"},
+  /* compute optimal folding path based on 2D representatives using Dijkstra algorithm on andscape projection */
+  {TWO_D_LOWER_BOUND,                 &paths_pathfinder_dbba,   "Energy Barrier Lower Bound from 2D Representation"},
+  {REPELLENT_SAMPLING,                &sampling_repulsion,      "Repellent Sampling Scheme"},
+  {ATTRACTION_SAMPLING,               &sampling_attraction,     "Directed Sampling Scheme"},
+  {TEMPERATURE_SCALING_SAMPLING,      &sampling_temperature,    "Temperature Scaling Sampling Scheme"}
+};
 
 static char *extended_options = NULL;
 
@@ -56,10 +171,139 @@ static char *extended_options = NULL;
 size_t length_indicesAndPercentages=0;
 double *indicesAndPercentages=NULL;
 
+
+/*
+#################################
+# BEGIN OF FUNCTION DEFINITIONS #
+#################################
+*/
 int
 main(int argc, char *argv[])
 {
+  FILE          *input_stream     = stdin;
+  xplorer_func  *processing_func  = NULL;
+
+  struct options_s *options = process_arguments(argc, argv);
+
+  for (int i = 0; i < NUM_STRATEGIES; i++)
+    if (options->strategy == known_strategies[i].strategy) {
+      processing_func = known_strategies[i].f;
+      break;
+    }
+
+
+  int istty_in  = isatty(fileno(input_stream));
+  int istty_out = isatty(fileno(stdout));
+
+  unsigned int  read_opt = 0;
+
+  if (istty_in)
+    vrna_message_input_seq("Input sequence (upper or lower case) followed by structures");
+
+  /* set options we wanna pass to vrna_file_fasta_read_record() */
+  if (istty_in)
+    read_opt |= VRNA_INPUT_NOSKIP_BLANK_LINES;
+
+  /* initialize random number generator from libRNA */
+  vrna_init_rand();
+
+
+  /* main loop that processes each record obtained from input stream */
+  do {
+    char          *rec_sequence, *rec_id, **rec_rest;
+    unsigned int  rec_type;
+    int           maybe_multiline;
+
+    rec_id          = NULL;
+    rec_rest        = NULL;
+    maybe_multiline = 0;
+
+    rec_type = vrna_file_fasta_read_record(&rec_id,
+                                           &rec_sequence,
+                                           &rec_rest,
+                                           input_stream,
+                                           read_opt);
+
+    if (rec_type & (VRNA_INPUT_ERROR | VRNA_INPUT_QUIT))
+      break;
+
+    /*
+     ########################################################
+     # init everything according to the data we've read
+     ########################################################
+     */
+    if (rec_id) {
+      maybe_multiline = 1;
+      /* remove '>' from FASTA header */
+      rec_id = memmove(rec_id, rec_id + 1, strlen(rec_id));
+    }
+
+    unsigned int n = strlen(rec_sequence);
+
+    char **structures = extract_structures(n, maybe_multiline, rec_rest);
+
+    processing_func(rec_id, rec_sequence, structures, options);
+
+    free(rec_sequence);
+    free(rec_id);
+
+    /* free the rest of current dataset */
+    if (structures) {
+      for (int i = 0; structures[i]; i++)
+        free(structures[i]);
+      free(structures);
+    }
+
+    if (istty_in)
+      vrna_message_input_seq("Input sequence (upper or lower case) followed by structures");
+  } while (1);
+
+  return (EXIT_SUCCESS);
+}
+
+
+struct options_s *
+default_options(void)
+{
+  struct options_s *options = (struct options_s *)vrna_alloc(sizeof(struct options_s));
+
+  /* default strategy */
+  options->strategy = FINDPATH;
+
+  /* default energy model settings */
+  vrna_md_set_default(&(options->md));
+  options->md.uniq_ML = 1; /* we certainly require unique multibranch loop decomposition in any case */
+
+  /* findpath option(s) */
+  options->max_keep             = 10;
+
+  /* common options to many methods */
+  options->samples              = 1000;
+  options->iterations           = 1;
+
+  /* PathFinder options */
+  options->max_storage          = 10;
+
+  /* 2D fold options */
+  options->max_d1               = 5;
+  options->max_d2               = 5;
+
+  /* simulated annealing options */
+  options->simulated_annealing  = 0;
+  options->t_start              = 37.0 + K0;
+  options->t_end                = 0. + K0;
+  options->cooling_rate         = 0.9998;
+
+  return options;
+}
+
+
+struct options_s *
+process_arguments(int argc, char *argv[])
+{
   struct RNAxplorer_args_info args_info;
+
+  struct options_s *options = default_options();
 
   /*
    #############################################
@@ -77,21 +321,21 @@ main(int argc, char *argv[])
   if (args_info.method_given) {
     char *m = args_info.method_arg;
     if (!strcmp (m, "MC"))
-      method = MC_METROPOLIS;
+      options->strategy = PATHFINDER_SADDLE_MONTE_CARLO;
     else if (!strcmp (m, "MC-SA")) {
-      method = MC_METROPOLIS;
+      options->strategy = PATHFINDER_SADDLE_MONTE_CARLO_SA;
       simulatedAnnealing = 1;
     }
     else if (!strcmp (m, "GW"))
-      method = GRADIENT_WALK;
+      options->strategy = PATHFINDER_SADDLE_GRADIENT_WALK;
     else if (!strcmp (m, "DB-MFE"))
-      whatToDo = FIND_DISTANCE_BASED_MFE_PATH;
+      options->strategy = PATHFINDER_TWO_D_REPRESENTATIVES;
     else if (!strcmp (m, "BLUBB"))
-      whatToDo = FIND_2D_BARRIER_ESTIMATE;
+      options->strategy = TWO_D_LOWER_BOUND;
     else if (!strcmp (m, "SM"))
-      whatToDo = FIND_2D_LANDSCAPE_ESTIMATE;
+      options->strategy = ATTRACTION_SAMPLING;
     else if (!strcmp (m, "RS")) /* Repellant Sampling */
-      whatToDo = DISTORTED_SAMPLING;
+      options->strategy = REPELLENT_SAMPLING;
   }
 
   /* maximum number of simulations / iterations */
@@ -100,18 +344,18 @@ main(int argc, char *argv[])
 
   /* maximum number of simulations / iterations */
   if (args_info.iterations_given)
-    maxIterations = args_info.iterations_arg;
+    options->iterations = args_info.iterations_arg;
 
   /* maxkeep for Flamm et al. direct path heuristics */
   if (args_info.maxKeep_given)
-    maxKeep = args_info.maxKeep_arg;
+    options->max_keep = args_info.maxKeep_arg;
 
   /* Amount of best solutions to store per iteration */
   if (args_info.maxStore_given)
-    maxStorage = args_info.maxStore_arg;
+    options->max_storage = args_info.maxStore_arg;
 
   if (args_info.circ_given)
-    circ = 1;
+    options->md.circ = 1;
 
   if (args_info.cooling_rate_given)
     treduction = args_info.cooling_rate_arg;
@@ -126,19 +370,19 @@ main(int argc, char *argv[])
     backWalkPenalty = 1;
 
   if (args_info.basinStructure_given)
-    whatToDo = FIND_BASIN_STRUCTURE;
+    options->strategy = MOVE_GRADIENT_WALK;
 
-  if (args_info.maxDist_given)
-    maximum_distance1 = maximum_distance2 = args_info.maxDist_arg;
+  if (args_info.maxD_given)
+    options->max_d1 = options->max_d2 = args_info.maxD_arg;
 
-  if (args_info.maxDist1_given)
-    maximum_distance1 = args_info.maxDist1_arg;
+  if (args_info.maxD1_given)
+    options->max_d1 = args_info.maxD1_arg;
 
-  if (args_info.maxDist2_given)
-    maximum_distance2 = args_info.maxDist2_arg;
+  if (args_info.maxD2_given)
+    options->max_d2 = args_info.maxD2_arg;
 
   if (args_info.betaScale_given)
-    betascale = args_info.betaScale_arg;
+    options->md.betaScale = args_info.betaScale_arg;
 
 
   if (args_info.p0_given) {
@@ -168,216 +412,426 @@ main(int argc, char *argv[])
   /* free allocated memory of command line data structure */
   RNAxplorer_cmdline_parser_free (&args_info);
 
-  switch (whatToDo) {
-    case FIND_BASIN_STRUCTURE:
-      GetBasinStructure ();
-      break;
-
-    default:
-      RNAxplorer ();
-      break;
-  }
-  return (EXIT_SUCCESS);
+  return options;
 }
 
-void
-GetBasinStructure(void)
+
+char **
+extract_structures(unsigned int n, int maybe_multiline, char **rec_rest)
 {
-  char *s1;
-  seq = get_line (stdin);
-  s1 = get_line (stdin);
+  char    **structures    = NULL;
+  size_t  num_structures  = 0;
+  size_t  size_structures = 10;
+  size_t  l, l_prev;
+  int     i, read_on;
 
-  vrna_md_t md;
-  vrna_md_set_default (&md);
-  /* set user-defined model details */
-  md.circ = circ;
-  md.uniq_ML = 1;
+  if ((rec_rest) && (rec_rest[0])) {
+    structures = (char **) vrna_alloc(sizeof(char *) * size_structures);
 
-  initRNAWalk (seq, &md);
-  char *basinStructure = structureWalk (seq, s1, GRADIENT_WALK);
-  fprintf (stdout, "%s\n", basinStructure);
-}
+    read_on = 0;
+    l_prev  = 0;
 
-void
-RNAxplorer()
-{
-  char *s1 = NULL, *s2 = NULL, *line, *start_struct = NULL, *target_struct = NULL;
-  int istty, n;
+    for (i = 0; rec_rest[i]; i++) {
+      switch (rec_rest[i][0]) {
+        case '\0':  /* fall-through */
+        case '#':   /* fall-through */
+        case '%':   /* fall-through */
+        case ';':   /* fall-through */
+        case '/':   /* fall-through */
+        case '*':   /* fall-through */
+        case ' ':   /* fall-through */
+        case '\t':
+          break;
 
-  istty = isatty (fileno (stdout)) && isatty (fileno (stdin));
-  do {
-    if (istty) {
-      printf (
-          "\nInput strings\n1st line: sequence (upper or lower case)\n2nd + 3rd line: start and target structure (dot bracket notation)\n@ to quit\n");
-      printf ("%s%s\n", scale1, scale2);
-    }
-    if ((line = get_line (stdin)) == NULL)
-      break;
+        case '(':
+        case ')':
+        case '.':
+        case '+':
+          l = strlen(rec_rest[i]);
+          if (l + l_prev < n) {
+            if (maybe_multiline) {
+              read_on = 1;
+            } else {
+              vrna_message_error("sequence and structure (at line %d) have unequal lengths (%u vs. %u)",
+                                 i,
+                                 n,
+                                 l + l_prev);
+            }
+          } else if (l + l_prev > n) {
+              vrna_message_error("sequence and structure (at line %d) have unequal lengths (%u vs. %u)",
+                                 i,
+                                 n,
+                                 l + l_prev);
+          }
 
-    /* skip comment lines and get filenames */
-    while ((*line == '*') || (*line == '\0') || (*line == '>')) {
-      if (*line == '>')
-        printf ("%s\n", line);
-      free (line);
-      if ((line = get_line (stdin)) == NULL)
-        break;
-    }
+          if (l_prev == 0)
+            structures[num_structures] = (char *)vrna_alloc(sizeof(char) * (n + 1));
 
-    if ((line == NULL) || (strcmp (line, "@") == 0))
-      break;
+          memcpy(structures[num_structures] + l_prev, &(rec_rest[i][0]), sizeof(char) * l);
+          structures[num_structures][l_prev + l] = '\0';
 
-    seq = (char *) vrna_alloc (strlen (line) + 1);
-    (void) sscanf (line, "%s", seq);
-    free (line);
-    n = (int) strlen (seq);
-
-    s1 = (char *) vrna_alloc (sizeof(char) * (n + 1));
-    s2 = (char *) vrna_alloc (sizeof(char) * (n + 1));
-    size_t numberOfReferences = 0;
-
-    if (whatToDo != DISTORTED_SAMPLING) {
-      if ((start_struct = get_line (stdin)) == NULL) {
-        vrna_message_error ("1st structure missing\n");
+          if (l + l_prev == n) {
+            num_structures++;
+            l_prev  = 0;
+            read_on = 0;
+            if (num_structures == size_structures - 1) {
+              size_structures *= 1.4;
+              structures = (char **)vrna_realloc(structures, sizeof(char *) * size_structures);
+            }
+          } else if (read_on) {
+            l_prev = l;
+          }
+          break;
       }
-      else {
-        char * start_structure = strtok (start_struct, " \0");
-        if (strlen (start_structure) != n) {
-          vrna_message_error ("sequence and 1st structure have unequal length");
-        }
-        strcpy (s1, start_structure);
-        numberOfReferences++;
-      }
 
-      if ((target_struct = get_line (stdin)) == NULL) {
-        vrna_message_error ("2nd structure missing\n");
-      }
-      else {
-        char * target_structure = strtok (target_struct, " \0");
-        if (strlen (target_structure) != n) {
-          vrna_message_error ("sequence and 2nd et structure have unequal length");
-        }
-        strcpy (s2, target_structure);
-        numberOfReferences++;
-      }
+      free(rec_rest[i]);
     }
 
-    if (istty)
-      printf ("length = %d\n", n);
+    free(rec_rest);
 
-    char ** totalReferences = (char**) vrna_alloc (numberOfReferences * sizeof(char*) + 1);
-    totalReferences[0] = s1;
-    totalReferences[1] = s2;
-    //scan stdin for additional references
-    char * tmpStruct;
-    while ((tmpStruct = get_line (stdin)) != NULL) {
-      if (strlen (tmpStruct) == n) {
-        char * newReference = (char *) vrna_alloc (sizeof(char) * (n + 1));
-        strcpy (newReference, tmpStruct);
-        numberOfReferences++;
-        totalReferences = vrna_realloc (totalReferences, numberOfReferences * sizeof(char*));
-        totalReferences[numberOfReferences - 1] = newReference;
-      }
-      free (tmpStruct);
-    }
-
-    /* get fold compound for MFE and PF computation */
-    //double mfe;
-    vrna_md_t md;
-    vrna_md_set_default (&md);
-    /* set user-defined model details */
-    md.circ = circ;
-    md.uniq_ML = 1; /* in case we need M1 arrays */
-    md.compute_bpp = 0;
-    md.betaScale = betascale;
-
-    vrna_fold_compound_t *vc = vrna_fold_compound (seq, &md, VRNA_OPTION_PF);
-
-    fprintf (stdout, "%s\n", seq);
-    for (int i = 0; i < numberOfReferences; i++) {
-      fprintf (stdout, "%s %6.2f\n", totalReferences[i], vrna_eval_structure (vc, totalReferences[i]));
-    }
-
-    vrna_path_t *foldingPath, *Saddle, *r;
-
-    switch (whatToDo) {
-      case DISTORTED_SAMPLING:
-        repellant_sampling(vc);
-        break;
-
-      case FIND_2D_BARRIER_ESTIMATE:
-        barrier_estimate_2D (seq, &md, s1, s2, maximum_distance1, maximum_distance2);
-        break;
-
-      case FIND_2D_LANDSCAPE_ESTIMATE: {
-        //gridLandscapeT* grid = estimate_landscape(vc, totalReferences, numberOfReferences, maxIterations, extended_options);
-        gridLandscapeT* grid = estimate_landscapeMD (vc, (const char **)totalReferences, numberOfReferences, maxIterations, extended_options, indicesAndPercentages, length_indicesAndPercentages);
-        printLandscape (grid, vc);
-        free_gridLandscape (grid);
-      }
-        break;
-
-      case FIND_DISTANCE_BASED_MFE_PATH: {
-        foldingPath = get_path (seq, s1, s2, maxKeep/*, &numSteps, circ*/);
-        Saddle = getSaddlePoint (foldingPath/*, numSteps*/);
-
-        fprintf (stdout, "# direct Path:\n# barrier: %6.2f\n\n", Saddle->en);
-        for (r = foldingPath; r->s; r++) {
-          fprintf (stdout, "%s %6.2f\n", r->s, r->en);
-        }
-        free_path (foldingPath);
-        foldingPath = NULL;
-
-        /* this was the old way to compute the folding path... now the new one is following */
-        fprintf (stdout, "\n# searching for alternative paths\n# ");
-        fflush (stdout);
-        foldingPath = levelSaddlePoint2 (seq, s1, s2/*, &numSteps*/, 0, maxIterations, maxKeep, maxStorage, maximum_distance1, maximum_distance2);
-        fprintf (stdout, "\n# done\n\n# Path with detours:\n# barrier: %6.2f\n\n", getSaddlePoint (foldingPath/*, numSteps*/)->en);
-        for (r = foldingPath; r->s; r++) {
-          fprintf (stdout, "%s %6.2f\n", r->s, r->en);
-        }
-        free_path (foldingPath);
-        foldingPath = NULL;
-        fflush (stdout);
-      }
-        break;
-      default:
-        vrna_init_rand ();
-        levelSaddlePoint (seq, s1, s2, maxIterations, maxKeep, method, maxStorage);
-        break;
-    }
-
-    vrna_fold_compound_free (vc);
-
-    free (seq);
-    for (int i = 0; i < numberOfReferences; i++) {
-      free (totalReferences[i]);
-    }
-    free (totalReferences);
-    free (start_struct);
-    free (target_struct);
-  }
-  while (1);
-}
-
-/* taken from ivo's "neighbor.c" */
-void
-print_structure(short* pt, int E)
-{
-  int i;
-  for (i = 1; i <= pt[0]; i++) {
-    if (pt[i] == 0) {
-      fprintf (stderr, ".");
-      continue;
-    }
-    if (pt[i] > i) {
-      fprintf (stderr, "(");
-      continue;
-    }
-    if (pt[i] < i) {
-      fprintf (stderr, ")");
-      continue;
+    if (num_structures > 0) {
+      structures                  = (char **)vrna_realloc(structures, sizeof(char *) * (num_structures + 1));
+      structures[num_structures]  = NULL;
+    } else {
+      free(structures);
+      structures = NULL;
     }
   }
-  fprintf (stderr, " %4d\n", E);
-  fflush (stderr);
+
+  return structures;
+}
+
+
+/*
+ *  #############################################################
+ *  # Below are the wrappers for the different operation modes  #
+ *  #############################################################
+ */
+
+/*
+ *  *******************
+ *  * 1. Move Modes   *
+ *  *******************
+ */
+int
+moves_gradient_descent(const char *rec_id,
+                  const char *orig_sequence,
+                  char **structures,
+                  struct options_s *opt)
+{
+  char *rec_sequence = strdup(orig_sequence);
+
+  vrna_seq_toRNA(rec_sequence);
+  vrna_seq_toupper(rec_sequence);
+
+  initRNAWalk (rec_sequence, &(opt->md));
+
+  for (int i = 0; structures[i]; i++) {
+    char *basinStructure = structureWalk(rec_sequence, structures[i], GRADIENT_WALK);
+    fprintf (stdout, "%4d\t%s\n", i, basinStructure);
+    free(basinStructure);
+  }
+
+  freeRNAWalkArrays();
+
+  return 1; /* success */
+}
+
+
+/*
+ *  ****************************
+ *  * 2. Path / Barrier Modes  *
+ *  ****************************
+ */
+int
+paths_findpath( const char        *rec_id,
+                const char        *orig_sequence,
+                char              **structures,
+                struct options_s  *opt)
+{
+  char *rec_sequence = strdup(orig_sequence);
+  vrna_path_t *foldingPath, *Saddle, *r;
+
+  vrna_seq_toRNA(rec_sequence);
+  vrna_seq_toupper(rec_sequence);
+
+  if ((!structures) || (!structures[0]) || (!structures[1])) {
+    vrna_message_warning("Too few structures to compute direct folding path");
+    free(rec_sequence);
+    return 0; /* failure */
+  }
+
+  foldingPath = get_path(rec_sequence,
+                         structures[0],
+                         structures[1],
+                         opt->max_keep);
+
+  Saddle = getSaddlePoint(foldingPath);
+
+  fprintf (stdout, "# direct Path:\n# barrier: %6.2f\n\n", Saddle->en);
+  for (r = foldingPath; r->s; r++)
+    fprintf (stdout, "%s %6.2f\n", r->s, r->en);
+
+  free_path (foldingPath);
+  free(rec_sequence);
+
+  return 1; /* success */
+}
+
+int
+paths_pathfinder_gd(const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt)
+{
+  char *sequence;
+
+  if ((!structures) || (!structures[0]) || (!structures[1])) {
+    vrna_message_warning("Too few structures to compute folding path");
+    return 0; /* failure */
+  }
+
+  sequence = strdup(orig_sequence);
+  vrna_seq_toRNA(sequence);
+  vrna_seq_toupper(sequence);
+
+  levelSaddlePoint( sequence,
+                    structures[0],
+                    structures[1],
+                    opt->iterations,
+                    opt->max_keep,
+                    GRADIENT_WALK,
+                    opt->max_storage);
+
+  free(sequence);
+
+  return 1; /* success */
+}
+
+
+int
+paths_pathfinder_mc(const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt)
+{
+  char *sequence;
+
+  if ((!structures) || (!structures[0]) || (!structures[1])) {
+    vrna_message_warning("Too few structures to compute folding path");
+    return 0; /* failure */
+  }
+
+  sequence = strdup(orig_sequence);
+  vrna_seq_toRNA(sequence);
+  vrna_seq_toupper(sequence);
+
+  levelSaddlePoint( sequence,
+                    structures[0],
+                    structures[1],
+                    opt->iterations,
+                    opt->max_keep,
+                    MC_METROPOLIS,
+                    opt->max_storage);
+
+  free(sequence);
+
+  return 1; /* success */
+}
+
+int
+paths_pathfinder_mcsa(const char        *rec_id,
+                      const char        *orig_sequence,
+                      char              **structures,
+                      struct options_s  *opt)
+{
+  char *sequence;
+
+  if ((!structures) || (!structures[0]) || (!structures[1])) {
+    vrna_message_warning("Too few structures to compute folding path");
+    return 0; /* failure */
+  }
+
+  sequence = strdup(orig_sequence);
+  vrna_seq_toRNA(sequence);
+  vrna_seq_toupper(sequence);
+
+  levelSaddlePoint( sequence,
+                    structures[0],
+                    structures[1],
+                    opt->iterations,
+                    opt->max_keep,
+                    MC_METROPOLIS,
+                    opt->max_storage);
+
+  free(sequence);
+
+  return 1; /* success */
+}
+
+
+int
+paths_pathfinder_db(const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt)
+{
+  char *sequence;
+  vrna_path_t *foldingPath, *Saddle, *r;
+
+  if ((!structures) || (!structures[0]) || (!structures[1])) {
+    vrna_message_warning("Too few structures to compute folding path");
+    return 0; /* failure */
+  }
+
+  sequence = strdup(orig_sequence);
+  vrna_seq_toRNA(sequence);
+  vrna_seq_toupper(sequence);
+
+  foldingPath = levelSaddlePoint2(sequence,
+                                  structures[0],
+                                  structures[1],
+                                  0,
+                                  opt->iterations,
+                                  opt->max_keep,
+                                  opt->max_storage,
+                                  opt->max_d1,
+                                  opt->max_d2);
+
+  fprintf(stdout,
+          "\n# done\n\n# Path with detours:\n# barrier: %6.2f\n\n",
+          getSaddlePoint(foldingPath)->en);
+
+  for (r = foldingPath; r->s; r++)
+    fprintf (stdout, "%s %6.2f\n", r->s, r->en);
+
+  free_path(foldingPath);
+  free(sequence);
+  fflush (stdout);
+
+  return 1; /* success */
+}
+
+
+int
+paths_pathfinder_dbba(const char        *rec_id,
+                      const char        *orig_sequence,
+                      char              **structures,
+                      struct options_s  *opt)
+{
+  char *sequence;
+
+  if ((!structures) || (!structures[0]) || (!structures[1])) {
+    vrna_message_warning("Too few structures to compute energy barrier approximation");
+    return 0; /* failure */
+  }
+
+  sequence = strdup(orig_sequence);
+  vrna_seq_toRNA(sequence);
+  vrna_seq_toupper(sequence);
+
+  barrier_estimate_2D(sequence,
+                      &(opt->md),
+                      structures[0],
+                      structures[1],
+                      opt->max_d1,
+                      opt->max_d2);
+
+  free(sequence);
+
+  return 1; /* success */
+}
+
+
+/*
+ *  *********************
+ *  * 3. Sampling Modes *
+ *  *********************
+ */
+int
+sampling_repulsion( const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt)
+{
+  char *sequence = strdup(orig_sequence);
+
+  vrna_seq_toRNA(sequence);
+  vrna_seq_toupper(sequence);
+
+  vrna_fold_compound_t *fc = vrna_fold_compound(sequence,
+                                                &(opt->md),
+                                                VRNA_OPTION_DEFAULT);
+
+  repellant_sampling(fc);
+
+  vrna_fold_compound_free(fc);
+  free(sequence);
+
+  return 1; /* success */
+}
+
+
+int
+sampling_attraction(const char        *rec_id,
+                    const char        *orig_sequence,
+                    char              **structures,
+                    struct options_s  *opt)
+{
+  char                  *sequence;
+  int                   num_ref = 0;
+  vrna_fold_compound_t  *fc;
+  gridLandscapeT        *grid;
+
+  if ((!structures) || (!structures[0]) || (!structures[1])) {
+    vrna_message_warning("Too few structures to perform directed sampling");
+    return 0; /* failure */
+  }
+
+  /* count number of reference structures */
+  for (num_ref = 0; structures[num_ref]; num_ref++);
+
+  sequence = strdup(orig_sequence);
+
+  vrna_seq_toRNA(sequence);
+  vrna_seq_toupper(sequence);
+
+  fc = vrna_fold_compound(sequence,
+                          &(opt->md),
+                          VRNA_OPTION_DEFAULT);
+
+#if 0
+  grid = estimate_landscape(fc,
+                            structures,
+                            num_ref,
+                            opt->iterations,
+                            extended_options);
+#endif
+  grid = estimate_landscapeMD(fc,
+                              (const char **)structures,
+                              num_ref,
+                              opt->iterations,
+                              extended_options,
+                              indicesAndPercentages,
+                              length_indicesAndPercentages);
+
+  printLandscape (grid, fc);
+
+  free_gridLandscape (grid);
+
+  vrna_fold_compound_free(fc);
+  free(sequence);
+
+  return 1; /* success */
+}
+
+
+int
+sampling_temperature( const char        *rec_id,
+                      const char        *orig_sequence,
+                      char              **structures,
+                      struct options_s  *opt)
+{
+  vrna_message_warning("Not implemented yet!");
+  return 1; /* success */
 }
