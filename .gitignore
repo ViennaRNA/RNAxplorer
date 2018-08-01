@@ -33,3 +33,6 @@ m4/lt~obsolete.m4
 
 # compiled python code
 *.pyc
+
+# distribution tarball
+RNAxplorer-*.tar.gz
