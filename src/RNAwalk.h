@@ -24,34 +24,43 @@ extern FLT_OR_DBL tstop;
 extern float      treduction;
 
 /* Monte Carlo related variables */
-extern int rememberStructures;
-extern int maxRest;
-extern int backWalkPenalty;
+extern int        rememberStructures;
+extern int        maxRest;
+extern int        backWalkPenalty;
 
 /* init function that initializes the random number generator
-*  and also constructs the S and S1 sequence encoding arrays
-*  and the pair table for further usage
-*/
-void initRNAWalk(const char *seq, vrna_md_t *md);
+ *  and also constructs the S and S1 sequence encoding arrays
+ *  and the pair table for further usage
+ */
+void initRNAWalk(const char *seq,
+                 vrna_md_t  *md);
+
 
 /* free all arrays that were allocated by the init function
-*/
+ */
 void freeRNAWalkArrays(void);
 
+
 /* the actual walking function that performs a walk on the
-*  structure landscape according to the defined method
-*  The returned secondary structure in dot bracket notation
-*  is the one where the walk ended...
-*  Implemented walks are defined below...
-*/
+ *  structure landscape according to the defined method
+ *  The returned secondary structure in dot bracket notation
+ *  is the one where the walk ended...
+ *  Implemented walks are defined below...
+ */
 #define GRADIENT_WALK   0
 #define MC_METROPOLIS   1
-char *structureWalk(const char *seq, char *structure, int method);
+char *structureWalk(const char  *seq,
+                    char        *structure,
+                    int         method);
+
 
 /* a simple position finding function that searches
-*  for the first entry in a sorted array of floats
-* that exceeds a given value
-*/
-int getPosition(float *array, float value, int array_size);
+ *  for the first entry in a sorted array of floats
+ * that exceeds a given value
+ */
+int getPosition(float *array,
+                float value,
+                int   array_size);
+
 
 #endif

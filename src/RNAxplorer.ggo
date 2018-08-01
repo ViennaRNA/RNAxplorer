@@ -25,7 +25,6 @@ off
 
 section "Algorithms"
 sectiondesc="Select additional algorithms which should be included in the calculations.\n\n"
-
 option "method" M
 "Set the method used to obtain meshpoint structures for the bisection algorithm\n"
 details="Available options are:\n GW        Gradient Walk             (default)\n\
@@ -121,19 +120,19 @@ flag
 off
 
 
-option  "maxDist" D
+option  "maxD" D
 "Maximum base pair distance between meshpoints and references\n\n"
 int
 default="5"
 optional
 
-option  "maxDist1"  -
+option  "maxD1"  -
 "Maximum base pair distance between meshpoints and reference structure 1\n\n"
 int
 default="5"
 optional
 
-option  "maxDist2"  -
+option  "maxD2"  -
 "Maximum base pair distance between meshpoints and reference structure 2\n\n"
 int
 default="5"
