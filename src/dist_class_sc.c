@@ -6,8 +6,8 @@
 #include <math.h>
 #include <string.h>
 
-#include <ViennaRNA/utils.h>
-#include <ViennaRNA/constraints_soft.h>
+#include <ViennaRNA/utils/basic.h>
+#include <ViennaRNA/constraints/soft.h>
 
 #include "dist_class_sc.h"
 

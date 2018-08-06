@@ -1,12 +1,140 @@
 /*
- * paths.cpp
- *
- *  Created on: Mar 7, 2016
- *      Author: entzian
+ * PathFinder algorithm
  */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "paths.h"
+#include <ViennaRNA/utils/basic.h>
 #include <ViennaRNA/2Dfold.h>
+#include <ViennaRNA/walk.h>
+
+#include "RNAwalk.h"
+#include "PathFinder.h"
+
+
+unsigned int
+find_saddle_point(vrna_path_t *folding_path);
+
+
+vrna_path_t *
+concat_path(vrna_path_t *target,
+            vrna_path_t *extension);
+
+
+vrna_path_t *
+clone_path_element(vrna_path_t *source);
+
+
+rnax_path_finder_opt_t *
+rnax_path_finder_options(void)
+{
+  rnax_path_finder_opt_t *options = (rnax_path_finder_opt_t *)vrna_alloc(sizeof(rnax_path_finder_opt_t));
+
+  options->method       = GRADIENT_WALK;
+  options->iterations   = 1;
+  options->max_keep     = 10;
+  options->storage_size = 10;
+  options->max_d1       = 5;
+  options->max_d2       = 5;
+
+  vrna_md_set_default(&(options->md));
+
+  return options;
+}
+
+
+vrna_path_t *
+rnax_path_finder( const char              *seq,
+                  const char              *s_source,
+                  const char              *s_target,
+                  rnax_path_finder_opt_t  *opt)
+{
+  unsigned int            n, i, saddle_pos, s1_pos, s2_pos;
+  double                  saddle_en, s1_en, s2_en;
+  vrna_path_t             *refolding_path, *p1, *p2;
+  rnax_path_finder_opt_t  *options;
+
+  refolding_path = NULL;
+
+  if ((seq) && (s_source) && (s_target)) {
+    n = strlen(seq);
+
+    if ((strlen(s_source) != n) || (strlen(s_target) != n)) {
+      vrna_message_warning("rnax_path_finder: lengths of structures do not match length of sequence!");
+      return NULL;
+    }
+
+    options = (opt) ? opt : rnax_path_finder_options();
+
+    initRNAWalk (seq,  &(options->md));
+
+    vrna_fold_compound_t *fc = vrna_fold_compound(seq, &(options->md), VRNA_OPTION_DEFAULT | VRNA_OPTION_EVAL_ONLY);
+
+    /* 1st step, compute direct folding path */
+    refolding_path  = vrna_path_findpath(fc, s_source, s_target, options->max_keep);
+    saddle_pos      = find_saddle_point(refolding_path);
+    saddle_en       = refolding_path[saddle_pos].en;
+
+    fprintf (stdout, "old Path:\nbarrier: %6.2f\n\n", saddle_en);
+    for (int d = 0; refolding_path[d].s; d++)
+      fprintf (stdout, "%s %6.2f\n", refolding_path[d].s, refolding_path[d].en);
+
+    for (i = 0; i < options->iterations; i++) {
+      /* obtain new mesh point for detour path by starting a walk from current saddle */
+#if 1
+      short *pt = vrna_ptable(refolding_path[saddle_pos].s);
+      (void)vrna_path(fc, pt, 0, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
+      char *transient_structure = vrna_db_from_ptable(pt);
+#else
+      char    *transient_structure  = structureWalk(seq, refolding_path[saddle_pos].s, options->method);
+#endif
+      printf("testing transient structure:\n%s\n", transient_structure);
+      double  transient_en          = vrna_eval_structure(fc, transient_structure);
+      if ((transient_en < saddle_en) && (strcmp(refolding_path[saddle_pos].s, transient_structure) != 0)) {
+        /* compute direct paths to new mesh point */
+        p1 = vrna_path_findpath_ub(fc, s_source, transient_structure, options->max_keep, saddle_en);
+        p2 = vrna_path_findpath_ub(fc, transient_structure, s_target, options->max_keep, saddle_en);
+
+        if ((p1) && (p2)) {
+          /* accept new path if saddle is lower than before */
+          s1_pos = find_saddle_point(p1);
+          s2_pos = find_saddle_point(p2);
+          s1_en = p1[s1_pos].en;
+          s2_en = p2[s2_pos].en;
+          if ((s1_en < saddle_en) && (s2_en < saddle_en)) {
+            /* release memory of previous path */
+            free_path(refolding_path);
+
+            refolding_path = concat_path(p1, p2 + 1);
+            free(p2);
+
+            saddle_pos  = find_saddle_point(refolding_path);
+            saddle_en   = refolding_path[saddle_pos].en;
+          } else {
+            free(transient_structure);
+            break;
+          }
+        } else {
+          free(transient_structure);
+          break;
+        }
+      } else {
+        free(transient_structure);
+        break;
+      }
+
+      free(transient_structure);
+    }
+
+    vrna_fold_compound_free(fc);
+
+    if (!opt)
+      free(options);
+  }
+
+  return refolding_path;
+}
 
 /**
  * Computes the direct folding path between the given structures. This path is used as template for an alternative path search.
@@ -86,6 +214,7 @@ levelSaddlePoint(const char *seq, const char *s1, const char *s2, int maxIterati
     fprintf (stdout, "\rsearching for alternative paths...(%2.1f %% done)", (float) (maxIterations - iterator) / (float) maxIterations * 100.);
     fflush (stdout);
   }
+
   if (bestMeshPoints.count > 0) {
     path_left = get_path (seq, s1, (bestMeshPoints.first)->s, maxKeep/*, &steps1, circ*/);
     path_right = get_path (seq, (bestMeshPoints.first)->s, s2, maxKeep/*, &steps2, circ*/);
@@ -333,24 +462,70 @@ levelSaddlePoint2(const char *seq, const char *s1, const char *s2/*, int *num_en
   return newPath;
 }
 
+
+unsigned int
+find_saddle_point(vrna_path_t *folding_path)
+{
+  unsigned int  i, position = 0;
+  double        max_e, curr_e;
+  vrna_path_t   *ptr;
+
+  max_e = folding_path[0].en;
+
+  for (i = 1; folding_path[i].s; i++) {
+    curr_e = folding_path[i].en;
+    if (curr_e > max_e) {
+      max_e     = curr_e;
+      position  = i;
+    }
+  }
+
+  return position;
+}
+
+
+vrna_path_t *
+clone_path_element(vrna_path_t *source)
+{
+  vrna_path_t *copy = vrna_alloc(2 * sizeof(vrna_path_t));
+
+  copy[0].s   = strdup(source->s);
+  copy[0].en  = source->en;
+  copy[1].s   = NULL;
+  copy[1].en  = 0;
+
+  return copy;
+}
+
+
+vrna_path_t *
+concat_path(vrna_path_t *target,
+            vrna_path_t *extension)
+{
+  /* find out size of both paths */
+  unsigned int l1, l2;
+  vrna_path_t  *ptr;
+
+  for (l1 = 0, ptr = target; ptr->s; ptr++, l1++);
+  for (l2 = 0, ptr = extension; ptr->s; ptr++, l2++);
+
+  /* resize target path */
+  target = (vrna_path_t *)vrna_realloc(target, sizeof(vrna_path_t) * (l1 + l2 + 1));
+
+  memcpy(target + l1, extension, l2 * sizeof(vrna_path_t));
+
+  target[l1 + l2].s   = NULL;
+  target[l1 + l2].en  = 0;
+
+  return target;
+}
+
+
 vrna_path_t *
 getSaddlePoint(vrna_path_t *foldingPath)
 {
-  vrna_path_t *r;
-  vrna_path_t *saddle = vrna_alloc (2 * sizeof(vrna_path_t));
-  if (foldingPath != NULL) {
-    int length = strlen (foldingPath->s) + 1;
-    saddle->s = vrna_alloc (length * sizeof(char));
-    saddle->en = foldingPath->en;
-    memcpy (saddle->s, foldingPath->s, length);
-    for (r = foldingPath; r->s; r++) {
-      if (saddle->en < r->en) {
-        saddle->en = r->en;
-        memcpy (saddle->s, r->s, length);
-      }
-    }
-    saddle[1].s = NULL; //terminator symbol.
-  }
-  //if(saddle->en == foldingPath->en) return --r;
-  return saddle;
+  if (foldingPath)
+    return clone_path_element(foldingPath + find_saddle_point(foldingPath));
+
+  return NULL;
 }

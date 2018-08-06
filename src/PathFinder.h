@@ -1,15 +1,31 @@
-/*
- * paths.h
- *
- *  Created on: Mar 7, 2016
- *      Author: entzian
- */
+#ifndef RNAXPLORER_PATH_FINDER_H
+#define RNAXPLORER_PATH_FINDER_H
 
-#ifndef _PATHS_H_
-#define _PATHS_H_
-
-#include "RNAwalk.h"
+#include <ViennaRNA/model.h>
 #include <ViennaRNA/findpath.h>
+
+typedef struct {
+  unsigned int method;
+  unsigned int iterations;
+  int max_keep;
+  unsigned int storage_size;
+
+  int         max_d1;
+  int         max_d2;
+
+  vrna_md_t   md;
+} rnax_path_finder_opt_t;
+
+
+rnax_path_finder_opt_t *
+rnax_path_finder_options(void);
+
+
+vrna_path_t *
+rnax_path_finder( const char              *seq,
+                  const char              *s_source,
+                  const char              *s_target,
+                  rnax_path_finder_opt_t  *options);
 
 
 /**
@@ -28,4 +44,4 @@ vrna_path_t *levelSaddlePoint2(const char *seq, const char *s1, const char *s2/*
 		int maxIterations, int maxKeep, int maxStorage, int maximum_distance1, int maximum_distance2);
 vrna_path_t *getSaddlePoint(vrna_path_t *foldingPath);
 
-#endif /* _PATHS_H_ */
+#endif /* RNAXPLORER_PATH_FINDER_H */

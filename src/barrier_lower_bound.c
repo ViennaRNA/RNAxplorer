@@ -13,16 +13,9 @@
 #include <math.h>
 #include <unistd.h>
 
-/*
- #include <ViennaRNA/fold_vars.h>
- #include <ViennaRNA/fold.h>
- #include <ViennaRNA/part_func.h>
- #include <ViennaRNA/constraints.h>
- #include <ViennaRNA/energy_const.h>
- #include <ViennaRNA/findpath.h>
- #include <ViennaRNA/2Dpfold.h>
- #include <ViennaRNA/mm.h>
- */
+#include <ViennaRNA/utils/basic.h>
+#include <ViennaRNA/utils/structures.h>
+#include <ViennaRNA/2Dfold.h>
 
 #include "barrier_lower_bound.h"
 
