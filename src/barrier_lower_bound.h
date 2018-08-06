@@ -1,10 +1,7 @@
 #ifndef   _RNAXPLORER_BARRIER_LOWER_BOUND_H_
 #define   _RNAXPLORER_BARRIER_LOWER_BOUND_H_
 
-#include <ViennaRNA/utils/basic.h>
-#include <ViennaRNA/utils/structures.h>
-#include <ViennaRNA/2Dfold.h>
-
+#include <ViennaRNA/model.h>
 
 float
 barrier_estimate_2D(char      *seq,

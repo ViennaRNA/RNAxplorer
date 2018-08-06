@@ -1,6 +1,7 @@
 #ifndef   _RNAXPLORER_DIST_CLASS_SC_H_
 #define   _RNAXPLORER_DIST_CLASS_SC_H_
 
+
 typedef struct sc_dist_class_s sc_dist_class_t;
 
 typedef int (dist_class_func)(int,
@@ -12,6 +13,8 @@ typedef int (dist_class_func)(int,
                               sc_dist_class_t *);
 
 typedef void (dist_class_free)(void *);
+
+#include <ViennaRNA/fold_compound.h>
 
 struct sc_dist_class_s {
   unsigned int    ref_num;

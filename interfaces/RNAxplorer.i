@@ -13,7 +13,7 @@ extern "C" {
 #include "../src/dist_class_sc.h"
 #include "../src/repellant_sampling.h"
 #include "../src/meshpoint.h"
-#include "../src/paths.h"
+#include "../src/PathFinder.h"
 #include "../src/RNAwalk.h"
 }
 %}

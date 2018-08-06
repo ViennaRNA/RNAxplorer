@@ -12,21 +12,16 @@
 #include <unistd.h>
 #include <float.h>
 
-/*
- #include <ViennaRNA/fold_vars.h>
- #include <ViennaRNA/energy_const.h>
- #include <ViennaRNA/findpath.h>
- #include <ViennaRNA/2Dpfold.h>
- */
-#include <ViennaRNA/utils.h>
-#include <ViennaRNA/structure_utils.h>
-#include <ViennaRNA/constraints.h>
-#include <ViennaRNA/constraints_soft.h>
+#include <ViennaRNA/utils/basic.h>
+#include <ViennaRNA/utils/structures.h>
+#include <ViennaRNA/constraints/basic.h>
+#include <ViennaRNA/constraints/soft.h>
 #include <ViennaRNA/mfe.h>
 #include <ViennaRNA/eval.h>
 #include <ViennaRNA/part_func.h>
 #include <ViennaRNA/mm.h>
 #include <ViennaRNA/pair_mat.h>
+
 #include "distorted_sampling.h"
 
 kl_soft_constraints *kl_init_datastructures(vrna_fold_compound_t *vc, const char *s1, const char *s2, double x,

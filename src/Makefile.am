@@ -19,8 +19,8 @@ libRNAxplorer_conv_la_SOURCES = \
   repellant_sampling.h \
   barrier_lower_bound.c \
   barrier_lower_bound.h \
-  paths.c \
-  paths.h
+  PathFinder.c \
+  PathFinder.h
 
 bin_PROGRAMS = RNAxplorer
 

@@ -7,6 +7,7 @@
 #include <ViennaRNA/fold_compound.h>
 #include <ViennaRNA/utils/basic.h>
 #include <ViennaRNA/io/file_formats.h>
+#include <ViennaRNA/walk.h>
 
 #include "RNAwalk.h"
 #include "meshpoint.h"
@@ -14,7 +15,7 @@
 #include "distorted_sampling.h"
 #include "distorted_samplingMD.h"
 #include "repellant_sampling.h"
-#include "paths.h"
+#include "PathFinder.h"
 
 #include "RNAxplorer_cmdl.h"
 
@@ -313,7 +314,7 @@ default_options(void)
   struct options_s *options = (struct options_s *)vrna_alloc(sizeof(struct options_s));
 
   /* default strategy */
-  options->strategy = FINDPATH;
+  options->strategy = PATHFINDER_SADDLE_GRADIENT_WALK;
 
   /* default energy model settings */
   vrna_md_set_default(&(options->md));
@@ -575,15 +576,24 @@ moves_gradient_descent(const char       *rec_id,
   vrna_seq_toRNA(rec_sequence);
   vrna_seq_toupper(rec_sequence);
 
-  initRNAWalk(rec_sequence, &(opt->md));
+  vrna_fold_compound_t *fc = vrna_fold_compound(rec_sequence,
+                                                &(opt->md),
+                                                VRNA_OPTION_EVAL_ONLY);
 
   for (int i = 0; structures[i]; i++) {
-    char *basinStructure = structureWalk(rec_sequence, structures[i], GRADIENT_WALK);
-    fprintf(stdout, "%4d\t%s\n", i, basinStructure);
-    free(basinStructure);
+    short *pt = vrna_ptable(structures[i]);
+
+    (void)vrna_path(fc, pt, 0, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
+
+    char *loc_min = vrna_db_from_ptable(pt);
+    fprintf(stdout, "%4d\t%s\n", i, loc_min);
+
+    free(loc_min);
+    free(pt);
   }
 
-  freeRNAWalkArrays();
+  vrna_fold_compound_free(fc);
+  free(rec_sequence);
 
   return 1; /* success */
 }
@@ -612,18 +622,23 @@ paths_findpath(const char       *rec_id,
     return 0; /* failure */
   }
 
-  foldingPath = get_path(rec_sequence,
-                         structures[0],
-                         structures[1],
-                         opt->max_keep);
+  vrna_fold_compound_t *fc = vrna_fold_compound(rec_sequence,
+                                                &(opt->md),
+                                                VRNA_OPTION_EVAL_ONLY);
+  
+  foldingPath = vrna_path_findpath(fc,
+                                   structures[0],
+                                   structures[1],
+                                   opt->max_keep);
 
   Saddle = getSaddlePoint(foldingPath);
 
-  fprintf(stdout, "# direct Path:\n# barrier: %6.2f\n\n", Saddle->en);
+  fprintf(stdout, "# direct Path:\n# barrier: %6.2f\n\n", Saddle->en - foldingPath->en);
   for (r = foldingPath; r->s; r++)
     fprintf(stdout, "%s %6.2f\n", r->s, r->en);
 
   free_path(foldingPath);
+  vrna_fold_compound_free(fc);
   free(rec_sequence);
 
   return 1; /* success */
@@ -647,6 +662,29 @@ paths_pathfinder_gd(const char        *rec_id,
   vrna_seq_toRNA(sequence);
   vrna_seq_toupper(sequence);
 
+#if 1
+  vrna_path_t *foldingPath, *Saddle, *r;
+  rnax_path_finder_opt_t *options = rnax_path_finder_options();
+  options->md          = opt->md;
+  options->iterations  = opt->iterations;
+  options->max_keep    = opt->max_keep;
+
+  foldingPath = rnax_path_finder(sequence,
+                                 structures[0],
+                                 structures[1],
+                                 options);
+
+  fprintf(stdout,
+          "\n# done\n\n# Path with detours:\n# barrier: %6.2f\n\n",
+          getSaddlePoint(foldingPath)->en);
+
+  for (r = foldingPath; r->s; r++)
+    fprintf(stdout, "%s %6.2f\n", r->s, r->en);
+
+  free_path(foldingPath);
+  free(options);
+  fflush(stdout);
+#else
   levelSaddlePoint(sequence,
                    structures[0],
                    structures[1],
@@ -654,6 +692,7 @@ paths_pathfinder_gd(const char        *rec_id,
                    opt->max_keep,
                    GRADIENT_WALK,
                    opt->max_storage);
+#endif
 
   free(sequence);
 
