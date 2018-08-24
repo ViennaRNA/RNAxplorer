@@ -55,6 +55,8 @@ struct options_s {
   float                   t_start;
   float                   t_end;
   float                   cooling_rate;
+
+  rnax_path_finder_opt_t  pathfinder;
 };
 
 typedef int (xplorer_func)(const char       *rec_id,
@@ -675,7 +677,7 @@ paths_pathfinder_gd(const char        *rec_id,
                                  options);
 
   fprintf(stdout,
-          "\n# done\n\n# Path with detours:\n# barrier: %6.2f\n\n",
+          "# barrier: %6.2f\n\n",
           getSaddlePoint(foldingPath)->en);
 
   for (r = foldingPath; r->s; r++)

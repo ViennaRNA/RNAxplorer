@@ -50,7 +50,7 @@ void freeRNAWalkArrays(void);
 #define GRADIENT_WALK   0
 #define MC_METROPOLIS   1
 char *structureWalk(const char  *seq,
-                    char        *structure,
+                    const char  *structure,
                     int         method);
 
 

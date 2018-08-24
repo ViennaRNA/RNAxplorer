@@ -4,11 +4,25 @@
 #include <ViennaRNA/model.h>
 #include <ViennaRNA/findpath.h>
 
+/* perform gradient walks from saddle point to find meshpoint(s) */
+#define  RNAX_PATHFINDER_SADDLE_GRADIENT_WALK   1U
+
+/* perform rejection-less monte carlo (Gillespie) simulation away from saddle point */
+#define  RNAX_PATHFINDER_SADDLE_MONTE_CARLO     2U
+
+/* perform rejection-less monte carlo (Gillespie) simulation away from saddle point while cooling down the system (simulated annealing) */
+#define  RNAX_PATHFINDER_SADDLE_MONTE_CARLO_SA  3U  
+
+/* use 2D representatives as meshpoints */
+#define  RNAX_PATHFINDER_TWO_D_REPRESENTATIVES  4U
+
+
 typedef struct {
   unsigned int method;
   unsigned int iterations;
   int max_keep;
   unsigned int storage_size;
+  unsigned int max_paths;
 
   int         max_d1;
   int         max_d2;
