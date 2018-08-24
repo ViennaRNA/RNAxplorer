@@ -16,6 +16,7 @@
 #include "distorted_samplingMD.h"
 #include "repellant_sampling.h"
 #include "PathFinder.h"
+#include "gradient_walker.h"
 
 #include "RNAxplorer_cmdl.h"
 
@@ -29,7 +30,8 @@ enum strategies_avail_e {
   TWO_D_LOWER_BOUND,                /* compute optimal folding path based on 2D representatives using Dijkstra algorithm on andscape projection */
   REPELLENT_SAMPLING,
   ATTRACTION_SAMPLING,
-  TEMPERATURE_SCALING_SAMPLING
+  TEMPERATURE_SCALING_SAMPLING,
+  RETRIEVE_LOCAL_MINIMA             /* perform gradient walks for and arbitrary set of structures */
 };
 
 struct options_s {
@@ -57,6 +59,11 @@ struct options_s {
   float                   cooling_rate;
 
   rnax_path_finder_opt_t  pathfinder;
+
+  /* retrieve local minima options */
+  double temperature_celsius;
+  int shift_moves;
+  char *parameter_file;
 };
 
 typedef int (xplorer_func)(const char       *rec_id,
@@ -151,13 +158,19 @@ sampling_temperature(const char       *rec_id,
                      char             **structures,
                      struct options_s *opt);
 
+int
+retrieve_local_minima(const char       *rec_id,
+                      const char       *orig_sequence,
+                      char             **structures,
+                      struct options_s *opt);
+
 
 /**
 *** \file RNAxplorer.c
 **/
 
 
-#define NUM_STRATEGIES    10
+#define NUM_STRATEGIES    11
 
 static strategies known_strategies[NUM_STRATEGIES] = {
   /* code, function, name */
@@ -210,6 +223,11 @@ static strategies known_strategies[NUM_STRATEGIES] = {
     TEMPERATURE_SCALING_SAMPLING,
     &sampling_temperature,
     "Temperature Scaling Sampling Scheme"
+  },
+  {
+      RETRIEVE_LOCAL_MINIMA,
+      &retrieve_local_minima,
+      "Retrieve local minima for an arbitrary set of secondary structures"
   }
 };
 
@@ -363,8 +381,19 @@ process_arguments(int   argc,
     exit(1);
 
   /* temperature */
-  if (args_info.temp_given)
+  options->temperature_celsius = 37;
+  if (args_info.temp_given){
     temperature = args_info.temp_arg;
+    options->temperature_celsius = args_info.temp_arg;
+  }
+  options->shift_moves = 0;
+  if (args_info.shift_moves_flag){
+      options->shift_moves = 1;
+  }
+  options->parameter_file = NULL;
+  if (args_info.parameter_file_given){
+      options->parameter_file = args_info.parameter_file_arg;
+  }
 
   /* method */
   if (args_info.method_given) {
@@ -385,6 +414,8 @@ process_arguments(int   argc,
     } else if (!strcmp(m, "RS")) {
       /* Repellant Sampling */
       options->strategy = REPELLENT_SAMPLING;
+    } else if (!strcmp(m, "RL")) {
+      options->strategy = RETRIEVE_LOCAL_MINIMA;
     }
   }
 
@@ -929,3 +960,18 @@ sampling_temperature(const char       *rec_id,
   vrna_message_warning("Not implemented yet!");
   return 1; /* success */
 }
+
+
+int
+retrieve_local_minima(const char       *rec_id,
+                      const char       *orig_sequence,
+                      char             **structures,
+                      struct options_s *opt){
+  double temperature_celsius = opt->temperature_celsius;
+  int shift_moves = opt->shift_moves;
+  char *parameter_file = opt->parameter_file;
+  gradient_walker(temperature_celsius, shift_moves, parameter_file, orig_sequence, structures);
+
+}
+
+

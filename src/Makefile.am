@@ -20,7 +20,9 @@ libRNAxplorer_conv_la_SOURCES = \
   barrier_lower_bound.c \
   barrier_lower_bound.h \
   PathFinder.c \
-  PathFinder.h
+  PathFinder.h \
+  gradient_walker.c \
+  gradient_walker.h
 
 bin_PROGRAMS = RNAxplorer
 
