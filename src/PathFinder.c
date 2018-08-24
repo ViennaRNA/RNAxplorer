@@ -13,17 +13,33 @@
 #include "PathFinder.h"
 
 
-unsigned int
+typedef char *(get_transient_structure_func)(vrna_fold_compound_t    *fc,
+                                              const char              *start_structure,
+                                              rnax_path_finder_opt_t  *options);
+
+static unsigned int
 find_saddle_point(vrna_path_t *folding_path);
 
 
-vrna_path_t *
+static vrna_path_t *
 concat_path(vrna_path_t *target,
             vrna_path_t *extension);
 
 
-vrna_path_t *
+static vrna_path_t *
 clone_path_element(vrna_path_t *source);
+
+
+static char *
+get_transient_gradient_walk(vrna_fold_compound_t    *fc,
+                            const char              *start_structure,
+                            rnax_path_finder_opt_t  *options);
+
+
+static char *
+get_transient_monte_carlo(vrna_fold_compound_t    *fc,
+                          const char              *start_structure,
+                          rnax_path_finder_opt_t  *options);
 
 
 rnax_path_finder_opt_t *
@@ -37,6 +53,7 @@ rnax_path_finder_options(void)
   options->storage_size = 10;
   options->max_d1       = 5;
   options->max_d2       = 5;
+  options->max_paths    = 1;
 
   vrna_md_set_default(&(options->md));
 
@@ -50,15 +67,20 @@ rnax_path_finder( const char              *seq,
                   const char              *s_target,
                   rnax_path_finder_opt_t  *opt)
 {
-  unsigned int            n, i, saddle_pos, s1_pos, s2_pos;
-  double                  saddle_en, s1_en, s2_en;
-  vrna_path_t             *refolding_path, *p1, *p2;
-  rnax_path_finder_opt_t  *options;
+  char                          *transient_structure;
+  unsigned int                  n, i, saddle_pos, s1_pos, s2_pos, num_paths;
+  double                        saddle_en, s1_en, s2_en, transient_en;
+  vrna_path_t                   *refolding_path, *p1, *p2, **alternative_paths;
+  rnax_path_finder_opt_t        *options;
+  get_transient_structure_func  *get_transient_structures;
 
   refolding_path = NULL;
 
   if ((seq) && (s_source) && (s_target)) {
-    n = strlen(seq);
+    transient_structure = NULL;
+    p1                   = NULL;
+    p2                   = NULL;
+    n                    = strlen(seq);
 
     if ((strlen(s_source) != n) || (strlen(s_target) != n)) {
       vrna_message_warning("rnax_path_finder: lengths of structures do not match length of sequence!");
@@ -66,6 +88,20 @@ rnax_path_finder( const char              *seq,
     }
 
     options = (opt) ? opt : rnax_path_finder_options();
+
+    switch (options->method) {
+      case RNAX_PATHFINDER_SADDLE_GRADIENT_WALK:
+        get_transient_structures = &get_transient_gradient_walk;
+        break;
+
+      case RNAX_PATHFINDER_SADDLE_MONTE_CARLO: /* fall through */
+      case RNAX_PATHFINDER_SADDLE_MONTE_CARLO_SA:
+        get_transient_structures = &get_transient_monte_carlo;
+        break;
+
+      default:
+        break;
+    }
 
     initRNAWalk (seq,  &(options->md));
 
@@ -76,21 +112,20 @@ rnax_path_finder( const char              *seq,
     saddle_pos      = find_saddle_point(refolding_path);
     saddle_en       = refolding_path[saddle_pos].en;
 
-    fprintf (stdout, "old Path:\nbarrier: %6.2f\n\n", saddle_en);
-    for (int d = 0; refolding_path[d].s; d++)
-      fprintf (stdout, "%s %6.2f\n", refolding_path[d].s, refolding_path[d].en);
+    /* 2nd step, collect alternative routes */
+    num_paths             = 1;
+    alternative_paths     = (vrna_path_t **)vrna_alloc(sizeof(vrna_path_t *) * (options->storage_size));
+    alternative_paths[0]  = vrna_path_findpath(fc, s_source, s_target, options->max_keep);
+
 
     for (i = 0; i < options->iterations; i++) {
       /* obtain new mesh point for detour path by starting a walk from current saddle */
-#if 1
-      short *pt = vrna_ptable(refolding_path[saddle_pos].s);
-      (void)vrna_path(fc, pt, 0, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
-      char *transient_structure = vrna_db_from_ptable(pt);
-#else
-      char    *transient_structure  = structureWalk(seq, refolding_path[saddle_pos].s, options->method);
-#endif
-      printf("testing transient structure:\n%s\n", transient_structure);
-      double  transient_en          = vrna_eval_structure(fc, transient_structure);
+      transient_structure = get_transient_structures(fc,
+                                                      refolding_path[saddle_pos].s,
+                                                      options);
+
+      transient_en = vrna_eval_structure(fc, transient_structure);
+
       if ((transient_en < saddle_en) && (strcmp(refolding_path[saddle_pos].s, transient_structure) != 0)) {
         /* compute direct paths to new mesh point */
         p1 = vrna_path_findpath_ub(fc, s_source, transient_structure, options->max_keep, saddle_en);
@@ -109,24 +144,32 @@ rnax_path_finder( const char              *seq,
             refolding_path = concat_path(p1, p2 + 1);
             free(p2);
 
+            p1          = NULL;
+            p2          = NULL;
             saddle_pos  = find_saddle_point(refolding_path);
             saddle_en   = refolding_path[saddle_pos].en;
           } else {
-            free(transient_structure);
             break;
           }
         } else {
-          free(transient_structure);
           break;
         }
       } else {
-        free(transient_structure);
         break;
       }
 
       free(transient_structure);
+      free(p1);
+      free(p2);
+
+      transient_structure = NULL;
+      p1                  = NULL;
+      p2                  = NULL;
     }
 
+    free(transient_structure);
+    free(p1);
+    free(p2);
     vrna_fold_compound_free(fc);
 
     if (!opt)
@@ -135,6 +178,36 @@ rnax_path_finder( const char              *seq,
 
   return refolding_path;
 }
+
+
+static char *
+get_transient_gradient_walk(vrna_fold_compound_t    *fc,
+                            const char              *start_structure,
+                            rnax_path_finder_opt_t  *options)
+{
+  char *structure;
+  short *pt       = vrna_ptable(start_structure);
+  (void)vrna_path(fc, pt, 0, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
+  structure   = vrna_db_from_ptable(pt);
+  free(pt);
+
+  return structure;
+}
+
+
+static char *
+get_transient_monte_carlo(vrna_fold_compound_t    *fc,
+                          const char              *start_structure,
+                          rnax_path_finder_opt_t  *options)
+{
+  char *structure;
+    structure = structureWalk(fc->sequence,
+                                  start_structure,
+                                  options->method);
+
+  return structure;
+}
+
 
 /**
  * Computes the direct folding path between the given structures. This path is used as template for an alternative path search.
@@ -463,7 +536,7 @@ levelSaddlePoint2(const char *seq, const char *s1, const char *s2/*, int *num_en
 }
 
 
-unsigned int
+static unsigned int
 find_saddle_point(vrna_path_t *folding_path)
 {
   unsigned int  i, position = 0;
@@ -484,7 +557,7 @@ find_saddle_point(vrna_path_t *folding_path)
 }
 
 
-vrna_path_t *
+static vrna_path_t *
 clone_path_element(vrna_path_t *source)
 {
   vrna_path_t *copy = vrna_alloc(2 * sizeof(vrna_path_t));
@@ -498,7 +571,7 @@ clone_path_element(vrna_path_t *source)
 }
 
 
-vrna_path_t *
+static vrna_path_t *
 concat_path(vrna_path_t *target,
             vrna_path_t *extension)
 {
@@ -528,4 +601,64 @@ getSaddlePoint(vrna_path_t *foldingPath)
     return clone_path_element(foldingPath + find_saddle_point(foldingPath));
 
   return NULL;
+}
+
+
+typedef struct {
+  double  saddle_en;
+  char    *saddle_structure;
+} heap_elem_t;
+
+typedef struct {
+  unsigned int  num_elem;
+  unsigned int  storage_size;
+  heap_elem_t   **data;
+} min_heap_t;
+
+
+static min_heap_t *
+init_heap(unsigned int max_nodes)
+{
+  min_heap_t  *heap = (min_heap_t *)vrna_alloc(sizeof(min_heap_t));
+
+  heap->num_elem      = 0;
+  heap->storage_size  = max_nodes;
+  heap->data          = (heap_elem_t **)vrna_alloc(sizeof(heap_elem_t *) * (heap->storage_size + 1));
+
+  return heap;
+}
+
+static void
+destroy_heap(min_heap_t *heap)
+{
+  free(heap->data);
+  free(heap);
+}
+
+
+heap_insert(min_heap_t  *heap,
+            heap_elem_t *d)
+{
+  if (heap->num_elem < heap->storage_size) {
+    heap->data[heap->num_elem] = d;
+
+    /* restore min-heap property */
+    if (heap->num_elem > 0) {
+      unsigned int current = heap->num_elem;
+      unsigned int parent = floor((current - 1) / 2.);
+      while (parent >= 0) {
+        if (heap->data[parent]->saddle_en <= heap->data[current]->saddle_en)
+          break;
+
+        /* swap data with parent */
+        heap_elem_t *tmp = heap->data[parent];
+        heap->data[parent] = heap->data[current];
+        heap->data[heap->num_elem] = tmp;
+
+        current = parent;
+        parent  = floor((current - 1) / 2.);
+      }
+    }
+  }
+
 }

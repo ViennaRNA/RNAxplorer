@@ -32,7 +32,7 @@ freeRNAWalkArrays(void)
 
 char *
 structureWalk(const char  *seq,
-              char        *structure,
+              const char  *structure,
               int         method)
 {
   vrna_md_t       *md;
