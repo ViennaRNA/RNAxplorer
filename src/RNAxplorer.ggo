@@ -32,7 +32,8 @@ details="Available options are:\n GW        Gradient Walk             (default)\
  MC-SA     Monte Carlo Walk\n             with simulated Annealing\n\
  DB-MFE    Distance based MFE structure\n             meshpoints\n\
  TRATES    Transition rate computation\n
- SM        Stochastic sampling method with 2D mapping (activate distortion with -e\"N\").\n\n"
+ SM        Stochastic sampling method with 2D mapping (activate distortion with -e\"N\").\n
+ RL        Retrieve local minima. Standard input should be a sequence and a set of secondary structures (one per line).\n\\n"
 string
 typestr="<method>"
 optional
@@ -150,5 +151,17 @@ option "p0"                 -
 "Set the percentage of the references distortion value <int> to <double>\nCan be given for all reference indices\n(NOTE: the value <double> should be between 0 and 1)\n(example: \"--p0 2=0.5\" - distortion value of sequence 2 will be multiplied with 0.5 before sampling.)" 
 string no multiple
 
+
+section "Gradient walker options`"
+
+option  "shift_moves"  -
+"Use shift moves for gradient walks.\n\n"
+flag
+off
+
+option  "parameter_file"  P
+"Use the given parameter file for gradient walks.\n\n"
+string
+optional
 
 
