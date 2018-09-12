@@ -18,7 +18,8 @@
 #include "ViennaRNA/neighbor.h"
 #include "ViennaRNA/eval.h"
 #include "ViennaRNA/read_epars.h"
-
+#include <omp.h>
+#include <unistd.h>
 
 PRIVATE void
 printStructure_pt(vrna_fold_compound_t *vc, short * pt)
@@ -50,12 +51,21 @@ gradient_walker(double temperature_celsius, int shift_moves, char *parameter_fil
   md.noGU = 0;
   md.temperature = temperature;
   vrna_fold_compound_t *vc = vrna_fold_compound (sequence, &md, VRNA_OPTION_EVAL_ONLY);
-  char *structure;
-  short *pt;
+  //char *structure;
+  //short *pt;
   int i;
+  int num_structures = 0;
   for(i = 0;structures[i] !=NULL; i++){
-    structure = structures[i];
-    pt = vrna_ptable (structure);
+    num_structures++;
+  }
+
+long int cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
+
+#pragma omp parallel num_threads(cpu_count)
+#pragma omp for
+  for(i = 0; i < num_structures; i++){
+    char *structure = structures[i];
+    short *pt = vrna_ptable (structure);
     vrna_move_t *moves = vrna_path_gradient(vc,pt, moveset);
     free(moves);
     printStructure_pt(vc, pt);
