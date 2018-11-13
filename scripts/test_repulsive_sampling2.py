@@ -16,7 +16,7 @@ num_samples = 10000
 kt_fact = 1
 min_explore_min_percent = 10
 do_clustering = False
-fake_2D_file = True
+fake_2D_file = False
 # switch to select penalization of base pairs instead of computing complicated structure penalties
 penalize_base_pairs = True
 verbose = False
@@ -133,6 +133,7 @@ if args.lmin_file:
 
 if args.TwoD_file:
     TwoD_file = args.TwoD_file
+    fake_2D_file = True
 
 if args.nonred_file:
     nonredundant_sample_file = args.nonred_file
