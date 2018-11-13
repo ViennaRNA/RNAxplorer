@@ -177,7 +177,7 @@ class Node():
         return has_index
             
 
-def create_barrier_tree(minimal_saddle_list, structure_list, filter, do_merge_ignore_connectivity = False):
+def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_connectivity = False):
     clusters = []
     has_updated_length_for_ids = []
     clustered_ids = set()
@@ -387,24 +387,47 @@ def newick_string_builder(tree):
     sub_tree_string += ":" + "{:.2f}".format(tree.Branch_Length) + ")"
     return  sub_tree_string
     
+
+def filter_tree_min_height(tree, minh):
+    """
+    TODO: implement this.
+    """
+    return tree
   
 def create_newick_tree_string(minimal_saddle_list, structure_list, filter, do_merge_ignore_connectivity=False):
-    # create barriers tree (could be one or many if it is unconnected)
-    clusters = create_barrier_tree(minimal_saddle_list, structure_list, filter, do_merge_ignore_connectivity)
+    #apply max Energy filter
+    filtered_saddle_list = []
+    if filter.MaxEnergy != None:
+        for s in minimal_saddle_list:
+            if s[2] < filter.MaxEnergy:
+                filtered_saddle_list.append(s)
+    else:
+        filtered_saddle_list = minimal_saddle_list
     
-    if len(clusters) <= 0:
+    # create barriers tree (could be one or many if it is unconnected)
+    clusters = create_barrier_tree(filtered_saddle_list, structure_list, do_merge_ignore_connectivity)
+    
+    filtered_clusters = []
+    if filter.MinHeight != None:
+        for c in clusters:
+            minh_tree = filter_tree_min_height(c, filter.MinHeight)
+            filtered_clusters.append(minh_tree)
+    else:
+        filtered_clusters = clusters
+    
+    if len(filtered_clusters) <= 0:
         print("Error: no tree was created!")
-    if len(clusters) > 1:
+    if len(filtered_clusters) > 1:
         print("Error: the landscape is not connected! We have a forest!")
-    print(len(clusters),"cl")
+    print(len(filtered_clusters),"cl")
     barriers_tree = None
-    for i in range(len(clusters)):
-        if clusters[i].contains_node_index(0):
+    for i in range(len(filtered_clusters)):
+        if filtered_clusters[i].contains_node_index(0):
             # if it contains the mfe basin (with index 0)
-            barriers_tree = clusters.pop(i)
+            barriers_tree = filtered_clusters.pop(i)
             break
 
-    print(len(clusters),"cl")
+    print(len(filtered_clusters),"cl")
     newick_string = ""
     if barriers_tree != None:
         newick_string = newick_string_builder(barriers_tree) + ";"
@@ -413,16 +436,16 @@ def create_newick_tree_string(minimal_saddle_list, structure_list, filter, do_me
     else:
         print("Error: the mfe structure is not connected to the tree!")
     
-    if len(clusters) > 0:
+    if len(filtered_clusters) > 0:
         print("other trees")
-        for c in clusters:
+        for c in filtered_clusters:
             other_tree = newick_string_builder(c) + ";"
             print(other_tree)
             if newick_string == "":
                 newick_string = other_tree
-    print(len(clusters),"cl")
+    print(len(filtered_clusters),"cl")
 
-    return newick_string, minimal_saddle_list
+    return newick_string, filtered_saddle_list
 
 
 def print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color):
@@ -491,13 +514,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Read structures and create a barriers tree.')
     parser.add_argument("-f", "--structure_file", type=str, required=False, help="File with RNA secondary structures.")
     parser.add_argument("-b", "--saddle_file", type=str, required=False, help="Barriers output file with saddles.")
-    parser.add_argument("-m", "--minh", type=float, required=False, help="Join minima that are in the range of minimum height.")
+    #parser.add_argument("-m", "--minh", type=float, required=False, help="Join minima that are in the range of minimum height.") # not implemented
     parser.add_argument("-x", "--max", type=int, required=False, help="Print the lowest minima.") 
     parser.add_argument("-e", "--max_energy", type=float, required=False, help="Print everything below this saddle threshold.")
     parser.add_argument("-c", "--color_minima", type=str, required=False, help="File with minima that should be colored (one in each line).")
     args = parser.parse_args()
 
-    filter = Filter(args.minh, args.max, args.max_energy)
+    #filter = Filter(args.minh, args.max, args.max_energy)
+    filter = Filter(None, args.max, args.max_energy)
     
     minima_to_color = []
     if args.color_minima:
