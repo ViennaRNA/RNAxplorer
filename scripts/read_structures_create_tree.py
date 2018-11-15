@@ -10,6 +10,7 @@ import pylab
 from math import *
 from matplotlib.pyplot import figure
 from matplotlib import pyplot
+from multiprocess.pool import Pool
 
 
 class StructureEnergy():
@@ -54,6 +55,21 @@ def read_structure(file):
                 if match:
                     sequence = match.group(1)
     return sequence, structure_list, min_energy
+
+def read_pure_structure_list(file):
+    structure_list = []
+    with open(file, 'r') as f:
+        new_index = 0
+        for line in f:
+            match = re.match("([\.\(\)]+)", line)
+            if match:
+                structure = match.group(1)
+                energy = None
+                new_index += 1
+                index = new_index
+                structure_object = StructureEnergy(index, structure, energy)
+                structure_list.append(structure_object)
+    return structure_list
 
 
 """
@@ -105,20 +121,34 @@ def read_bar_saddle_file(file, filter):
     #print(saddle_list)
     return sequence, structure_list, min_energy, saddle_list
 
+def find_saddle(s1, s2, index_1, index_2):
+    fold_compound = RNA.fold_compound(sequence)
+    saddle_energy_dcal = fold_compound.path_findpath_saddle(s1, s2)
+    saddle_energy_kcal = saddle_energy_dcal / 100.0
+    return (index_1, index_2, saddle_energy_kcal)
 
 def connect_structures_find_saddles(sequence, structure_list):
     pairs = {}
-    fc = RNA.fold_compound(sequence)
+    #fc = RNA.fold_compound(sequence)
+    fp_pool = Pool(Max_Threads)
+    res_list=[]
     for i, se_1 in enumerate(structure_list):
         for j in range(i+1, len(structure_list)):
             se_2 = structure_list[j]
-            saddle_energy_dcal = fc.path_findpath_saddle(se_1.Structure, se_2.Structure)
-            #saddle_energy_dcal_2 = fc.path_findpath_saddle(se_2.Structure, se_1.Structure)
-            #saddle_energy_dcal = min(saddle_energy_dcal, saddle_energy_dcal_2)
-            saddle_energy_kcal = saddle_energy_dcal / 100.0
-            pairs[(i,j)] = saddle_energy_kcal
-            pairs[(j,i)] = saddle_energy_kcal
-
+            a = fp_pool.apply_async(find_saddle, args=(se_1.Structure, se_2.Structure, i, j))
+            res_list.append(a)
+            #saddle_energy_dcal = fc.path_findpath_saddle(se_1.Structure, se_2.Structure)
+            #saddle_energy_kcal = saddle_energy_dcal / 100.0
+            #pairs[(i,j)] = saddle_energy_kcal
+            #pairs[(j,i)] = saddle_energy_kcal
+    fp_pool.close()
+    
+    for a in res_list:
+        i,j, saddle_energy_kcal = a.get()
+        pairs[(i,j)] = saddle_energy_kcal
+        pairs[(j,i)] = saddle_energy_kcal
+        
+        
     # get lowest saddle for each structure that ends in a structure with lower energy than the first structure.
     minimal_saddle_list = []
     for i in range(0, len(structure_list)):
@@ -175,6 +205,50 @@ class Node():
                         has_index = True
                         break
         return has_index
+    
+    
+    def find_node_index(self, index):
+        result_node = None
+        if self.Index == index:
+            result_node = self
+        else:
+            if len(self.Children) > 0:
+                for c in self.Children:
+                    if c.contains_node_index(index):
+                        result_node = c
+                        break
+        return result_node
+    
+    def find_lca_saddle_energy(self, index_a, index_b):
+        node_a = self.find_node_index(index_a)
+        saddle_energy = None
+        if node_a == None:
+            return saddle_energy
+        
+        if node_a.Index != index_b:
+            parent_node = node_a.Parent
+            lca_node = None
+            node_b = None
+            while lca_node == None:
+                if parent_node == None:
+                    saddle_energy = None
+                    break
+                node_b = parent_node.find_node_index(index_b)
+                if node_b == None:
+                    parent_node = parent_node.Parent
+                    continue
+                else:
+                    lca_node = parent_node
+                    break
+            if parent_node != None:
+                saddle_energy = parent_node.Saddle_Energy
+        else:
+            # saddle is zero if nodes are equal
+            saddle_energy = 0
+        return saddle_energy
+        
+        
+        
             
 
 def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_connectivity = False):
@@ -406,7 +480,7 @@ def create_newick_tree_string(minimal_saddle_list, structure_list, filter, do_me
     
     # create barriers tree (could be one or many if it is unconnected)
     clusters = create_barrier_tree(filtered_saddle_list, structure_list, do_merge_ignore_connectivity)
-    
+
     filtered_clusters = []
     if filter.MinHeight != None:
         for c in clusters:
@@ -445,7 +519,7 @@ def create_newick_tree_string(minimal_saddle_list, structure_list, filter, do_me
                 newick_string = other_tree
     print(len(filtered_clusters),"cl")
 
-    return newick_string, filtered_saddle_list
+    return newick_string, filtered_saddle_list, barriers_tree
 
 
 def print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color):
@@ -508,78 +582,236 @@ def get_ids_to_color(minima_to_color, structure_list):
                 to_color.append(s.Index)
                 break
     return to_color
-                
-                
+ 
+def read_barriers_structure_map_file(barriers_map_file_path):
+    #basin_structure_to_input_line_map = {}
+    basin_index_to_input_line_index = {}
+    
+    lines = []
+    map_regex = "^\s*([\.\(\)]+)\s*(\d+)\s*(\-?\d+\.?\d*)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)"
+    with open(barriers_map_file_path, 'r') as f:
+        lines = f.readlines()
+    for idx, line in enumerate(lines):
+        match = re.match(map_regex, line)
+        if match:
+            basin_representative = match.group(1)
+            index_in_energy_sorted_list = match.group(1)
+            energy_value_of_input_structure = match.group(1)
+            #myms.min, myms.truemin, myms.gradmin, myms.truegradmin
+            min_index = match.group(1)
+            true_min_index = match.group(1)
+            gradient_min_index = match.group(1)
+            true_gradient_min_index = match.group(1)
+            line_index_in_input_file = match.group(1)
+            
+            #basin_structure_to_input_line_map[basin_representative] = idx
+            if not true_gradient_min_index in basin_index_to_input_line_index:
+                basin_index_to_input_line_index[true_gradient_min_index] = set()
+            basin_index_to_input_line_index[true_gradient_min_index].add(idx)
+    return basin_index_to_input_line_index #, basin_structure_to_input_line_map  
+    
+
+Max_Threads = 1                
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Read structures and create a barriers tree.')
     parser.add_argument("-f", "--structure_file", type=str, required=False, help="File with RNA secondary structures.")
+    parser.add_argument("-s", "--sequence", type=str, required=False, help="Sequence that belongs to the structure file f.")
     parser.add_argument("-b", "--saddle_file", type=str, required=False, help="Barriers output file with saddles.")
     #parser.add_argument("-m", "--minh", type=float, required=False, help="Join minima that are in the range of minimum height.") # not implemented
-    parser.add_argument("-x", "--max", type=int, required=False, help="Print the lowest minima.") 
+    parser.add_argument("-x", "--max", type=int, required=False, help="Print the lowest minima.")
+    parser.add_argument("-t", "--threads", type=int, required=False, help="Number of threads for parallel find path computations.") 
     parser.add_argument("-e", "--max_energy", type=float, required=False, help="Print everything below this saddle threshold.")
     parser.add_argument("-c", "--color_minima", type=str, required=False, help="File with minima that should be colored (one in each line).")
+    parser.add_argument("-z", "--compute_l2_norm_saddle_heights", type=str, required=False, help="Input: barriers file with mapped structures to barriers minima. Needs a structure file for which a barrier tree is constructucted and a barriers file with the reference tree." + \
+                        "The basins for the saddles from the artificial tree are mapped into the reference tree then the saddle height in the reference tree is determined."+
+                        " The absolute difference of all saddle heights squared is the l2 norm.")
+    
     args = parser.parse_args()
-
+    
+    Max_Threads = 1
+    if args.threads:
+        Max_Threads = args.threads
+    
     #filter = Filter(args.minh, args.max, args.max_energy)
     filter = Filter(None, args.max, args.max_energy)
     
+    barriers_minima_representatives = []
+    barriers_saddles = []
+    barriers_tree_barriers = None
+    
+    gradient_walk_minima_representatives = []
+    find_path_saddle_list = []
+    barriers_tree_findpath = None
+    
     minima_to_color = []
     if args.color_minima:
-        sequence, minima_to_color, min_energy = read_structure(args.color_minima)
+        minima_to_color = read_pure_structure_list(args.color_minima)
+        
     if args.saddle_file:
         output_file = "bar_tree"
-        sequence, structure_list, min_energy, saddle_list = read_bar_saddle_file(args.saddle_file, filter)
-        saddle_list.sort(key = operator.itemgetter(2))
-        newick_string, saddle_list = create_newick_tree_string(saddle_list, structure_list, filter)
+        sequence, barriers_minima_representatives, min_energy, barriers_saddles = read_bar_saddle_file(args.saddle_file, filter)
+        barriers_saddles.sort(key = operator.itemgetter(2))
+        newick_string, barriers_saddles, barriers_tree_barriers = create_newick_tree_string(barriers_saddles, barriers_minima_representatives, filter)
         
-        max_saddle_energy = saddle_list[-1][2]
-        if saddle_list[-1][1] == -1: # mfe has not way out to another basin.
-            max_saddle_energy = saddle_list[-2][2]
+        max_saddle_energy = barriers_saddles[-1][2]
+        if barriers_saddles[-1][1] == -1: # mfe has not way out to another basin.
+            max_saddle_energy = barriers_saddles[-2][2]
         print(max_saddle_energy, 'max_saddle')
-        print(saddle_list)
-        ids_to_color = get_ids_to_color(minima_to_color, structure_list)
+        print(barriers_saddles)
+        ids_to_color = get_ids_to_color(minima_to_color, barriers_minima_representatives)
         print(ids_to_color)
         #newick_string = "(1:1.0,2:2.0):2,((3:1.0,4:1.0):4);"
         #max_saddle_energy = 6
         #min_energy = 1
         print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
-        for s in saddle_list:
+        for s in barriers_saddles:
             print(s)
 
     if args.structure_file:
         output_file = "find_path_tree"
         sequence = None
-        structure_list = []
-        sequence, structure_list, min_energy = read_structure(args.structure_file)
+        gradient_walk_minima_representatives = []
+        sequence, gradient_walk_minima_representatives, min_energy = read_structure(args.structure_file)
         
         if filter.MaxMinima != None:
-            structure_list.sort(key=lambda x: x.Energy, reverse=False)
-            structure_list = structure_list[:filter.MaxMinima]
+            gradient_walk_minima_representatives.sort(key=lambda x: x.Energy, reverse=False)
+            gradient_walk_minima_representatives = gradient_walk_minima_representatives[:filter.MaxMinima]
             
         if sequence == None:
-            print("Error: file contains no sequence!")
-            exit()
+            if args.sequence == None:
+                print("Error: file contains no sequence!")
+                exit()
+            else:
+                sequence = args.sequence
         
-        minimal_saddle_list = connect_structures_find_saddles(sequence, structure_list)
+        find_path_saddle_list = connect_structures_find_saddles(sequence, gradient_walk_minima_representatives)
         #sort according to saddle energy
-        minimal_saddle_list.sort(key = operator.itemgetter(2))
+        find_path_saddle_list.sort(key = operator.itemgetter(2))
 
         #create newick string: (A:0.1,B:0.2,(C:0.3,D:0.4):0.5);
-        newick_string, minimal_saddle_list  = create_newick_tree_string(minimal_saddle_list, structure_list, filter, do_merge_ignore_connectivity=False)
-        max_saddle_energy = minimal_saddle_list[-1][2]
-        if minimal_saddle_list[-1][1] == -1: # mfe has not way out to another basin.
-            max_saddle_energy = minimal_saddle_list[-2][2]
-        n_minima = len(structure_list)
-        ids_to_color = get_ids_to_color(minima_to_color, structure_list)
+        newick_string, find_path_saddle_list, barriers_tree_findpath  = create_newick_tree_string(find_path_saddle_list, gradient_walk_minima_representatives, filter, do_merge_ignore_connectivity=False)
+        max_saddle_energy = find_path_saddle_list[-1][2]
+        if find_path_saddle_list[-1][1] == -1: # mfe has not way out to another basin.
+            max_saddle_energy = find_path_saddle_list[-2][2]
+        n_minima = len(gradient_walk_minima_representatives)
+        ids_to_color = get_ids_to_color(minima_to_color, gradient_walk_minima_representatives)
 
         print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
 
         
+    if args.compute_l2_norm_saddle_heights:
+        if not args.saddle_file or not args.structure_file:
+            print("Error: we need a barriers file for the original tree and a structure file for the find_path tree!")
+        barriers_map_file_path = args.compute_l2_norm_saddle_heights
+        basin_index_to_input_line_index = read_barriers_structure_map_file(barriers_map_file_path)
+        
+        """
+        
+        #find_path saddles to hash_map
+        find_path_saddle_hash_map = {}
+        for s in find_path_saddle_list:
+            f_i, f_j = sorted([s[0], s[1]])
+            find_path_saddle_hash_map[(f_i, f_j)] = s[2]
+            
+        barriers_saddle_hash_map = {}
+        for s in barriers_saddles:
+            b_i, b_j = sorted([s[0], s[1]])
+            barriers_saddle_hash_map[(b_i, b_j)] = s[2]
+
+        mapped_direct_findpath_saddles = []        
+        for s in find_path_saddle_list:
+            s_from, s_to, saddle_energy = s
+            
+            b_from = input_line_index_to_basin_index[s_from]
+            b_to = input_line_index_to_basin_index[s_to]
+        
+            basin_pair = tuple(sorted([b_from, b_to]))
+            mapped_direct_findpath_saddles[basin_pair] = saddle_energy
         
         
+        # compare direct saddles:
+        sum_diff = 0
+        for basin_index_pair, b_saddle in barriers_saddle_hash_map.items():
+            
+            fp_saddle = 0
+            if basin_index_pair in mapped_direct_findpath_saddles:
+                fp_saddle = mapped_direct_findpath_saddles[mapped_direct_findpath_saddles]
+            
+            saddle_diff = math.pow((b_saddle - fp_saddle), 2)
+
+            sum_diff += saddle_diff
         
+        l2_norm = sqrt(sum_diff)
         
+        with open("l2_norm_direct_neighbor_basins.txt", 'w') as f:
+            f.write(str(l2_norm))
+            
         
+        """
+        
+        sum_diff = 0
+        for i in range(len(barriers_minima_representatives)):
+            b_i = barriers_minima_representatives[i].Index
+            zb_i = b_i - 1
+            
+            for j in range(i+1, len(barriers_minima_representatives)):
+                b_j = barriers_minima_representatives[j].Index
+                zb_j = b_j - 1
+                
+                barriers_saddle = 0
+                if zb_i != zb_j:
+                    barriers_saddle = barriers_tree_findpath.find_lca_saddle_energy(zb_i, zb_j)
+                print("barriers lca:", zb_i, zb_j, barriers_saddle)
+                set_idx_from = None
+                set_idx_to = None
+                try:
+                    # should be zero based (check the input file!)
+                    set_idx_from = basin_index_to_input_line_index[zb_i]
+                    set_idx_to = basin_index_to_input_line_index[zb_j]
+                except Exception as e:
+                    pass
+                
+                lowest_fp_saddle = sys.maxsize
+                if set_idx_from != None and set_idx_to != None:
+                    for fp_i in set_idx_from:
+                        for fp_j in set_idx_to:
+                            if fp_i == fp_j:
+                                lowest_fp_saddle = 0
+                                break
+                            else:
+                                fp_saddle = barriers_tree_findpath.find_lca_saddle_energy(fp_i, fp_j)
+                                print("fp lca:", fp_i, fp_j, fp_saddle)
+                                if fp_saddle < lowest_fp_saddle:
+                                    lowest_fp_saddle = fp_saddle
+                else:
+                    lowest_fp_saddle = 0 # TODO: handle the case of missing mapped values.
+                
+                if lowest_fp_saddle == sys.maxsize:
+                    print("Error: saddle not found!", b_i, b_j)
+                
+                # TODO: find proper value if barriers saddle is not in the tree with the mfe or sampled minimum is not in the tree with the mfe.
+                if barriers_saddle == None:
+                    barriers_saddle = 0
+                if lowest_fp_saddle == None:
+                    lowest_fp_saddle = 0
+                    
+                saddle_diff = barriers_saddle - lowest_fp_saddle
+                sum_diff += saddle_diff * saddle_diff
+                
+        l2_norm = sqrt(sum_diff)
+        
+        with open("l2_norm_direct_neighbor_basins.txt", 'w') as f:
+            f.write(str(l2_norm))
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
         
         
    
