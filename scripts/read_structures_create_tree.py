@@ -11,6 +11,9 @@ from math import *
 from matplotlib.pyplot import figure
 from matplotlib import pyplot
 from multiprocess.pool import Pool
+#import copy
+#from scipy import sparse
+#import numpy as np
 
 
 class StructureEnergy():
@@ -102,7 +105,7 @@ def read_bar_saddle_file(file, filter):
                 saddle_energy_distance = float(saddle_energy_distance)
                 saddle_energy_kcal = saddle_energy_distance + energy
                 saddle_structure = match.group(6)
-                print(index, structure, energy, structure_basin_index,saddle_energy_distance, saddle_structure)
+                #print(index, structure, energy, structure_basin_index,saddle_energy_distance, saddle_structure)
                 if energy < min_energy:
                     min_energy = energy
                 try:
@@ -112,7 +115,7 @@ def read_bar_saddle_file(file, filter):
                     index = new_index
                 structure_object = StructureEnergy(index, structure, energy)
                 structure_list.append(structure_object)
-                print(index, structure, energy, saddle_energy_kcal)
+                #print(index, structure, energy, saddle_energy_kcal)
                 saddle_list.append((index-1, structure_basin_index-1, saddle_energy_kcal))
             else:
                 match = re.match("\s*([ACGUTNIP]+)", line)
@@ -171,6 +174,7 @@ def connect_structures_find_saddles(sequence, structure_list):
 
 class Node():
     Children = []
+    Reachable_Leaf_Indices = set()
     Parent = None
     Branch_Length = 0.0
     Saddle_Energy = None
@@ -185,6 +189,10 @@ class Node():
         self.Parent = parent
         if type(children) == type([]):
             self.Children = children
+            
+        if index != None:
+            self.Reachable_Leaf_Indices = set()
+            self.Reachable_Leaf_Indices |= set([index])
     
     def extend_branch_length(self,additional_length):
         self.Branch_Length += additional_length
@@ -214,19 +222,22 @@ class Node():
         else:
             if len(self.Children) > 0:
                 for c in self.Children:
-                    if c.contains_node_index(index):
-                        result_node = c
+                    res =  c.find_node_index(index)
+                    if res != None:
+                        result_node = res
                         break
         return result_node
-    
+    """
     def find_lca_saddle_energy(self, index_a, index_b):
         node_a = self.find_node_index(index_a)
+        #node_x = self.find_node_index(index_b)
         saddle_energy = None
+        
         if node_a == None:
             return saddle_energy
         
         if node_a.Index != index_b:
-            parent_node = node_a.Parent
+            parent_node = node_a
             lca_node = None
             node_b = None
             while lca_node == None:
@@ -241,25 +252,82 @@ class Node():
                     lca_node = parent_node
                     break
             if parent_node != None:
-                saddle_energy = parent_node.Saddle_Energy
+                saddle_energy = parent_node.Saddle_Energy - parent_node.Branch_Length
         else:
             # saddle is zero if nodes are equal
             saddle_energy = 0
         return saddle_energy
+    
+    def find_lca_saddle_energy_rl(self, index_a, index_b):
+        node_a = self.find_node_index(index_a)
+        print(node_a.Reachable_Leaf_Indices)
+        #node_x = self.find_node_index(index_b)
+        saddle_energy = None
         
+        if node_a == None:
+            return saddle_energy
         
-        
-            
+        if node_a.Index != index_b:
+            parent_node = node_a
+            lca_node = None
+            #node_b = None
+            while lca_node == None:
+                if parent_node == None:
+                    saddle_energy = None
+                    break
+                #node_b = parent_node.find_node_index(index_b)
+                if not index_b in parent_node.Reachable_Leaf_Indices: #node_b == None:
+                    parent_node = parent_node.Parent
+                    continue
+                else:
+                    lca_node = parent_node
+                    print(parent_node.Reachable_Leaf_Indices)
+                    break
+            if lca_node != None:
+                saddle_energy = lca_node.Saddle_Energy
+        else:
+            # saddle is zero if nodes are equal
+            saddle_energy = 0
+        return saddle_energy
+    """ 
+    def get_leafs(self):
+        leafs = set()
+        if self.Index != None and len(self.Children) == 0:
+            leafs.add(self.Index)
+        else:
+            if len(self.Children) > 0:
+                for c in self.Children:
+                    leafs |= c.get_leafs()
+        return leafs
+    
 
-def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_connectivity = False):
+def create_barrier_tree(minimal_saddle_list, structure_list):
+    n_structures = len(structure_list)
+    print("n_structures", n_structures)
+    saddle_matrix = []
+    for n in range(n_structures):
+        my_row = [None] * n_structures
+        saddle_matrix.append(my_row)
+    #saddle_matrix = np.empty((n_structures,n_structures,)) #sparse.lil_matrix((n_structures, n_structures))
+    #saddle_matrix.fill(np.nan)
+    #for i in range(n_structures):
+    #    for j in range(n_structures):
+    #        saddle_matrix[i,j] = None
+    
     clusters = []
     has_updated_length_for_ids = []
     clustered_ids = set()
     previous_saddle = None
+    
     for s in minimal_saddle_list:
         id_from = s[0]
         id_to = s[1]
-        
+        print(s)
+    
+    for s in minimal_saddle_list:
+        id_from = s[0]
+        id_to = s[1]
+
         if id_to == -1: # ignore unconnected root edge
             continue
         
@@ -269,7 +337,7 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
         if previous_saddle != None:
             saddle_difference = saddle_energy - previous_saddle
         previous_saddle = saddle_energy
-        print(id_from, id_to)
+        #print(id_from, id_to)
         if id_from in clustered_ids and id_to in clustered_ids:
             #update lengths of two branches, if not already done (use lowest saddle of sorted saddle list)
             id_pair = set([id_from, id_to])
@@ -290,13 +358,31 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
                     print("Error: handled node is not in tree.")
                     exit()
                 if c_id_from != c_id_to:
-                    print("update lengths", id_from, id_to)
+                    #print("update lengths", id_from, id_to)
                     # update lengths only if they are not in the same cluster
                     clusters[c_id_from].extend_branch_length(saddle_difference)
+                    clusters[c_id_from].Saddle_Energy = saddle_energy
                     clusters[c_id_to].extend_branch_length(saddle_difference)
+                    clusters[c_id_to].Saddle_Energy = saddle_energy
                     # and merge them!
                     
                     parent = Node(None, None, saddle_energy, None, children = [clusters[c_id_from], clusters[c_id_to]])
+                    clusters[c_id_from].Parent = parent
+                    clusters[c_id_to].Parent = parent
+                    
+                    set_from = clusters[c_id_from].Reachable_Leaf_Indices
+                    set_to = clusters[c_id_to].Reachable_Leaf_Indices 
+                    for rn in set_from:
+                        for rn_2 in set_to:
+                            #if numpy.isnan(saddle_matrix[rn_2, rn]):
+                            if saddle_matrix[rn_2][ rn] == None:  #np.isnan(saddle_matrix[rn_2, rn]):
+                                saddle_matrix[rn_2][ rn] = saddle_energy
+                                saddle_matrix[rn][ rn_2] = saddle_energy
+                    
+                    
+                    parent.Reachable_Leaf_Indices |= clusters[c_id_from].Reachable_Leaf_Indices
+                    parent.Reachable_Leaf_Indices |= clusters[c_id_to].Reachable_Leaf_Indices
+                    
                     clusters.pop(max(c_id_from, c_id_to))
                     clusters.pop(min(c_id_from, c_id_to))
                     clusters.append(parent)
@@ -308,7 +394,7 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
             continue
         
         if not id_from in clustered_ids and not id_to in clustered_ids:
-            print("new cluster", id_from, id_to)
+            #print("new cluster", id_from, id_to)
             # create new cluster with both ids
             energy_from = structure_list[id_from].Energy
             energy_to = structure_list[id_to].Energy
@@ -319,20 +405,9 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
             energy = None
             #saddle_energy = None
             parent = Node(index, energy, saddle_energy, parent = None, children = [node_from, node_to])
+            parent.Reachable_Leaf_Indices |= set([id_from, id_to])
             node_from.Parent = parent
             node_to.Parent = parent
-            
-            if do_merge_ignore_connectivity:
-                # merge previous clusters and add new cluster
-                if len(clusters) > 1:
-                    index_merge = None
-                    energy_merge = None
-                    #saddle_energy_merge = None
-                    copied_children = [ x for x in clusters ]
-                    del clusters[:]
-                    merged_clusters = Node(index_merge, energy_merge, saddle_energy, parent = None, children = copied_children)
-                    merged_clusters.Branch_Length = saddle_difference
-                    clusters.append(merged_clusters)
             
             for c in clusters:
                 #c.extend_branch_length(saddle_difference)
@@ -344,32 +419,24 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
                 
             clustered_ids.add(id_from)
             clustered_ids.add(id_to)
+            
+            saddle_matrix[id_from][ id_to] = saddle_energy
+            saddle_matrix[id_to][ id_from] = saddle_energy
             continue
         
         if id_from in clustered_ids and not id_to in clustered_ids:
-            print("add cluster", id_to)
-            
-            node_from = None
-            if not do_merge_ignore_connectivity:
-                # create cluster for id to and merge it to cluster with id_from
-                c_from_id = None
-                for c_i, c in enumerate(clusters):
-                    if c.contains_node_index(id_from):
-                        c_from_id = c_i
-                        break
-                node_from = clusters.pop(c_from_id)
-                diff = saddle_energy - node_from.Saddle_Energy
-                node_from.Branch_Length += diff
-                node_from.Saddle_Energy = saddle_energy
-            else:
-                # create node that connects all clusters (does not matter if they contain id_from)
-                index_merge = None
-                energy_merge = None
-                #saddle_energy_merge = None
-                copied_children = [ x for x in clusters ]
-                del clusters[:]
-                node_from = Node(index_merge, energy_merge, saddle_energy, parent = None, children = copied_children)
-                node_from.Branch_Length = saddle_difference
+            #print("add cluster", id_to)
+            # create cluster for id to and merge it to cluster with id_from
+            c_from_id = None
+            for c_i, c in enumerate(clusters):
+                if c.contains_node_index(id_from):
+                    c_from_id = c_i
+                    break
+            node_from = clusters.pop(c_from_id)
+            diff = saddle_energy - node_from.Saddle_Energy
+            node_from.Branch_Length += diff
+            node_from.Saddle_Energy = saddle_energy
+
             
             energy_to = structure_list[id_to].Energy
             node_to = Node(id_to, energy_to, saddle_energy, parent = None, children = None)
@@ -378,6 +445,8 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
             energy = None
             #saddle_energy = None
             parent = Node(index, energy, saddle_energy, parent = None, children = [node_from, node_to])
+            parent.Reachable_Leaf_Indices |= node_from.Reachable_Leaf_Indices
+            parent.Reachable_Leaf_Indices |= node_to.Reachable_Leaf_Indices
             
             node_from.Parent = parent
             node_to.Parent = parent
@@ -391,32 +460,27 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
             clusters.append(parent)
             
             clustered_ids.add(id_to)
+            
+            for rn in node_from.Reachable_Leaf_Indices:
+                print(id_to, rn)
+                if saddle_matrix[id_to][ rn] == None: #np.isnan(saddle_matrix[id_to, rn]):
+                    saddle_matrix[id_to][ rn] = saddle_energy
+                    saddle_matrix[rn][ id_to] = saddle_energy
+            
             continue
             
         if not id_from in clustered_ids and id_to in clustered_ids:
-            print("add cluster", id_from)
-            
-            node_to = None
-            if not do_merge_ignore_connectivity:
-                # create cluster for id_from and merge it to id_to
-                c_to_id = None
-                for c_i, c in enumerate(clusters):
-                    if c.contains_node_index(id_to):
-                        c_to_id = c_i
-                        break
-                node_to = clusters.pop(c_to_id)
-                diff = saddle_energy - node_to.Saddle_Energy
-                node_to.Branch_Length += diff
-                node_to.Saddle_Energy = saddle_energy
-            else:
-                # create node that connects all clusters (does not matter if they contain id_to)
-                index_merge = None
-                energy_merge = None
-                #saddle_energy_merge = None
-                copied_children = [ x for x in clusters ]
-                del clusters[:]
-                node_to = Node(index_merge, energy_merge, saddle_energy, parent = None, children = copied_children)
-                node_to.Branch_Length = saddle_difference
+            #print("add cluster", id_from)
+            # create cluster for id_from and merge it to id_to
+            c_to_id = None
+            for c_i, c in enumerate(clusters):
+                if c.contains_node_index(id_to):
+                    c_to_id = c_i
+                    break
+            node_to = clusters.pop(c_to_id)
+            diff = saddle_energy - node_to.Saddle_Energy
+            node_to.Branch_Length += diff
+            node_to.Saddle_Energy = saddle_energy
 
             energy_from = structure_list[id_from].Energy
             node_from = Node(id_from, energy_from, saddle_energy, parent = None, children = None)
@@ -425,6 +489,8 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
             energy = None
             #saddle_energy = None
             parent = Node(index, energy, saddle_energy, parent = None, children = [node_from, node_to])
+            parent.Reachable_Leaf_Indices |= node_from.Reachable_Leaf_Indices
+            parent.Reachable_Leaf_Indices |= node_to.Reachable_Leaf_Indices
             
             node_from.Parent = parent
             node_to.Parent = parent
@@ -438,9 +504,14 @@ def create_barrier_tree(minimal_saddle_list, structure_list, do_merge_ignore_con
             clusters.append(parent)
             
             clustered_ids.add(id_from)
+            
+            for rn in node_to.Reachable_Leaf_Indices:
+                if saddle_matrix[id_from][ rn] == None: #np.isnan(saddle_matrix[id_from, rn]):
+                    saddle_matrix[id_from][ rn] = saddle_energy
+                    saddle_matrix[rn][ id_from] = saddle_energy
             continue
     
-    return clusters
+    return clusters, saddle_matrix
 
 
 def newick_string_builder(tree):
@@ -468,7 +539,7 @@ def filter_tree_min_height(tree, minh):
     """
     return tree
   
-def create_newick_tree_string(minimal_saddle_list, structure_list, filter, do_merge_ignore_connectivity=False):
+def create_newick_tree_string(minimal_saddle_list, structure_list, filter):
     #apply max Energy filter
     filtered_saddle_list = []
     if filter.MaxEnergy != None:
@@ -479,7 +550,7 @@ def create_newick_tree_string(minimal_saddle_list, structure_list, filter, do_me
         filtered_saddle_list = minimal_saddle_list
     
     # create barriers tree (could be one or many if it is unconnected)
-    clusters = create_barrier_tree(filtered_saddle_list, structure_list, do_merge_ignore_connectivity)
+    clusters, saddle_matrix = create_barrier_tree(filtered_saddle_list, structure_list)
 
     filtered_clusters = []
     if filter.MinHeight != None:
@@ -519,7 +590,7 @@ def create_newick_tree_string(minimal_saddle_list, structure_list, filter, do_me
                 newick_string = other_tree
     print(len(filtered_clusters),"cl")
 
-    return newick_string, filtered_saddle_list, barriers_tree
+    return newick_string, filtered_saddle_list, barriers_tree, saddle_matrix
 
 
 def print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color):
@@ -611,6 +682,41 @@ def read_barriers_structure_map_file(barriers_map_file_path):
     return basin_index_to_input_line_index #, basin_structure_to_input_line_map  
     
 
+"""
+def find_lca(tree, i,j):
+    saddle_energy = None
+    saddle_energy = tree.find_lca_saddle_energy(i, j)
+    return (i,j, saddle_energy)
+"""
+
+def barriers_zeugs(saddle_file, filter):
+    barriers_minima_representatives = []
+    barriers_saddles = []
+    barriers_tree_barriers = None
+    barriers_saddle_matrix = None
+    
+    output_file = "bar_tree"
+    sequence, barriers_minima_representatives, min_energy, barriers_saddles = read_bar_saddle_file(saddle_file, filter)
+    barriers_saddles.sort(key = operator.itemgetter(2))
+    print("barriers tree")
+    newick_string, barriers_saddles, barriers_tree_barriers, barriers_saddle_matrix = create_newick_tree_string(barriers_saddles, barriers_minima_representatives, filter)
+    
+    max_saddle_energy = barriers_saddles[-1][2]
+    if barriers_saddles[-1][1] == -1: # mfe has not way out to another basin.
+        max_saddle_energy = barriers_saddles[-2][2]
+    #print(max_saddle_energy, 'max_saddle')
+    #print(barriers_saddles)
+    ids_to_color = get_ids_to_color(minima_to_color, barriers_minima_representatives)
+    #print(ids_to_color)
+    #newick_string = "(1:1.0,2:2.0):2,((3:1.0,4:1.0):4);"
+    #max_saddle_energy = 6
+    #min_energy = 1
+    print("max min", max_saddle_energy, min_energy)
+    print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
+    #for s in barriers_saddles:
+    #    print(s)
+    return (barriers_minima_representatives, barriers_saddles, barriers_tree_barriers, barriers_saddle_matrix)
+
 Max_Threads = 1                
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Read structures and create a barriers tree.')
@@ -628,6 +734,8 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
+    #sys.setrecursionlimit(1000000)
+    
     Max_Threads = 1
     if args.threads:
         Max_Threads = args.threads
@@ -638,41 +746,26 @@ if __name__ == "__main__":
     barriers_minima_representatives = []
     barriers_saddles = []
     barriers_tree_barriers = None
+    barriers_saddle_matrix = None
     
     gradient_walk_minima_representatives = []
     find_path_saddle_list = []
     barriers_tree_findpath = None
+    findpath_saddle_matrix = None
     
     minima_to_color = []
     if args.color_minima:
         minima_to_color = read_pure_structure_list(args.color_minima)
         
     if args.saddle_file:
-        output_file = "bar_tree"
-        sequence, barriers_minima_representatives, min_energy, barriers_saddles = read_bar_saddle_file(args.saddle_file, filter)
-        barriers_saddles.sort(key = operator.itemgetter(2))
-        newick_string, barriers_saddles, barriers_tree_barriers = create_newick_tree_string(barriers_saddles, barriers_minima_representatives, filter)
-        
-        max_saddle_energy = barriers_saddles[-1][2]
-        if barriers_saddles[-1][1] == -1: # mfe has not way out to another basin.
-            max_saddle_energy = barriers_saddles[-2][2]
-        print(max_saddle_energy, 'max_saddle')
-        print(barriers_saddles)
-        ids_to_color = get_ids_to_color(minima_to_color, barriers_minima_representatives)
-        print(ids_to_color)
-        #newick_string = "(1:1.0,2:2.0):2,((3:1.0,4:1.0):4);"
-        #max_saddle_energy = 6
-        #min_energy = 1
-        print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
-        for s in barriers_saddles:
-            print(s)
+        barriers_minima_representatives, barriers_saddles, barriers_tree_barriers, barriers_saddle_matrix = barriers_zeugs(args.saddle_file, filter)
 
     if args.structure_file:
         output_file = "find_path_tree"
         sequence = None
         gradient_walk_minima_representatives = []
         sequence, gradient_walk_minima_representatives, min_energy = read_structure(args.structure_file)
-        
+        print(len(gradient_walk_minima_representatives))
         if filter.MaxMinima != None:
             gradient_walk_minima_representatives.sort(key=lambda x: x.Energy, reverse=False)
             gradient_walk_minima_representatives = gradient_walk_minima_representatives[:filter.MaxMinima]
@@ -681,15 +774,28 @@ if __name__ == "__main__":
             if args.sequence == None:
                 print("Error: file contains no sequence!")
                 exit()
+         
             else:
                 sequence = args.sequence
         
         find_path_saddle_list = connect_structures_find_saddles(sequence, gradient_walk_minima_representatives)
         #sort according to saddle energy
         find_path_saddle_list.sort(key = operator.itemgetter(2))
-
+        
+        """
+        print("num_saddles", len(find_path_saddle_list))
+        for s in find_path_saddle_list:
+            print(s)
+        
+        print("num_str", len(gradient_walk_minima_representatives))    
+        for s in gradient_walk_minima_representatives:
+            print(s.Index, s.Structure)
+        """
+        #exit()
+        
+        print("findpath tree")
         #create newick string: (A:0.1,B:0.2,(C:0.3,D:0.4):0.5);
-        newick_string, find_path_saddle_list, barriers_tree_findpath  = create_newick_tree_string(find_path_saddle_list, gradient_walk_minima_representatives, filter, do_merge_ignore_connectivity=False)
+        newick_string, find_path_saddle_list, barriers_tree_findpath, findpath_saddle_matrix  = create_newick_tree_string(find_path_saddle_list, gradient_walk_minima_representatives, filter)
         max_saddle_energy = find_path_saddle_list[-1][2]
         if find_path_saddle_list[-1][1] == -1: # mfe has not way out to another basin.
             max_saddle_energy = find_path_saddle_list[-2][2]
@@ -698,6 +804,30 @@ if __name__ == "__main__":
 
         print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
 
+
+    
+    
+    #barriers_saddle = barriers_tree_findpath.find_lca_saddle_energy(0, 1)
+    #print("barriers lca:", 0, 1, barriers_saddle, barriers_saddle_matrix[0,1])
+    
+    
+    
+ 
+    """
+    sum_diff = 0
+    for i in range(len(barriers_minima_representatives)):
+        b_i = barriers_minima_representatives[i].Index
+        zb_i = b_i - 1
+        
+        for j in range(i+1, len(barriers_minima_representatives)):
+            b_j = barriers_minima_representatives[j].Index
+            zb_j = b_j - 1
+            
+            barriers_saddle = 0
+            if zb_i != zb_j:
+                barriers_saddle = barriers_tree_findpath.find_lca_saddle_energy(zb_i, zb_j)
+            print("barriers lca:", zb_i, zb_j, barriers_saddle)
+    """
         
     if args.compute_l2_norm_saddle_heights:
         if not args.saddle_file or not args.structure_file:
@@ -749,19 +879,39 @@ if __name__ == "__main__":
         
         """
         
+        leaf_indices_barriers = barriers_tree_barriers.get_leafs()
+        leaf_indices_barriers = list(leaf_indices_barriers)
+        #print(sorted(list(leafs)))
+    
+        leaf_indices_findpath = barriers_tree_findpath.get_leafs()
+        print(sorted(list(leaf_indices_barriers)))
+        
+
+        #barriers_saddle_matrix = barriers_tree_barriers.get_lca_matrix()
+        
         sum_diff = 0
-        for i in range(len(barriers_minima_representatives)):
-            b_i = barriers_minima_representatives[i].Index
-            zb_i = b_i - 1
+        for i, zb_i in enumerate(leaf_indices_barriers): #range(len(barriers_minima_representatives)):
+            #b_i = barriers_minima_representatives[i].Index
+            #zb_i = b_i - 1
             
-            for j in range(i+1, len(barriers_minima_representatives)):
-                b_j = barriers_minima_representatives[j].Index
-                zb_j = b_j - 1
+            for zb_j in leaf_indices_barriers[i+1:]: #range(i+1, len(barriers_minima_representatives)):
+                #b_j = barriers_minima_representatives[j].Index
+                #zb_j = b_j - 1
                 
                 barriers_saddle = 0
-                if zb_i != zb_j:
-                    barriers_saddle = barriers_tree_findpath.find_lca_saddle_energy(zb_i, zb_j)
+                #if zb_i != zb_j:
+                #barriers_saddle = barriers_tree_barriers.find_lca_saddle_energy(zb_i, zb_j)
+                #a = pool.apply_async(find_lca, args=(barriers_tree_barriers, zb_j, zb_i))
+                #res_list.append(a)
+
+                #zb_j, zb_i, barriers_saddle =  r.get()
+                #print("barriers lca:", zb_i, zb_j, barriers_saddle)
+                x,y = sorted([zb_i,zb_j])
+                barriers_saddle= barriers_saddle_matrix[x][y]
+                if np.isnan(barriers_saddle):
+                    barriers_saddle = 0
                 print("barriers lca:", zb_i, zb_j, barriers_saddle)
+                
                 set_idx_from = None
                 set_idx_to = None
                 try:
@@ -770,7 +920,7 @@ if __name__ == "__main__":
                     set_idx_to = basin_index_to_input_line_index[zb_j]
                 except Exception as e:
                     pass
-                
+                print("sets",set_idx_from, set_idx_to)
                 lowest_fp_saddle = sys.maxsize
                 if set_idx_from != None and set_idx_to != None:
                     for fp_i in set_idx_from:
@@ -779,8 +929,11 @@ if __name__ == "__main__":
                                 lowest_fp_saddle = 0
                                 break
                             else:
-                                fp_saddle = barriers_tree_findpath.find_lca_saddle_energy(fp_i, fp_j)
+                                #fp_saddle = barriers_tree_findpath.find_lca_saddle_energy(fp_i, fp_j)
+                                fp_saddle = findpath_saddle_matrix[fp_i][ fp_j]
                                 print("fp lca:", fp_i, fp_j, fp_saddle)
+                                if np.isnan(fp_saddle):
+                                    fp_saddle = 0
                                 if fp_saddle < lowest_fp_saddle:
                                     lowest_fp_saddle = fp_saddle
                 else:
@@ -796,7 +949,7 @@ if __name__ == "__main__":
                     lowest_fp_saddle = 0
                     
                 saddle_diff = barriers_saddle - lowest_fp_saddle
-                sum_diff += saddle_diff * saddle_diff
+                sum_diff += (saddle_diff * saddle_diff)
                 
         l2_norm = sqrt(sum_diff)
         
