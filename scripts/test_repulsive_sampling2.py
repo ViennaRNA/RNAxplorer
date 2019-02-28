@@ -184,6 +184,33 @@ def detect_local_minimum(fc, structure):
     return ss
 
 
+
+def generate_samples(fc, number, non_redundant=False):
+    samples = list()
+
+    if non_redundant:
+        samples = fc.pbacktrack_nr(number)
+    else:
+        for i in range(0, num_samples):
+            samples.append(fc.pbacktrack())
+
+    return samples
+
+
+def prepare_soft_constraints(fc, penalty_data, distance_based = False):
+    if distance_based:
+        return
+    else:
+        # remove previous soft constraints
+        fc.sc_remove()
+
+        # add latest penalties for base pairs
+        for k in penalty_data['weights'].keys():
+            i = k[0]
+            j = k[1]
+            fc.sc_add_bp(i, j, penalty_data['weights'][k])
+
+
 """
 Do main stuff
 """
@@ -208,76 +235,105 @@ minima = dict()
 sample_list = []
 repulsed_structures = dict()
 
+fc.pf()
+current_minima = dict()
+num_sc = 1
 
 for it in range(0, num_iter):
     if verbose:
         eprint("iteration %d" % it)
 
-    #fc = RNA.fold_compound(sequence, md)
-    fc.sc_remove()
-
-    for k in sc_data['weights'].keys():
-        i = k[0]
-        j = k[1]
-        fc.sc_add_bp(i, j, sc_data['weights'][k])
-
-    # fill partition function DP matrices 
-    fc.pf()
 
     new_minima = 0
 
-    if nonredundant:
-        for s in fc.pbacktrack_nr(num_samples):
-            # perform gradient walk from sample to determine direct local minimum
-            ss = detect_local_minimum(fc_base, s)
-            if ss not in minima:
-                minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
-                new_minima = new_minima + 1
-            else:
-                minima[ss]['count'] = minima[ss]['count'] + 1
+    # generate samples through stocastic backtracing
+    sample_set = generate_samples(fc, num_samples, nonredundant)
+
+    # store samples of this round to global list of samples
+    sample_list = sample_list + sample_set
+
+    # go through list of sampled structures and determine corresponding local minima
+    for s in sample_set:
+        ss = detect_local_minimum(fc_base, s)
+        if ss not in current_minima:
+            current_minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
+            new_minima = new_minima + 1
+        else:
+            current_minima[ss]['count'] = current_minima[ss]['count'] + 1
+
+    if verbose:
+        eprint("new minima: %d vs. present minima: %d" % (new_minima, len(minima)))
+
+    if it < num_iter - 1:
+        # find out which local minima we've seen the most in this sampling round
+        struct_cnt_max = max(current_minima.iterkeys(), key=(lambda a: current_minima[a]['count']))
+        struct_cnt_min = min(current_minima.iterkeys(), key=(lambda a: current_minima[a]['count']))
+        struct_en_max = max(current_minima.iterkeys(), key=(lambda a: current_minima[a]['energy']))
+        struct_en_min = min(current_minima.iterkeys(), key=(lambda a: current_minima[a]['energy']))
 
         if verbose:
-            eprint("new minima (nonred): %d vs. present minima (nonred): %d" % (new_minima, len(minima)))
+            eprint("%s (%6.2f) [%d] = max\n%s (%6.2f) [%d] = min\n%s (%6.2f) [%d] = maxE\n%s (%6.2f) [%d] = minE" % (\
+                    struct_cnt_max, current_minima[struct_cnt_max]['energy'], current_minima[struct_cnt_max]['count'], \
+                    struct_cnt_min, current_minima[struct_cnt_min]['energy'], current_minima[struct_cnt_min]['count'], \
+                    struct_en_max, current_minima[struct_en_max]['energy'], current_minima[struct_en_max]['count'], \
+                    struct_en_min, current_minima[struct_en_min]['energy'], current_minima[struct_en_min]['count']))
 
-        if it < num_iter - 1:
-            # find out which local minima we've seen the most
-            repell_struct = max(minima.iterkeys(), key=(lambda a: minima[a] if a not in repulsed_structures else 0))
-            repell_en = kt_fact * kT / 1000.
+        mu        = 0.1
+        cnt_once  = 0
+        cnt_other = 0
+        e_threshold = current_minima[struct_en_min]['energy']
 
+        for key, value in sorted(current_minima.iteritems(), key=lambda (k, v): v['energy']):
             if verbose:
-                eprint("repelling the following struct\n%s (%6.2f)" % (repell_struct, repell_en))
+                eprint("%s (%6.2f) [%d]" % (key, value['energy'], value['count']))
 
-            repulsed_structures[repell_struct] = 1
+            if value['count'] == 1:
+                cnt_once = cnt_once + 1
+            else:
+                cnt_other = cnt_other + 1
 
-            store_basepair_sc(sc_data, repell_struct, repell_en)
+            # check whether we've seen other local minim way more often than those we've seen just once
+            if cnt_other > 0 and cnt_once > 0:
+                if cnt_once <= (mu * cnt_other):
+                    e_threshold = value['energy'] - e_threshold
+                    if verbose:
+                        eprint("e_threshold of %6.2f reached with %d <= %d" % (e_threshold, cnt_once, cnt_other))
 
+                    #repell_en = kt_fact * kT / 1000.
+                    repell_en = kt_fact * e_threshold
+
+                    if verbose:
+                        eprint("repelling the following struct\n%s (%6.2f) %dx seen" % (struct_cnt_max, repell_en, current_minima[struct_cnt_max]['count']))
+
+                    repulsed_structures[struct_cnt_max] = 1
+
+                    store_basepair_sc(sc_data, struct_cnt_max, repell_en)
+
+                    prepare_soft_constraints(fc, sc_data)
+
+                    num_sc = num_sc + 1
+                    # fill partition function DP matrices 
+                    fc.pf()
+
+                    for cmk in current_minima.keys():
+                        if cmk not in minima:
+                            minima[cmk] = current_minima[cmk]
+                        else:
+                            minima[cmk]['count'] = minima[cmk]['count'] + current_minima[cmk]['count']
+
+                    current_minima = dict()
+
+                    break
     else:
-        for i in range(0, num_samples):
-            # sample structure
-            s = fc.pbacktrack()
-            sample_list.append(s)
-            ss = detect_local_minimum(fc_base, s)
-            if ss not in minima:
-                minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
-                new_minima = new_minima + 1
+        for cmk in current_minima.keys():
+            if cmk not in minima:
+                minima[cmk] = current_minima[cmk]
             else:
-                minima[ss]['count'] = minima[ss]['count'] + 1
+                minima[cmk]['count'] = minima[cmk]['count'] + current_minima[cmk]['count']
 
-        if verbose:
-            eprint("new minima: %d vs. present minima: %d" % (new_minima, len(minima)))
 
-        if it < num_iter - 1:
-            # find out which local minima we've seen the most
-            repell_struct = max(minima.iterkeys(), key=(lambda a: minima[a] if a not in repulsed_structures else 0))
-            repell_en = kt_fact * kT / 1000.
 
-            if verbose:
-                eprint("repelling the following struct\n%s (%6.2f)" % (repell_struct, repell_en))
-
-            repulsed_structures[repell_struct] = 1
-
-            store_basepair_sc(sc_data, repell_struct, repell_en)
-
+eprint("Recomputed PF %d times" % num_sc)
 
 
 # save local minima to file
