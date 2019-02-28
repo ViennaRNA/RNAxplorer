@@ -176,11 +176,67 @@ def store_basepair_sc(data, structure, weight):
                         print("We've seen this pair (%d,%d) before! Increasing its repellent potential to %g)!" % (i, pt[i], data['weights'][key]))
 
 
+def move_apply(structure_in, move):
+    #s_length = structure_in[0]
+    output_structure = list(structure_in)
+    if(move.pos_5 > 0 and move.pos_3 > 0):
+        output_structure[move.pos_5] = move.pos_3
+        output_structure[move.pos_3] = move.pos_5
+    elif(move.pos_5 < 0 and move.pos_3 < 0):
+        output_structure[-move.pos_5] = 0
+        output_structure[-move.pos_3] = 0
+    else:
+        print("Error: shfit moves are not supported")
+    res = output_structure
+    return res
+
 def detect_local_minimum(fc, structure):
+    """
+    detect a local minimum via extended gradient walks. If a lower energy structure within radius 2
+    is detected (lower than the local minimum of a normal gradient walk), then another gradient walk
+    is applied for the lower structure.
+    """
     # perform gradient walk from sample to determine direct local minimum
     pt = RNA.IntVector(RNA.ptable(structure))
     fc.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
     ss = RNA.db_from_ptable(list(pt))
+    
+    list_deeper_neighbors = []
+    neigh = fc.neighbors(pt, RNA.MOVESET_DELETION | RNA.MOVESET_INSERTION)
+    for nb in neigh:
+        #print(nb.pos_3, nb.pos_5)
+        list_moved = move_apply(list(pt),nb)
+        #print(list_moved)
+        ss_neighbor = RNA.db_from_ptable(list_moved)
+        #print(ss_neighbor,1)
+        e_m_1 = fc.eval_move(ss, nb.pos_5, nb.pos_3)
+        pt_1 = RNA.IntVector(RNA.ptable(ss_neighbor))
+        neigh_2 = fc.neighbors(pt_1, RNA.MOVESET_DELETION | RNA.MOVESET_INSERTION)
+        
+        for nb_2 in neigh_2:
+            list_moved_2 = move_apply(list(list_moved),nb_2)
+            #print(list_moved_2)
+            ss_neighbor_2 = RNA.db_from_ptable(list_moved_2)
+            #print(nb_2.pos_5, nb_2.pos_3)
+            #print(ss_neighbor_2,2)
+            bp_distance = RNA.bp_distance(ss, ss_neighbor_2)
+            if(bp_distance == 2):
+                e_m_2 = fc.eval_move(ss_neighbor, nb_2.pos_5, nb_2.pos_3)
+                if (e_m_1 + e_m_2) < 0.0:
+                    deeper_neighbor = detect_local_minimum(fc, ss_neighbor_2)
+                    list_deeper_neighbors.append(deeper_neighbor)
+        
+    
+    min_energy = fc.eval_structure_pt(pt)
+    min_structure = ss             
+    for n in list_deeper_neighbors:
+        pt_n = RNA.IntVector(RNA.ptable(n))
+        energy_int = fc.eval_structure_pt(pt_n)
+        if energy_int < min_energy:
+            min_energy = energy_int
+            min_structure = n
+
+    ss = str(min_structure)
     return ss
 
 
