@@ -176,6 +176,14 @@ def store_basepair_sc(data, structure, weight):
                         print("We've seen this pair (%d,%d) before! Increasing its repellent potential to %g)!" % (i, pt[i], data['weights'][key]))
 
 
+def detect_local_minimum(fc, structure):
+    # perform gradient walk from sample to determine direct local minimum
+    pt = RNA.IntVector(RNA.ptable(structure))
+    fc.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
+    ss = RNA.db_from_ptable(list(pt))
+    return ss
+
+
 """
 Do main stuff
 """
@@ -221,9 +229,7 @@ for it in range(0, num_iter):
     if nonredundant:
         for s in fc.pbacktrack_nr(num_samples):
             # perform gradient walk from sample to determine direct local minimum
-            pt = RNA.IntVector(RNA.ptable(s))
-            fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
-            ss = RNA.db_from_ptable(list(pt))
+            ss = detect_local_minimum(fc_base, s)
             if ss not in minima:
                 minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
                 new_minima = new_minima + 1
@@ -250,10 +256,7 @@ for it in range(0, num_iter):
             # sample structure
             s = fc.pbacktrack()
             sample_list.append(s)
-            # perform gradient walk from sample to determine direct local minimum
-            pt = RNA.IntVector(RNA.ptable(s))
-            fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
-            ss = RNA.db_from_ptable(list(pt))
+            ss = detect_local_minimum(fc_base, s)
             if ss not in minima:
                 minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
                 new_minima = new_minima + 1
