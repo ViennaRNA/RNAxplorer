@@ -26,6 +26,10 @@ TwoD_file = "local_minima.2D.out"
 nonredundant_sample_file = False
 subopt_file = None
 nonredundant = False
+explore_two_neighborhood  = False
+ediff_penalty             = False
+mu                        = 0.1
+post_filter_two           = False
 
 # this is SV11
 sequence = "GGGCACCCCCCUUCGGGGGGUCACCUCGCGUAGCUAGCUACGCGAGGGUUAAAGCGCCUUUCUCCCUCGCGUAGCUAACCACGCGAGGUGACCCCCCGAAAAGGGGGGUUUCCCA"
@@ -91,7 +95,10 @@ parser.add_argument("--lmin-file", type=str, help="Output filename for local min
 parser.add_argument("--TwoD-file", type=str, help="Output filename for pseudo-2D file")
 parser.add_argument("--nonred", help="Do sampling with non-redundant pbacktrack", action="store_true")
 parser.add_argument("--nonred-file", type=str, help="Input filename for nonredundant samples")
-
+parser.add_argument("-2", "--explore-two-neighborhood", help="Explore 2-Neighborhood of local minima, i.e. eliminate shallow minima", action="store_true")
+parser.add_argument("--post-filter-two", help="Post processing Filter local minima according to 2-Neighborhood, i.e. eliminate shallow minima", action="store_true")
+parser.add_argument("-e", "--ediff-penalty", help="Use energy difference instead of kT for penalty", action="store_true")
+parser.add_argument("-m", "--mu", type=float, help="proportion factor used to decide whether sampling round was sufficient")
 
 args = parser.parse_args()
 
@@ -141,6 +148,17 @@ if args.nonred_file:
 if args.nonred:
     nonredundant = True
 
+if args.explore_two_neighborhood:
+    explore_two_neighborhood = True
+
+if args.ediff_penalty:
+    ediff_penalty = True
+
+if args.mu:
+    mu  = args.mu
+
+if args.post_filter_two:
+    post_filter_two = True
 
 
 sc_data = {
@@ -190,55 +208,42 @@ def move_apply(structure_in, move):
     res = output_structure
     return res
 
+
 def detect_local_minimum(fc, structure):
-    """
-    detect a local minimum via extended gradient walks. If a lower energy structure within radius 2
-    is detected (lower than the local minimum of a normal gradient walk), then another gradient walk
-    is applied for the lower structure.
-    """
     # perform gradient walk from sample to determine direct local minimum
     pt = RNA.IntVector(RNA.ptable(structure))
     fc.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
-    ss = RNA.db_from_ptable(list(pt))
-    
-    list_deeper_neighbors = []
-    neigh = fc.neighbors(pt, RNA.MOVESET_DELETION | RNA.MOVESET_INSERTION)
+    return RNA.db_from_ptable(list(pt))
+
+
+def detect_local_minimum_two(fc, structure):
+    """
+    Take a local minimum and detect nearby local minimum via extended gradient walks.
+    If a lower energy structure within radius 2 is detected (lower than the local minimum
+    of a normal gradient walk), then another gradient walk is applied for the lower structure.
+    """
+    deepest_neighbor      = None
+    deepest_neighbor_ddG  = 1
+    pt                    = RNA.IntVector(RNA.ptable(structure))
+    neigh                 = fc.neighbors(pt, RNA.MOVESET_DELETION | RNA.MOVESET_INSERTION)
+
     for nb in neigh:
-        #print(nb.pos_3, nb.pos_5)
-        list_moved = move_apply(list(pt),nb)
-        #print(list_moved)
-        ss_neighbor = RNA.db_from_ptable(list_moved)
-        #print(ss_neighbor,1)
-        e_m_1 = fc.eval_move(ss, nb.pos_5, nb.pos_3)
-        pt_1 = RNA.IntVector(RNA.ptable(ss_neighbor))
-        neigh_2 = fc.neighbors(pt_1, RNA.MOVESET_DELETION | RNA.MOVESET_INSERTION)
-        
+        dG_nb   = fc.eval_move_pt(pt, nb.pos_5, nb.pos_3)
+        pt_nb   = RNA.IntVector(move_apply(pt, nb))
+        neigh_2 = fc.neighbors(pt_nb, RNA.MOVESET_DELETION | RNA.MOVESET_INSERTION)
+
         for nb_2 in neigh_2:
-            list_moved_2 = move_apply(list(list_moved),nb_2)
-            #print(list_moved_2)
-            ss_neighbor_2 = RNA.db_from_ptable(list_moved_2)
-            #print(nb_2.pos_5, nb_2.pos_3)
-            #print(ss_neighbor_2,2)
-            bp_distance = RNA.bp_distance(ss, ss_neighbor_2)
-            if(bp_distance == 2):
-                e_m_2 = fc.eval_move(ss_neighbor, nb_2.pos_5, nb_2.pos_3)
-                if (e_m_1 + e_m_2) < 0.0:
-                    deeper_neighbor = detect_local_minimum(fc, ss_neighbor_2)
-                    list_deeper_neighbors.append(deeper_neighbor)
-        
-    
-    min_energy = fc.eval_structure_pt(pt)
-    min_structure = ss             
-    for n in list_deeper_neighbors:
-        pt_n = RNA.IntVector(RNA.ptable(n))
-        energy_int = fc.eval_structure_pt(pt_n)
-        if energy_int < min_energy:
-            min_energy = energy_int
-            min_structure = n
+            dG_nb2  = fc.eval_move_pt(pt_nb, nb_2.pos_5, nb_2.pos_3)
+            ddG     = dG_nb + dG_nb2
+            if ddG < 0 and ddG < deepest_neighbor_ddG:
+                deepest_neighbor_ddG  = ddG
+                deepest_neighbor      = move_apply(pt_nb, nb_2)
+                deepest_neighbor      = detect_local_minimum(fc, RNA.db_from_ptable(deepest_neighbor))
 
-    ss = str(min_structure)
-    return ss
-
+    if deepest_neighbor:
+        return detect_local_minimum_two(fc, deepest_neighbor)
+    else:
+        return structure
 
 
 def generate_samples(fc, number, non_redundant=False):
@@ -292,13 +297,15 @@ sample_list = []
 repulsed_structures = dict()
 
 fc.pf()
-current_minima = dict()
+pending_lm = dict()
 num_sc = 1
 
 for it in range(0, num_iter):
     if verbose:
-        eprint("iteration %d" % it)
-
+        eprint("iteration %4d / %4d" % (it + 1, num_iter))
+    else:
+        sys.stderr.write("\riteration %4d / %4d" % (it + 1, num_iter))
+        sys.stderr.flush()
 
     new_minima = 0
 
@@ -308,38 +315,75 @@ for it in range(0, num_iter):
     # store samples of this round to global list of samples
     sample_list = sample_list + sample_set
 
+    current_lm = dict()
+
     # go through list of sampled structures and determine corresponding local minima
     for s in sample_set:
         ss = detect_local_minimum(fc_base, s)
-        if ss not in current_minima:
-            current_minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
+
+        if ss not in current_lm:
+            current_lm[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
             new_minima = new_minima + 1
         else:
-            current_minima[ss]['count'] = current_minima[ss]['count'] + 1
+            current_lm[ss]['count'] = current_lm[ss]['count'] + 1
+
+    # explore the 2-neighborhood of current local minima to reduce total number of local minima
+    if explore_two_neighborhood:
+        lm_remove = list()
+        lm_two    = dict()
+        for s in current_lm:
+            ss = detect_local_minimum_two(fc_base, s)
+            if s != ss:
+                # store structure for removal
+                lm_remove.append(s)
+                if ss not in current_lm:
+                    # store structure for novel insertion
+                    if ss not in lm_two:
+                        lm_two[ss] = { 'count' : current_lm[s]['count'], 'energy' : fc_base.eval_structure(ss) }
+                    else:
+                        lm_two[ss]['count'] = lm_two[ss]['count'] + current_lm[s]['count']
+                else:
+                    # update current minima list
+                    current_lm[ss]['count'] = current_lm[ss]['count'] + current_lm[s]['count']
+
+        # remove obsolete local minima
+        for lm in lm_remove:
+            del current_lm[lm]
+
+        # add newly detected local minima
+        current_lm.update(lm_two)
+
+    # transfer local minima obtained in this iteration to list of pending local minima
+    for ss in current_lm:
+        if ss not in pending_lm:
+            pending_lm[ss] = current_lm[ss]
+        else:
+            pending_lm[ss]['count'] = pending_lm[ss]['count'] + current_lm[ss]['count']
+
+    del current_lm
 
     if verbose:
-        eprint("new minima: %d vs. present minima: %d" % (new_minima, len(minima)))
+        eprint("pending minima: %d vs. present minima: %d" % (len(pending_lm), len(minima)))
 
     if it < num_iter - 1:
         # find out which local minima we've seen the most in this sampling round
-        struct_cnt_max = max(current_minima.iterkeys(), key=(lambda a: current_minima[a]['count']))
-        struct_cnt_min = min(current_minima.iterkeys(), key=(lambda a: current_minima[a]['count']))
-        struct_en_max = max(current_minima.iterkeys(), key=(lambda a: current_minima[a]['energy']))
-        struct_en_min = min(current_minima.iterkeys(), key=(lambda a: current_minima[a]['energy']))
+        struct_cnt_max = max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
+        struct_cnt_min = min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
+        struct_en_max = max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
+        struct_en_min = min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
 
         if verbose:
             eprint("%s (%6.2f) [%d] = max\n%s (%6.2f) [%d] = min\n%s (%6.2f) [%d] = maxE\n%s (%6.2f) [%d] = minE" % (\
-                    struct_cnt_max, current_minima[struct_cnt_max]['energy'], current_minima[struct_cnt_max]['count'], \
-                    struct_cnt_min, current_minima[struct_cnt_min]['energy'], current_minima[struct_cnt_min]['count'], \
-                    struct_en_max, current_minima[struct_en_max]['energy'], current_minima[struct_en_max]['count'], \
-                    struct_en_min, current_minima[struct_en_min]['energy'], current_minima[struct_en_min]['count']))
+                    struct_cnt_max, pending_lm[struct_cnt_max]['energy'], pending_lm[struct_cnt_max]['count'], \
+                    struct_cnt_min, pending_lm[struct_cnt_min]['energy'], pending_lm[struct_cnt_min]['count'], \
+                    struct_en_max, pending_lm[struct_en_max]['energy'], pending_lm[struct_en_max]['count'], \
+                    struct_en_min, pending_lm[struct_en_min]['energy'], pending_lm[struct_en_min]['count']))
 
-        mu        = 0.1
         cnt_once  = 0
         cnt_other = 0
-        e_threshold = current_minima[struct_en_min]['energy']
+        e_threshold = pending_lm[struct_en_min]['energy']
 
-        for key, value in sorted(current_minima.iteritems(), key=lambda (k, v): v['energy']):
+        for key, value in sorted(pending_lm.iteritems(), key=lambda (k, v): v['energy']):
             if verbose:
                 eprint("%s (%6.2f) [%d]" % (key, value['energy'], value['count']))
 
@@ -355,11 +399,13 @@ for it in range(0, num_iter):
                     if verbose:
                         eprint("e_threshold of %6.2f reached with %d <= %d" % (e_threshold, cnt_once, cnt_other))
 
-                    #repell_en = kt_fact * kT / 1000.
-                    repell_en = kt_fact * e_threshold
+                    if ediff_penalty:
+                        repell_en = kt_fact * e_threshold
+                    else:
+                        repell_en = kt_fact * kT / 1000.
 
                     if verbose:
-                        eprint("repelling the following struct\n%s (%6.2f) %dx seen" % (struct_cnt_max, repell_en, current_minima[struct_cnt_max]['count']))
+                        eprint("repelling the following struct\n%s (%6.2f) %dx seen" % (struct_cnt_max, repell_en, pending_lm[struct_cnt_max]['count']))
 
                     repulsed_structures[struct_cnt_max] = 1
 
@@ -371,26 +417,62 @@ for it in range(0, num_iter):
                     # fill partition function DP matrices 
                     fc.pf()
 
-                    for cmk in current_minima.keys():
+                    for cmk in pending_lm.keys():
                         if cmk not in minima:
-                            minima[cmk] = current_minima[cmk]
+                            minima[cmk] = pending_lm[cmk]
                         else:
-                            minima[cmk]['count'] = minima[cmk]['count'] + current_minima[cmk]['count']
+                            minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
 
-                    current_minima = dict()
+                    pending_lm = dict()
 
                     break
     else:
-        for cmk in current_minima.keys():
+        for cmk in pending_lm.keys():
             if cmk not in minima:
-                minima[cmk] = current_minima[cmk]
+                minima[cmk] = pending_lm[cmk]
             else:
-                minima[cmk]['count'] = minima[cmk]['count'] + current_minima[cmk]['count']
+                minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
 
 
+if verbose:
+  eprint("\nRecomputed PF %d times" % num_sc)
+else:
+  eprint("\ndone")
 
-eprint("Recomputed PF %d times" % num_sc)
+if post_filter_two:
+    sys.stderr.write("Applying 2-Neighborhood Filter...")
+    sys.stderr.flush()
 
+    lm_remove = list()
+    lm_two    = dict()
+    cnt       = 1;
+    cnt_max   = len(minima)
+    for s in minima:
+        sys.stderr.write("\rApplying 2-Neighborhood Filter...%6d / %6d" % (cnt, cnt_max))
+        sys.stderr.flush()
+        ss = detect_local_minimum_two(fc_base, s)
+        if s != ss:
+            # store structure for removal
+            lm_remove.append(s)
+            if ss not in minima:
+                # store structure for novel insertion
+                if ss not in lm_two:
+                    lm_two[ss] = { 'count' : minima[s]['count'], 'energy' : fc_base.eval_structure(ss) }
+                else:
+                    lm_two[ss]['count'] = lm_two[ss]['count'] + minima[s]['count']
+            else:
+                # update current minima list
+                minima[ss]['count'] = minima[ss]['count'] + minima[s]['count']
+        cnt = cnt + 1
+
+    # remove obsolete local minima
+    for lm in lm_remove:
+        del minima[lm]
+
+    # add newly detected local minima
+    minima.update(lm_two)
+
+    sys.stderr.write("\rApplying 2-Neighborhood Filter...done\n")
 
 # save local minima to file
 f = open(lmin_file, 'w')
