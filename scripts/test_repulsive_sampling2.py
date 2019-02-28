@@ -197,6 +197,7 @@ fc_base = RNA.fold_compound(sequence, md)
 
 
 minima = dict()
+sample_list = []
 repulsed_structures = dict()
 
 
@@ -248,6 +249,7 @@ for it in range(0, num_iter):
         for i in range(0, num_samples):
             # sample structure
             s = fc.pbacktrack()
+            sample_list.append(s)
             # perform gradient walk from sample to determine direct local minimum
             pt = RNA.IntVector(RNA.ptable(s))
             fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
@@ -282,6 +284,17 @@ for i,s in enumerate(sorted(minima.keys(), key=lambda x: minima[x]['energy'])):
         f.write("%4d %s %6.2f %6d\n" % (i, s, minima[s]['energy'], minima[s]['count']))
 f.close()
 
+sample_file=""
+rind = lmin_file.rfind(".")
+if rind >= 0 :
+    sample_file = lmin_file[:rind] + ".samples"
+else:
+    sample_file = lmin_file[:rind] + ".samples"
+f = open(sample_file, 'w')
+f.write("     %s\n" % sequence)
+for s in sample_list:
+    f.write(s+"\n")
+f.close()
 
 if subopt_file != None:
     fc.sc_remove()
