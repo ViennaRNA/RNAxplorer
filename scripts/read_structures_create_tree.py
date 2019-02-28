@@ -556,6 +556,7 @@ def print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy,
     pylab.ylabel("") #"macro states")
     pylab.savefig(output_file + '.svg')
     pylab.clf()
+    pylab.close()
     
 
 class Filter():
@@ -580,7 +581,7 @@ def get_ids_to_color(minima_to_color, structure_list):
 def read_barriers_structure_map_file(barriers_map_file_path):
     #basin_structure_to_input_line_map = {}
     basin_index_to_input_line_index = {}
-    
+    input_line_to_basin_index = {}
     lines = []
     map_regex = "^\s*([\.\(\)]+)\s*(\d+)\s*(\-?\d+\.?\d*)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)\s*(\d+)"
     with open(barriers_map_file_path, 'r') as f:
@@ -603,7 +604,12 @@ def read_barriers_structure_map_file(barriers_map_file_path):
             if not true_gradient_min_index in basin_index_to_input_line_index:
                 basin_index_to_input_line_index[true_gradient_min_index] = set()
             basin_index_to_input_line_index[true_gradient_min_index].add(idx)
-    return basin_index_to_input_line_index #, basin_structure_to_input_line_map  
+            
+            if not idx in input_line_to_basin_index:
+                input_line_to_basin_index[idx] = set()
+            input_line_to_basin_index[idx].add(true_gradient_min_index)
+            
+    return basin_index_to_input_line_index, input_line_to_basin_index #, basin_structure_to_input_line_map  
     
 
 
@@ -630,11 +636,37 @@ def barriers_zeugs(saddle_file, filter):
     #max_saddle_energy = 6
     #min_energy = 1
     print("max min", max_saddle_energy, min_energy)
-    print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
+    #print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
+    
+    write_saddle_file(find_path_saddle_list, "barriers_saddles.ssv")
     #for s in barriers_saddles:
     #    print(s)
     return (barriers_minima_representatives, barriers_saddles, barriers_tree_barriers, barriers_saddle_matrix)
 
+
+def write_matrix_file(numpy_matrix, file_name):
+    x_states,y_states = a.shape
+    if x_states != y_states:
+        print("Error: matrix is not a square!")
+    with open(file_name, 'w') as f:
+        f.write("# upper triangular matrix")
+        for i in range(x_states):
+            line = ""
+            for j in range(i+1, x_states):
+                line += "{:.2f}".format(numpy_matrix[i,j]) + " "
+            line += "\n"
+            f.write(line)
+    return 0
+
+def write_saddle_file(saddles, file_name):
+    with open(file_name, 'w') as f:
+        for s in saddles:
+            index_from = s[0]
+            index_to = s[1]
+            saddle_energy = s[2]
+            line = str(index_from) + " " + str(index_to) + " " + "{:.2f}".format(saddle_energy)
+            f.write(line)
+    return 0
 
 Max_Threads = 1
        
@@ -654,7 +686,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    #sys.setrecursionlimit(1000000)
+    sys.setrecursionlimit(int(pow(2,31)-1))
     
     Max_Threads = 1
     if args.threads:
@@ -712,23 +744,121 @@ if __name__ == "__main__":
         n_minima = len(gradient_walk_minima_representatives)
         ids_to_color = get_ids_to_color(minima_to_color, gradient_walk_minima_representatives)
 
-        print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
-
+        #print_newick_tree(newick_string, output_file, max_saddle_energy, min_energy, ids_to_color)
+        
+        write_saddle_file(find_path_saddle_list, "find_path_saddles.ssv")
 
 
     if args.compute_l2_norm_saddle_heights:
         if not args.saddle_file or not args.structure_file:
             print("Error: we need a barriers file for the original tree and a structure file for the find_path tree!")
         barriers_map_file_path = args.compute_l2_norm_saddle_heights
-        basin_index_to_input_line_index = read_barriers_structure_map_file(barriers_map_file_path)
+        basin_index_to_input_line_index, input_line_to_basin_index = read_barriers_structure_map_file(barriers_map_file_path)
         
         
+        leaf_indices_findpath = barriers_tree_findpath.get_leafs()
+        leaf_indices_findpath = list(leaf_indices_findpath)
+        
+        leaf_indices_barriers = barriers_tree_barriers.get_leafs()
+        #for l in leaf_indices_findpath:
+        #    input_line_to_basin_index[]
+        
+        minima_barriers = len(barriers_minima_representatives)
+        minima_findpath = len(gradient_walk_minima_representatives)
+        minima_barriers_tree = len(leaf_indices_barriers)
+        minima_findpath_tree = len(leaf_indices_findpath)
+        minima_mapped_from_find_path_to_barriers = len(input_line_to_basin_index.keys())
+        minima_mapped_from_barriers_to_findpath = len(basin_index_to_input_line_index.keys())
+        minima_mapped_from_find_path_tree_to_barriers_tree = 0
+        minima_mapped_from_find_path_tree_to_barriers_tree_unique = set()
+        print(leaf_indices_findpath)
+        print(input_line_to_basin_index)
+        for l in leaf_indices_findpath:
+            m = None
+            try:
+                m = input_line_to_basin_index[l]
+            except Exception as e:
+                pass # minimum is not in barriers output (maybe maxE filter)
+            if m != None:
+                for mm in m:
+                    if mm in leaf_indices_barriers:
+                        minima_mapped_from_find_path_tree_to_barriers_tree += 1
+                        minima_mapped_from_find_path_tree_to_barriers_tree_unique.add(mm)
+        
+        minima_mapped_from_barriers_tree_to_findpath_tree = 0
+        for l in leaf_indices_barriers:
+            m = None
+            try:
+                m = basin_index_to_input_line_index[l]
+            except Exception as e:
+                pass # minimum is not in sampled minima
+            if m != None:
+                for mm in m:
+                    if mm in leaf_indices_findpath:
+                        minima_mapped_from_barriers_tree_to_findpath_tree += 1
+                  
+        all_measures = [minima_barriers, minima_findpath, minima_barriers_tree, minima_findpath_tree, minima_mapped_from_find_path_to_barriers, \
+                  minima_mapped_from_barriers_to_findpath, minima_mapped_from_find_path_tree_to_barriers_tree, minima_mapped_from_barriers_tree_to_findpath_tree]
+        with open("tree_mapped_indices_statistics.txt", 'w') as f:
+            csv_header = "minima_barriers, minima_findpath, minima_barriers_tree, minima_findpath_tree, minima_mapped_from_find_path_to_barriers, " + \
+                  "minima_mapped_from_barriers_to_findpath, minima_mapped_from_find_path_tree_to_barriers_tree, minima_mapped_from_barriers_tree_to_findpath_tree"
+            f.write(csv_header)
+            results_line = ", ".join([ str(x) for x in all_measures])
+            f.write(results_line)
+            
+        with open("percentage_tree_covered.txt", 'w') as f:
+            results_line = (len(minima_mapped_from_find_path_tree_to_barriers_tree_unique) / len(leaf_indices_barriers))*100.0
+            f.write("{:.2f}".format(results_line))
+
+        #leaf_indices_findpath = barriers_tree_findpath.get_leafs()
+        sum_diff = 0
+        for i, z_i in enumerate(leaf_indices_findpath):
+            set_idx_from = None
+            try:
+                set_idx_from = input_line_to_basin_index[z_i]
+            except Exception as e:
+                print("Warning: fp index not in barriers tree", z_i)
+                pass
+
+            if set_idx_from != None:
+                for z_j in leaf_indices_findpath[i+1:]:
+                    barriers_saddle = None
+                    findpath_saddle = 0
+                    
+                    set_idx_to = None
+                    try:
+                        set_idx_to = input_line_to_basin_index[z_j]
+                    except Exception as e:
+                        print("Warning: fp index not in barriers tree", z_j)
+                        pass
+                    
+                    if set_idx_to != None:
+                        
+                        x,y = sorted([z_i,z_j])
+                        findpath_saddle = findpath_saddle_matrix[x, y]
+                        
+                        mapped_saddle_count = 0
+                        for m_i in set_idx_from:
+                            for m_j in set_idx_to:
+                                if m_i != m_j:
+                                    a,b = sorted([m_i-1, m_j-1])
+                                    if a in leaf_indices_barriers and b in leaf_indices_barriers:
+                                        barriers_saddle = barriers_saddle_matrix[a, b]
+                                        mapped_saddle_count += 1
+                        
+                        if mapped_saddle_count > 1:
+                            print("Error: fp minima are mapped to several barriers minima! This should not be possible.", z_i, z_i, set_idx_from, set_idx_to)
+                        
+                        if barriers_saddle != None:
+                            saddle_diff = findpath_saddle - barriers_saddle
+                            sum_diff += (saddle_diff * saddle_diff)
+                    
+        l2_norm = sqrt(sum_diff)
+        """
         leaf_indices_barriers = barriers_tree_barriers.get_leafs()
         leaf_indices_barriers = list(leaf_indices_barriers)
 
         #leaf_indices_findpath = barriers_tree_findpath.get_leafs()
-        
-        
         sum_diff = 0
         for i, zb_i in enumerate(leaf_indices_barriers): 
             for zb_j in leaf_indices_barriers[i+1:]:
@@ -758,7 +888,11 @@ if __name__ == "__main__":
                                 break
                             else:
                                 #fp_saddle = barriers_tree_findpath.find_lca_saddle_energy(fp_i, fp_j)
-                                fp_saddle = findpath_saddle_matrix[fp_i, fp_j]
+                                fp_saddle = 0
+                                try:
+                                    fp_saddle = findpath_saddle_matrix[fp_i, fp_j]
+                                except Exception as e:
+                                    pass
                                 print("fp lca:", fp_i, fp_j, fp_saddle)
                                 if np.isnan(fp_saddle):
                                     fp_saddle = 0
@@ -780,6 +914,7 @@ if __name__ == "__main__":
                 sum_diff += (saddle_diff * saddle_diff)
                 
         l2_norm = sqrt(sum_diff)
+        """
         
         with open("l2_norm_direct_neighbor_basins.txt", 'w') as f:
             f.write(str(l2_norm))
