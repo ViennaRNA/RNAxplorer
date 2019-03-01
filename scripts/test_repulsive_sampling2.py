@@ -11,21 +11,20 @@ import RNAxplorer
 
 from pipeline.clusteralgorithms.diana import DIANA
 
-num_iter = 100
-num_samples = 10000
-kt_fact = 1
-min_explore_min_percent = 10
-do_clustering = False
-fake_2D_file = False
+
+granularity               = 1000
+num_samples               = 10000
+kt_fact                   = 1
+do_clustering             = False
+fake_2D_file              = False
 # switch to select penalization of base pairs instead of computing complicated structure penalties
-penalize_base_pairs = True
-verbose = False
-debug   = False
-lmin_file = "local_minima.txt"
-TwoD_file = "local_minima.2D.out"
-nonredundant_sample_file = False
-subopt_file = None
-nonredundant = False
+penalize_base_pairs       = True
+verbose                   = False
+debug                     = False
+lmin_file                 = "local_minima.txt"
+TwoD_file                 = "local_minima.2D.out"
+nonredundant_sample_file  = False
+nonredundant              = False
 explore_two_neighborhood  = False
 ediff_penalty             = False
 mu                        = 0.1
@@ -43,11 +42,44 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def RNAlocmin_output(seq, m):
-    print("     %s" % seq)
+def RNAlocmin_output(sequence, m, filename = None):
+    if filename:
+        f = open(filename, 'w')
+    else:
+        f = sys.stdout
 
+    f.write("     %s\n" % sequence)
     for i,s in enumerate(sorted(m.keys(), key=lambda x: m[x]['energy'])):
-        print("%4d %s %6.2f %6d" % (i, s, m[s]['energy'], m[s]['count']))
+        f.write("%4d %s %6.2f %6d\n" % (i, s, m[s]['energy'], m[s]['count']))
+
+    if filename:
+        f.close()
+
+
+def RNA2Dfold_output(sequence, s_mfe, mfe, s1, s2, m, filename = None):
+    n         = len(sequence)
+    distances = [ [ None for j in range(0, n) ] for i in range(0, n) ];
+
+    for s in m.keys():
+        d1 = RNA.bp_distance(s1, s)
+        d2 = RNA.bp_distance(s2, s)
+        if not distances[d1][d2] or m[s]['energy'] < distances[d1][d2]['e']:
+            distances[d1][d2] = { 's': s, 'e': m[s]['energy'] }
+
+    if filename:
+        f = open(filename, 'w')
+    else:
+        f = sys.stdout
+
+    f.write("%s\n%s (%6.2f)\n%s\n%s\n\n\n" % (sequence, s_mfe, mfe, s1, s2))
+
+    for i in range(0, n):
+        for j in range(0, n):
+            if distances[i][j] != None:
+                f.write("%d\t%d\ta\tb\tc\t%6.2f\td\t%s\n" % (i, j, distances[i][j]['e'], distances[i][j]['s']))
+
+    if filename:
+        f.close()
 
 
 def mfeStructure(seq, cluster):
@@ -82,11 +114,10 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("-v", "--verbose", help="Be verbose", action="store_true")
 parser.add_argument("-d", "--debug", help="Be even more verbose", action="store_true")
-parser.add_argument("--subopt", type=str, help="Compute suboptimals")
 parser.add_argument("-s", "--sequence", type=str, help="Input sequence")
 parser.add_argument("--struc1", type=str, help="Input structure 1")
 parser.add_argument("--struc2", type=str, help="Input structure 2")
-parser.add_argument("-i", "--iterations", type=int, help="Number of iterations")
+parser.add_argument("--granularity", type=int, help="Granularity, i.e. number of samples after which distortion checks are performed")
 parser.add_argument("-n", "--num-samples", type=int, help="Number of samples per iteration")
 parser.add_argument("-f", "--exploration-factor", type=float, help="Exploration factor")
 parser.add_argument("--min-exploration-percent", type=float, help="Minimum exploration percentage before adding new repelled structures")
@@ -117,11 +148,8 @@ if args.struc1:
 if args.struc2:
     structure2 = args.struc2
 
-if args.subopt:
-    subopt_file = args.subopt
-
-if args.iterations:
-    num_iter = args.iterations
+if args.granularity:
+    granularity = args.granularity
 
 if args.num_samples:
     num_samples = args.num_samples
@@ -167,31 +195,39 @@ sc_data = {
 }
 
 
-def store_basepair_sc(data, structure, weight):
-    pt = RNA.ptable(structure)
-    # count number of pairs in structure to repell
-    cnt = 0
-    for i in range(1, len(pt)):
-        if pt[i] > i:
-            cnt = cnt + 1
+def store_basepair_sc(fc, data, structure, weight, distance_based = False):
+    if distance_based:
+        return
+    else:
+        pt = RNA.ptable(structure)
+        # count number of pairs in structure to repell
+        cnt = 0
+        for i in range(1, len(pt)):
+            if pt[i] > i:
+                cnt = cnt + 1
 
-    if cnt > 0:
-        weight = weight / cnt
+        if cnt > 0:
+            weight = weight / cnt
 
-    # add repulsion
-    for i in range(1, len(pt)):
-        if pt[i] > i:
-            key = (i, pt[i])
-            if key not in data['base_pairs']:
-                data['base_pairs'][key] = 1
-                data['weights'][key] = weight
-                if debug:
-                    print("adding pair (%d,%d) with weight %g" % (i, pt[i], weight))
-            else:
+        # add repulsion
+        for i in range(1, len(pt)):
+            if pt[i] > i:
+                key = (i, pt[i])
+                if key not in data['base_pairs']:
+                    data['base_pairs'][key] = 1
+                    data['weights'][key] = weight
+                else:
                     data['base_pairs'][key] = data['base_pairs'][key] + 1
                     data['weights'][key] = data['weights'][key] + weight
-                    if debug:
-                        print("We've seen this pair (%d,%d) before! Increasing its repellent potential to %g)!" % (i, pt[i], data['weights'][key]))
+
+        # remove previous soft constraints
+        fc.sc_remove()
+
+        # add latest penalties for base pairs
+        for k in data['weights'].keys():
+            i = k[0]
+            j = k[1]
+            fc.sc_add_bp(i, j, data['weights'][k])
 
 
 def move_apply(structure_in, move):
@@ -238,12 +274,54 @@ def detect_local_minimum_two(fc, structure):
             if ddG < 0 and ddG < deepest_neighbor_ddG:
                 deepest_neighbor_ddG  = ddG
                 deepest_neighbor      = move_apply(pt_nb, nb_2)
-                deepest_neighbor      = detect_local_minimum(fc, RNA.db_from_ptable(deepest_neighbor))
 
     if deepest_neighbor:
+        deepest_neighbor = detect_local_minimum(fc, RNA.db_from_ptable(deepest_neighbor))
         return detect_local_minimum_two(fc, deepest_neighbor)
     else:
         return structure
+
+
+def reduce_lm_two_neighborhood(fc, lm, verbose = False):
+    cnt       = 1;
+    cnt_max   = len(lm)
+    lm_remove = list()
+    lm_novel  = dict()
+
+    if verbose:
+        sys.stderr.write("Applying 2-Neighborhood Filter...")
+        sys.stderr.flush()
+
+    for s in lm:
+        if verbose:
+            sys.stderr.write("\rApplying 2-Neighborhood Filter...%6d / %6d" % (cnt, cnt_max))
+            sys.stderr.flush()
+
+        ss = detect_local_minimum_two(fc, s)
+        if s != ss:
+            # store structure for removal
+            lm_remove.append(s)
+            if ss not in lm:
+                # store structure for novel insertion
+                if ss not in lm_novel:
+                    lm_novel[ss] = { 'count' : lm[s]['count'], 'energy' : fc.eval_structure(ss) }
+                else:
+                    lm_novel[ss]['count'] = lm_novel[ss]['count'] + lm[s]['count']
+            else:
+                # update current minima list
+                lm[ss]['count'] = lm[ss]['count'] + lm[s]['count']
+
+        cnt = cnt + 1
+
+    # remove obsolete local minima
+    for a in lm_remove:
+        del lm[a]
+
+    # add newly detected local minima
+    lm.update(lm_novel)
+
+    if verbose:
+        sys.stderr.write("\rApplying 2-Neighborhood Filter...done             \n")
 
 
 def generate_samples(fc, number, non_redundant=False):
@@ -252,24 +330,10 @@ def generate_samples(fc, number, non_redundant=False):
     if non_redundant:
         samples = fc.pbacktrack_nr(number)
     else:
-        for i in range(0, num_samples):
+        for i in range(0, number):
             samples.append(fc.pbacktrack())
 
     return samples
-
-
-def prepare_soft_constraints(fc, penalty_data, distance_based = False):
-    if distance_based:
-        return
-    else:
-        # remove previous soft constraints
-        fc.sc_remove()
-
-        # add latest penalties for base pairs
-        for k in penalty_data['weights'].keys():
-            i = k[0]
-            j = k[1]
-            fc.sc_add_bp(i, j, penalty_data['weights'][k])
 
 
 """
@@ -290,27 +354,33 @@ fc_base = RNA.fold_compound(sequence, md)
 
 # compute MFE structure
 (ss, mfe) = fc.mfe()
+fc.pf()
 
 
 minima = dict()
 sample_list = []
-repulsed_structures = dict()
 
-fc.pf()
 pending_lm = dict()
 num_sc = 1
 
-for it in range(0, num_iter):
-    if verbose:
-        eprint("iteration %4d / %4d" % (it + 1, num_iter))
-    else:
-        sys.stderr.write("\riteration %4d / %4d" % (it + 1, num_iter))
-        sys.stderr.flush()
+num_iter      = int(math.ceil(float(num_samples) / float(granularity)))
+samples_left  = num_samples
 
-    new_minima = 0
+for it in range(0, num_iter):
+    # determine number of samples for this round
+    # usually, this is 'granularity'
+    if samples_left < granularity:
+        current_num_samples = samples_left
+    else:
+        current_num_samples = granularity
+
+    samples_left = samples_left - current_num_samples
 
     # generate samples through stocastic backtracing
-    sample_set = generate_samples(fc, num_samples, nonredundant)
+    sample_set = generate_samples(fc, current_num_samples, nonredundant)
+
+    sys.stderr.write("\rsamples so far: %6d / %6d" % (num_samples - samples_left, num_samples))
+    sys.stderr.flush()
 
     # store samples of this round to global list of samples
     sample_list = sample_list + sample_set
@@ -323,35 +393,12 @@ for it in range(0, num_iter):
 
         if ss not in current_lm:
             current_lm[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
-            new_minima = new_minima + 1
         else:
             current_lm[ss]['count'] = current_lm[ss]['count'] + 1
 
     # explore the 2-neighborhood of current local minima to reduce total number of local minima
     if explore_two_neighborhood:
-        lm_remove = list()
-        lm_two    = dict()
-        for s in current_lm:
-            ss = detect_local_minimum_two(fc_base, s)
-            if s != ss:
-                # store structure for removal
-                lm_remove.append(s)
-                if ss not in current_lm:
-                    # store structure for novel insertion
-                    if ss not in lm_two:
-                        lm_two[ss] = { 'count' : current_lm[s]['count'], 'energy' : fc_base.eval_structure(ss) }
-                    else:
-                        lm_two[ss]['count'] = lm_two[ss]['count'] + current_lm[s]['count']
-                else:
-                    # update current minima list
-                    current_lm[ss]['count'] = current_lm[ss]['count'] + current_lm[s]['count']
-
-        # remove obsolete local minima
-        for lm in lm_remove:
-            del current_lm[lm]
-
-        # add newly detected local minima
-        current_lm.update(lm_two)
+        reduce_lm_two_neighborhood(fc_base, current_lm, verbose)
 
     # transfer local minima obtained in this iteration to list of pending local minima
     for ss in current_lm:
@@ -362,9 +409,6 @@ for it in range(0, num_iter):
 
     del current_lm
 
-    if verbose:
-        eprint("pending minima: %d vs. present minima: %d" % (len(pending_lm), len(minima)))
-
     if it < num_iter - 1:
         # find out which local minima we've seen the most in this sampling round
         struct_cnt_max = max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
@@ -372,21 +416,10 @@ for it in range(0, num_iter):
         struct_en_max = max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
         struct_en_min = min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
 
-        if verbose:
-            eprint("%s (%6.2f) [%d] = max\n%s (%6.2f) [%d] = min\n%s (%6.2f) [%d] = maxE\n%s (%6.2f) [%d] = minE" % (\
-                    struct_cnt_max, pending_lm[struct_cnt_max]['energy'], pending_lm[struct_cnt_max]['count'], \
-                    struct_cnt_min, pending_lm[struct_cnt_min]['energy'], pending_lm[struct_cnt_min]['count'], \
-                    struct_en_max, pending_lm[struct_en_max]['energy'], pending_lm[struct_en_max]['count'], \
-                    struct_en_min, pending_lm[struct_en_min]['energy'], pending_lm[struct_en_min]['count']))
-
         cnt_once  = 0
         cnt_other = 0
-        e_threshold = pending_lm[struct_en_min]['energy']
 
         for key, value in sorted(pending_lm.iteritems(), key=lambda (k, v): v['energy']):
-            if verbose:
-                eprint("%s (%6.2f) [%d]" % (key, value['energy'], value['count']))
-
             if value['count'] == 1:
                 cnt_once = cnt_once + 1
             else:
@@ -395,26 +428,13 @@ for it in range(0, num_iter):
             # check whether we've seen other local minim way more often than those we've seen just once
             if cnt_other > 0 and cnt_once > 0:
                 if cnt_once <= (mu * cnt_other):
-                    e_threshold = value['energy'] - e_threshold
-                    if verbose:
-                        eprint("e_threshold of %6.2f reached with %d <= %d" % (e_threshold, cnt_once, cnt_other))
-
                     if ediff_penalty:
-                        repell_en = kt_fact * e_threshold
+                        repell_en = kt_fact * (value['energy'] - pending_lm[struct_en_min]['energy'])
                     else:
                         repell_en = kt_fact * kT / 1000.
 
-                    if verbose:
-                        eprint("repelling the following struct\n%s (%6.2f) %dx seen" % (struct_cnt_max, repell_en, pending_lm[struct_cnt_max]['count']))
+                    store_basepair_sc(fc, sc_data, struct_cnt_max, repell_en)
 
-                    repulsed_structures[struct_cnt_max] = 1
-
-                    store_basepair_sc(sc_data, struct_cnt_max, repell_en)
-
-                    prepare_soft_constraints(fc, sc_data)
-
-                    num_sc = num_sc + 1
-                    # fill partition function DP matrices 
                     fc.pf()
 
                     for cmk in pending_lm.keys():
@@ -433,53 +453,14 @@ for it in range(0, num_iter):
             else:
                 minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
 
-
-if verbose:
-  eprint("\nRecomputed PF %d times" % num_sc)
-else:
-  eprint("\ndone")
+eprint(" ... done")
 
 if post_filter_two:
-    sys.stderr.write("Applying 2-Neighborhood Filter...")
-    sys.stderr.flush()
+    reduce_lm_two_neighborhood(fc_base, minima, verbose)
 
-    lm_remove = list()
-    lm_two    = dict()
-    cnt       = 1;
-    cnt_max   = len(minima)
-    for s in minima:
-        sys.stderr.write("\rApplying 2-Neighborhood Filter...%6d / %6d" % (cnt, cnt_max))
-        sys.stderr.flush()
-        ss = detect_local_minimum_two(fc_base, s)
-        if s != ss:
-            # store structure for removal
-            lm_remove.append(s)
-            if ss not in minima:
-                # store structure for novel insertion
-                if ss not in lm_two:
-                    lm_two[ss] = { 'count' : minima[s]['count'], 'energy' : fc_base.eval_structure(ss) }
-                else:
-                    lm_two[ss]['count'] = lm_two[ss]['count'] + minima[s]['count']
-            else:
-                # update current minima list
-                minima[ss]['count'] = minima[ss]['count'] + minima[s]['count']
-        cnt = cnt + 1
 
-    # remove obsolete local minima
-    for lm in lm_remove:
-        del minima[lm]
+RNAlocmin_output(sequence, minima, lmin_file)
 
-    # add newly detected local minima
-    minima.update(lm_two)
-
-    sys.stderr.write("\rApplying 2-Neighborhood Filter...done\n")
-
-# save local minima to file
-f = open(lmin_file, 'w')
-f.write("     %s\n" % sequence)
-for i,s in enumerate(sorted(minima.keys(), key=lambda x: minima[x]['energy'])):
-        f.write("%4d %s %6.2f %6d\n" % (i, s, minima[s]['energy'], minima[s]['count']))
-f.close()
 
 sample_file=""
 rind = lmin_file.rfind(".")
@@ -493,39 +474,10 @@ for s in sample_list:
     f.write(s+"\n")
 f.close()
 
-if subopt_file != None:
-    fc.sc_remove()
-    (ss, mfe) = fc.mfe()
-    # determine local minimum with highest energy from previous run
-    max_e = max(minima.keys(), key=lambda k: minima[k]['energy'])
-    delta = int((minima[max_e]['energy'] - mfe) * 100)
-    if delta > 500:
-        eprint("Warning, subopt delta is large: %d" % delta)
-
-    subopt_file = open(subopt_file, 'w')
-
-    sol = fc.subopt(delta, 0, subopt_file)
-    #for s in sol:
-    #    print("%s %g" % (s.structure, s.energy))
-
-    subopt_file.close()
 
 if fake_2D_file:
-    distances = [ [ None for j in range(0, 200) ] for i in range(0, 200) ];
-
-    for s in minima.keys():
-        d1 = RNA.bp_distance(structure1, s)
-        d2 = RNA.bp_distance(structure2, s)
-        if not distances[d1][d2] or minima[s]['energy'] < distances[d1][d2]:
-            distances[d1][d2] = minima[s]['energy']
-
-    f = open(TwoD_file, 'w')
-    f.write("%s\n%s (%6.2f)\n%s\n%s\n\n\n" % (sequence, structure1, mfe, structure1, structure2))
-    for i in range(0, 200):
-        for j in range(0, 200):
-            if distances[i][j] != None:
-                f.write("%d\t%d\ta\tb\tc\t%6.2f\n" % (i, j, distances[i][j]))
-    f.close()
+    (ss, mfe) = fc_base.mfe()
+    RNA2Dfold_output(sequence, ss, mfe, structure1, structure2, minima, TwoD_file)
 
 
 # read a list of sample structures and produce list of local minima for it
