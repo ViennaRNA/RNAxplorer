@@ -31,6 +31,7 @@ enum strategies_avail_e {
   REPELLENT_SAMPLING,
   ATTRACTION_SAMPLING,
   TEMPERATURE_SCALING_SAMPLING,
+  REPELLENT_SAMPLING_HEURISTIC,
   RETRIEVE_LOCAL_MINIMA             /* perform gradient walks for and arbitrary set of structures */
 };
 
@@ -64,6 +65,24 @@ struct options_s {
   double temperature_celsius;
   int shift_moves;
   char *parameter_file;
+
+  /* repulsive sampling options*/
+  char *sequence;
+  char *struc1;
+  char *struc2;
+  int granularity;
+  int num_samples;
+  float exploration_factor;
+  float min_exploration_percent;
+  int cluster; //flag
+  char *lmin_file;
+  char *TwoD_file;
+  int non_red; //flag
+  char *non_red_file;
+  int explore_two_neighborhood; //flag
+  int post_filter_two; //flag
+  int ediff_penalty; //flag
+  float mu;
 };
 
 typedef int (xplorer_func)(const char       *rec_id,
@@ -159,6 +178,12 @@ sampling_temperature(const char       *rec_id,
                      struct options_s *opt);
 
 int
+sampling_repellent_heuristic(const char       *rec_id,
+                   const char       *orig_sequence,
+                   char             **structures,
+                   struct options_s *opt);
+
+int
 retrieve_local_minima(const char       *rec_id,
                       const char       *orig_sequence,
                       char             **structures,
@@ -170,7 +195,7 @@ retrieve_local_minima(const char       *rec_id,
 **/
 
 
-#define NUM_STRATEGIES    11
+#define NUM_STRATEGIES    12
 
 static strategies known_strategies[NUM_STRATEGIES] = {
   /* code, function, name */
@@ -223,6 +248,11 @@ static strategies known_strategies[NUM_STRATEGIES] = {
     TEMPERATURE_SCALING_SAMPLING,
     &sampling_temperature,
     "Temperature Scaling Sampling Scheme"
+  },
+  {
+    REPELLENT_SAMPLING_HEURISTIC,
+    &sampling_repellent_heuristic,
+    "Repellent Sampling Heuristic"
   },
   {
       RETRIEVE_LOCAL_MINIMA,
@@ -414,6 +444,9 @@ process_arguments(int   argc,
     } else if (!strcmp(m, "RS")) {
       /* Repellant Sampling */
       options->strategy = REPELLENT_SAMPLING;
+    } else if (!strcmp(m, "RSH")) {
+      /* Repellant Sampling Heuristic*/
+      options->strategy = REPELLENT_SAMPLING_HEURISTIC;
     } else if (!strcmp(m, "RL")) {
       options->strategy = RETRIEVE_LOCAL_MINIMA;
     }
@@ -486,6 +519,57 @@ process_arguments(int   argc,
         j                                 += 2;
       }
     }
+  }
+
+  /* repulsive sampling args */
+  if(args_info.sequence_given){
+      options->sequence = args_info.sequence_arg;
+  }
+  if(args_info.struc1_given){
+      options->struc1 = args_info.struc1_arg;
+  }
+  if(args_info.struc2_given){
+      options->struc2 = args_info.struc2_arg;
+  }
+
+  if(args_info.granularity_given){
+      options->granularity = args_info.granularity_arg;
+  }
+  if(args_info.num_samples_given){
+      options->num_samples = args_info.num_samples_arg;
+  }
+  if(args_info.exploration_factor_given){
+      options->exploration_factor = args_info.exploration_factor_arg;
+  }
+  if(args_info.min_exploration_percent_given){
+      options->min_exploration_percent = args_info.min_exploration_percent_arg;
+  }
+  if(args_info.cluster_given){
+      options->cluster = args_info.cluster_flag;
+  }
+  if(args_info.lmin_file_given){
+      options->lmin_file = args_info.lmin_file_arg;
+  }
+  if(args_info.TwoD_file_given){
+      options->TwoD_file = args_info.TwoD_file_arg;
+  }
+  if(args_info.nonred_given){
+      options->non_red = args_info.nonred_flag;
+  }
+  if(args_info.nonred_file_given){
+      options->non_red_file = args_info.nonred_file_arg;
+  }
+  if(args_info.explore_two_neighborhood_given){
+      options->explore_two_neighborhood = args_info.explore_two_neighborhood_flag;
+  }
+  if(args_info.post_filter_two_given){
+      options->post_filter_two = args_info.post_filter_two_flag;
+  }
+  if(args_info.ediff_penalty_given){
+      options->ediff_penalty = args_info.ediff_penalty_flag;
+  }
+  if(args_info.mu_given){
+      options->mu = args_info.mu_arg;
   }
 
   /* free allocated memory of command line data structure */
@@ -961,6 +1045,28 @@ sampling_temperature(const char       *rec_id,
   return 1; /* success */
 }
 
+
+int
+sampling_repellent_heuristic(const char       *rec_id,
+                             const char       *orig_sequence,
+                             char             **structures,
+                             struct options_s *opt){
+    if(strlen(opt->sequence) == 0){
+        fprintf(stderr, "Error: the input sequence is not given!");
+        exit(1);
+    }
+    //if(strlen(opt->sequence) != strlen(opt->struc1) || strlen(opt->sequence) != strlen(opt->struc2)){
+    //    fprintf(stderr, "Error: the input sequence has to have the same length as structure 1 and structure 2!");
+    //    exit(1);
+    //}
+
+    printf("%s\n%s\n%s\n",opt->sequence,opt->struc1,opt->struc2);
+
+    //printf("%s\n",orig_sequence);
+    for(char *s=(char *)structures; s != NULL; s++){
+        printf("%s\n",s);
+    }
+}
 
 int
 retrieve_local_minima(const char       *rec_id,
