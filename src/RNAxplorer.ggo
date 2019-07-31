@@ -23,6 +23,105 @@ option  "verbose" v
 flag
 off
 
+
+section "Repulsive Sampling Options"
+option "sequence" -
+"Input sequence"
+string
+default=""
+optional
+
+option "struc1" -
+"Input structure 1"
+string
+default=""
+optional
+
+option "struc2" -
+"Input structure 2"
+string
+default=""
+optional
+
+option "granularity" -
+"Granularity, i.e. number of samples after which distortion checks are performed"
+int
+default="1"
+optional
+
+
+option "num-samples" n
+"Number of samples per iteration"
+int
+default="1"
+optional
+
+
+option "exploration-factor" f
+"Exploration factor"
+float
+default="1"
+optional
+
+
+option "min-exploration-percent" -
+"Minimum exploration percentage before adding new repelled structures"
+float
+default="1"
+optional
+
+
+option "cluster" -
+"Cluster resulting local minima to reduce effective size"
+flag
+off
+
+option "lmin-file" -
+"Output filename for local minima"
+string
+default=""
+optional
+
+option "TwoD-file" -
+"Output filename for pseudo-2D file"
+string
+default=""
+optional
+
+option "nonred" -
+"Do sampling with non-redundant pbacktrack"
+flag
+off
+
+option "nonred-file" -
+"Input filename for nonredundant samples"
+string
+default=""
+optional
+
+option "explore-two-neighborhood" 2
+"Explore 2-Neighborhood of local minima, i.e. eliminate shallow minima"
+flag
+off
+
+option "post-filter-two" -
+"Post processing Filter local minima according to 2-Neighborhood, i.e. eliminate shallow minima"
+flag
+off
+
+option "ediff-penalty" -
+"Use energy difference instead of kT for penalty"
+flag
+off
+
+option "mu" -
+"proportion factor used to decide whether sampling round was sufficient"
+float
+default="0.1"
+optional
+
+
+
 section "Algorithms"
 sectiondesc="Select additional algorithms which should be included in the calculations.\n\n"
 option "method" M
