@@ -132,6 +132,8 @@ details="Available options are:\n GW        Gradient Walk             (default)\
  DB-MFE    Distance based MFE structure\n             meshpoints\n\
  TRATES    Transition rate computation\n
  SM        Stochastic sampling method with 2D mapping (activate distortion with -e\"N\").\n
+ RS        Repellant or Attraction sampling\n
+ RSH       Repellant sampling heuristic\n
  RL        Retrieve local minima. Standard input should be a sequence and a set of secondary structures (one per line).\n\\n"
 string
 typestr="<method>"
