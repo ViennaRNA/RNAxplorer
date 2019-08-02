@@ -12,6 +12,8 @@
 #include <ViennaRNA/landscape/move.h>
 #include <ViennaRNA/landscape/walk.h>
 #include <ViennaRNA/landscape/neighbor.h>
+#include <ViennaRNA/boltzmann_sampling.h>
+#include <ViennaRNA/part_func.h>
 
 #include "RNAwalk.h"
 #include "meshpoint.h"
@@ -87,6 +89,7 @@ struct options_s {
   int post_filter_two; //flag
   int ediff_penalty; //flag
   float mu;
+  int verbose;
 };
 
 typedef int (xplorer_func)(const char       *rec_id,
@@ -329,6 +332,9 @@ main(int  argc,
         if(read_fasta_records == 0){
             vrna_message_input_seq("Input at least one valid fasta record! (a header line '> header' and a sequence line (upper or lower case) followed by structures)");
         }
+        free(rec_sequence);
+        free(rec_id);
+        free(rec_rest);
         break;
     }
 
@@ -352,6 +358,7 @@ main(int  argc,
 
     free(rec_sequence);
     free(rec_id);
+    free(rec_rest);
 
     /* free the rest of current dataset */
     if (structures) {
@@ -370,6 +377,7 @@ main(int  argc,
   free(options->sequence);
   free(options->struc1);
   free(options->struc2);
+  free(options);
 
   return EXIT_SUCCESS;
 }
@@ -564,9 +572,7 @@ process_arguments(int   argc,
   if(args_info.min_exploration_percent_given){
       options->min_exploration_percent = args_info.min_exploration_percent_arg;
   }
-  if(args_info.cluster_given){
-      options->cluster = args_info.cluster_flag;
-  }
+  options->cluster = args_info.cluster_flag;
   if(args_info.lmin_file_given){
       options->lmin_file = vrna_alloc(strlen(args_info.lmin_file_arg)+1);
       strcpy(options->lmin_file, args_info.lmin_file_arg);
@@ -575,26 +581,19 @@ process_arguments(int   argc,
       options->TwoD_file = vrna_alloc(strlen(args_info.TwoD_file_arg)+1);
       strcpy(options->TwoD_file, args_info.TwoD_file_arg);
   }
-  if(args_info.nonred_given){
-      options->non_red = args_info.nonred_flag;
-  }
+  options->non_red = args_info.nonred_flag;
   if(args_info.nonred_file_given){
       options->non_red_file = vrna_alloc(strlen(args_info.nonred_file_arg)+1);
       strcpy(options->non_red_file, args_info.nonred_file_arg);
   }
-  if(args_info.explore_two_neighborhood_given){
-      options->explore_two_neighborhood = args_info.explore_two_neighborhood_flag;
-  }
-  if(args_info.post_filter_two_given){
-      options->post_filter_two = args_info.post_filter_two_flag;
-  }
-  if(args_info.ediff_penalty_given){
-      options->ediff_penalty = args_info.ediff_penalty_flag;
-  }
+  options->explore_two_neighborhood = args_info.explore_two_neighborhood_flag;
+  options->post_filter_two = args_info.post_filter_two_flag;
+  options->ediff_penalty = args_info.ediff_penalty_flag;
+
   if(args_info.mu_given){
       options->mu = args_info.mu_arg;
   }
-
+  options->verbose = args_info.verbose_flag;
   /* free allocated memory of command line data structure */
   RNAxplorer_cmdline_parser_free(&args_info);
 
@@ -1084,9 +1083,9 @@ hash_function_base_pairs(void           *hash_entry,
                    unsigned long  hashtable_size)
 {
   key_value *kv = (key_value *)hash_entry;
-  unsigned long  hash_value = ((unsigned long)kv->key->pos_5) << 32;
+  unsigned int  hash_value = ((unsigned int)kv->key->pos_5) << 16;
   hash_value = hash_value & kv->key->pos_3;
-  return hash_value;
+  return hash_value % hashtable_size;
 }
 
 
@@ -1157,9 +1156,9 @@ free_hashtable_list(hashtable_list *ht_list)
   free(ht_list->list_weights);
   free(ht_list->list_counts);
 
-  //int i = 0;
-  //for (; i < ht_list->length; i++)
-  //  free(ht_list->list_key_value_pairs[i]);
+  int i = 0;
+  for (; i < ht_list->length; i++)
+    free(ht_list->list_key_value_pairs[i]);
 
   free(ht_list->list_key_value_pairs);
 }
@@ -1265,11 +1264,12 @@ void store_basepair_sc(vrna_fold_compound_t *fc, hashtable_list *data, char *str
 }
 
 short * detect_local_minimum(vrna_fold_compound_t *fc, short *structure_pt){
+    short * result_pt = vrna_ptable_copy(structure_pt);
     // perform gradient walk from sample to determine direct local minimum
     //pt = RNA.IntVector(RNA.ptable(structure))
     //fc->path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
-    vrna_path_gradient(fc, structure_pt, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
-    return structure_pt; //RNA.db_from_ptable(list(pt))
+    vrna_path_gradient(fc, result_pt, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
+    return result_pt; //RNA.db_from_ptable(list(pt))
 }
 
 /**
@@ -1281,8 +1281,8 @@ short * detect_local_minimum(vrna_fold_compound_t *fc, short *structure_pt){
  * @param structure_pt
  * @return
  */
-short * detect_local_minimum_two(vrna_fold_compound_t *fc, short *structure_pt){
-
+char * detect_local_minimum_two(vrna_fold_compound_t *fc, char *structure){
+    short *structure_pt = vrna_ptable(structure);
     short *deepest_neighbor = vrna_ptable_copy(structure_pt);
     int deepest_neighbor_ddG  = 1;
     //pt                    = RNA.IntVector(RNA.ptable(structure))
@@ -1311,77 +1311,532 @@ short * detect_local_minimum_two(vrna_fold_compound_t *fc, short *structure_pt){
     }
     free(neigh);
     if(memcmp(deepest_neighbor, structure_pt, sizeof(short)*(structure_pt[0]+1)) != 0){
-        free(deepest_neighbor);
         deepest_neighbor = detect_local_minimum(fc, deepest_neighbor);
-        return detect_local_minimum_two(fc, deepest_neighbor);
+        char * deepest_neighbor_string = vrna_db_from_ptable(deepest_neighbor);
+        free(deepest_neighbor);
+        return detect_local_minimum_two(fc, deepest_neighbor_string);
     }
     else{
         free(deepest_neighbor);
-        return structure_pt;
+        char *result = vrna_db_from_ptable(structure_pt);
+        free(structure_pt);
+        return result;
     }
 }
 
+typedef struct structure_and_index_{
+    char *structure;
+    int index;
+} structure_and_index;
 
-void reduce_lm_two_neighborhood(vrna_fold_compound_t *fc, short **lm, int verbose /*= False*/){
-//TODO: translate this
-    /*
-    cnt       = 1;
-    cnt_max   = len(lm)
-    lm_remove = list()
-    lm_novel  = dict()
+/* ----------------------------------------------------------------- */
 
-    if verbose:
-        sys.stderr.write("Applying 2-Neighborhood Filter...")
-        sys.stderr.flush()
+/*
+ * --------------------------------------------------------------------
+ * mix -- mix 3 32-bit values reversibly.
+ * For every delta with one or two bits set, and the deltas of all three
+ * high bits or all three low bits, whether the original value of a,b,c
+ * is almost all zero or is uniformly distributed,
+ * If mix() is run forward or backward, at least 32 bits in a,b,c
+ * have at least 1/4 probability of changing.
+ * If mix() is run forward, every bit of c will change between 1/3 and
+ * 2/3 of the time.  (Well, 22/100 and 78/100 for some 2-bit deltas.)
+ * mix() takes 36 machine instructions, but only 18 cycles on a superscalar
+ * machine (like a Pentium or a Sparc).  No faster mixer seems to work,
+ * that's the result of my brute-force search.  There were about 2^^68
+ * hashes to choose from.  I only tested about a billion of those.
+ * --------------------------------------------------------------------
+ */
+#define mix(a, b, c) \
+  { \
+    a -= b; a -= c; a ^= (c >> 13); \
+    b -= c; b -= a; b ^= (a << 8); \
+    c -= a; c -= b; c ^= (b >> 13); \
+    a -= b; a -= c; a ^= (c >> 12);  \
+    b -= c; b -= a; b ^= (a << 16); \
+    c -= a; c -= b; c ^= (b >> 5); \
+    a -= b; a -= c; a ^= (c >> 3);  \
+    b -= c; b -= a; b ^= (a << 10); \
+    c -= a; c -= b; c ^= (b >> 15); \
+  }
 
-    for s in lm:
-        if verbose:
-            sys.stderr.write("\rApplying 2-Neighborhood Filter...%6d / %6d" % (cnt, cnt_max))
-            sys.stderr.flush()
+/*
+ * --------------------------------------------------------------------
+ * hash() -- hash a variable-length key into a 32-bit value
+ * k       : the key (the unaligned variable-length array of bytes)
+ * len     : the length of the key, counting by bytes
+ * initval : can be any 4-byte value
+ * Returns a 32-bit value.  Every bit of the key affects every bit of
+ * the return value.  Every 1-bit and 2-bit delta achieves avalanche.
+ * About 6*len+35 instructions.
+ *
+ * The best hash table sizes are powers of 2.  There is no need to do
+ * mod a prime (mod is sooo slow!).  If you need less than 32 bits,
+ * use a bitmask.  For example, if you need only 10 bits, do
+ * h = (h & hashmask(10));
+ * In which case, the hash table should have hashsize(10) elements.
+ *
+ * If you are hashing n strings (char **)k, do it like this:
+ * for (i=0, h=0; i<n; ++i) h = hash( k[i], len[i], h);
+ *
+ * By Bob Jenkins, 1996.  bob_jenkins@burtleburtle.net.  You may use this
+ * code any way you wish, private, educational, or commercial.  It's free.
+ *
+ * See http://burtleburtle.net/bob/hash/evahash.html
+ * Use for hash table lookup, or anything where one collision in 2^^32 is
+ * acceptable.  Do NOT use for cryptographic purposes.
+ * --------------------------------------------------------------------
+ */
+unsigned int
+ht_db_hash_func_strings(void           *x,
+                     unsigned long  hashtable_size)
+{
+  register unsigned char  *k;           /* the key */
+  register unsigned int   length;       /* the length of the key */
+  register unsigned int   initval = 0;  /* the previous hash, or an arbitrary value */
+  register unsigned int   a, b, c, len;
 
-        ss = detect_local_minimum_two(fc, s)
-        if s != ss:
-            # store structure for removal
-            lm_remove.append(s)
-            if ss not in lm:
-                # store structure for novel insertion
-                if ss not in lm_novel:
-                    lm_novel[ss] = { 'count' : lm[s]['count'], 'energy' : fc.eval_structure(ss) }
-                else:
-                    lm_novel[ss]['count'] = lm_novel[ss]['count'] + lm[s]['count']
-            else:
-                # update current minima list
-                lm[ss]['count'] = lm[ss]['count'] + lm[s]['count']
+  /* Set up the internal state */
+  k   = ((structure_and_index *)x)->structure;
+  len = length = (unsigned int)strlen(k);
+  a   = b = 0x9e3779b9; /* the golden ratio; an arbitrary value */
+  c   = initval;        /* the previous hash value */
 
-        cnt = cnt + 1
+  /*---------------------------------------- handle most of the key */
+  while (len >= 12) {
+    a +=
+      (k[0] + ((unsigned int)k[1] << 8) + ((unsigned int)k[2] << 16) + ((unsigned int)k[3] << 24));
+    b +=
+      (k[4] + ((unsigned int)k[5] << 8) + ((unsigned int)k[6] << 16) + ((unsigned int)k[7] << 24));
+    c +=
+      (k[8] + ((unsigned int)k[9] << 8) + ((unsigned int)k[10] << 16) +
+       ((unsigned int)k[11] << 24));
+    mix(a, b, c);
+    k   += 12;
+    len -= 12;
+  }
 
-    # remove obsolete local minima
-    for a in lm_remove:
-        del lm[a]
-
-    # add newly detected local minima
-    lm.update(lm_novel)
-
-    if verbose:
-        sys.stderr.write("\rApplying 2-Neighborhood Filter...done             \n")
-  */
+  /*------------------------------------- handle the last 11 bytes */
+  c += length;
+  switch (len) {
+    /* all the case statements fall through */
+    case 11:
+      c += ((unsigned int)k[10] << 24);
+    case 10:
+      c += ((unsigned int)k[9] << 16);
+    case 9:
+      c += ((unsigned int)k[8] << 8);
+    /* the first byte of c is reserved for the length */
+    case 8:
+      b += ((unsigned int)k[7] << 24);
+    case 7:
+      b += ((unsigned int)k[6] << 16);
+    case 6:
+      b += ((unsigned int)k[5] << 8);
+    case 5:
+      b += k[4];
+    case 4:
+      a += ((unsigned int)k[3] << 24);
+    case 3:
+      a += ((unsigned int)k[2] << 16);
+    case 2:
+      a += ((unsigned int)k[1] << 8);
+    case 1:
+      a += k[0];
+      /* case 0: nothing left to add */
+  }
+  mix(a, b, c);
+  /*-------------------------------------------- report the result */
+  return c % hashtable_size;
 }
 
-short ** generate_samples(vrna_fold_compound_t *fc, int number, int non_redundant /*=False */){
-    //samples = list()
-    short **samples;
+
+/* ----------------------------------------------------------------- */
+int
+ht_db_comp_strings(void  *x,
+                void  *y)
+{
+  return strcmp(((structure_and_index *)x)->structure,
+                ((structure_and_index *)y)->structure);
+}
+
+
+int
+ht_db_free_entry_strings(void *hash_entry)
+{
+    if(hash_entry){
+        if(((structure_and_index *)hash_entry)->structure)
+            free(((structure_and_index *)hash_entry)->structure);
+    }
+  return 0;
+}
+
+
+static vrna_hash_table_t
+create_string_hashtable(int hashbits)
+{
+  vrna_callback_ht_free_entry       *my_free          = ht_db_free_entry_strings;
+  vrna_callback_ht_compare_entries  *my_comparison    = ht_db_comp_strings;
+  vrna_callback_ht_hash_function    *my_hash_function = ht_db_hash_func_strings;
+  vrna_hash_table_t                 ht                = vrna_ht_init(hashbits,
+                                                                     my_comparison,
+                                                                     my_hash_function,
+                                                                     my_free);
+
+  return ht;
+}
+
+typedef struct hashtable_list_strings_ {
+  unsigned long     length;
+  unsigned long     allocated_size;
+  int        *list_counts;
+  float        *list_energies;
+  structure_and_index         **list_key_value_pairs; // structure and index
+  vrna_hash_table_t ht_pairs; // lookup table;
+} hashtable_list_strings;
+
+static hashtable_list_strings
+create_hashtable_list_strings(int hashbits)
+{
+  hashtable_list_strings ht_list;
+
+  ht_list.allocated_size          = 10;
+  ht_list.length                  = 0;
+  ht_list.list_counts    = vrna_alloc(sizeof(int) * ht_list.allocated_size);
+  ht_list.list_energies    = vrna_alloc(sizeof(float) * ht_list.allocated_size);
+  ht_list.list_key_value_pairs    = vrna_alloc(sizeof(structure_and_index *) * ht_list.allocated_size);
+  ht_list.ht_pairs         = create_string_hashtable(hashbits);
+  return ht_list;
+}
+
+
+static
+void
+free_hashtable_list_strings(hashtable_list_strings *ht_list)
+{
+    if(ht_list){
+      vrna_ht_free(ht_list->ht_pairs);
+      free(ht_list->list_counts);
+      free(ht_list->list_energies);
+
+      int i = 0;
+      for (; i < ht_list->length; i++)
+        free(ht_list->list_key_value_pairs[i]);
+
+      free(ht_list->list_key_value_pairs);
+    }
+}
+
+static
+void
+hashtable_list_strings_add_structure_and_count(hashtable_list_strings *htl, short *pt_structure, float energy, int count)
+{
+  if (htl->ht_pairs != NULL) {
+    structure_and_index to_check;
+    to_check.structure = vrna_db_from_ptable(pt_structure);
+    //to_check->value = 0; //not checked anyways --> not set
+
+    //to_check.key = energy;
+    //to_check.value = count;
+    structure_and_index *lookup_result = NULL;
+    lookup_result = vrna_ht_get(htl->ht_pairs, (void *)&to_check);
+    if (lookup_result == NULL) {
+      //value is not in list.
+      if (htl->length >= htl->allocated_size) {
+        htl->allocated_size           += 10;
+        htl->list_counts  =
+          vrna_realloc(htl->list_counts, sizeof(int) * htl->allocated_size);
+        htl->list_energies  =
+          vrna_realloc(htl->list_energies, sizeof(float) * htl->allocated_size);
+        htl->list_key_value_pairs = vrna_realloc(htl->list_key_value_pairs,
+                                                 sizeof(structure_and_index *) * htl->allocated_size);
+      }
+
+      int           list_index = htl->length;
+      htl->list_counts[list_index]  = count;
+      htl->list_energies[list_index]  = energy;
+      structure_and_index *to_insert = vrna_alloc(sizeof(structure_and_index));
+      to_insert->structure = vrna_db_from_ptable(pt_structure);
+      to_insert->index = list_index;
+      htl->list_key_value_pairs[list_index] = to_insert;
+      htl->length++;
+      int           res         = vrna_ht_insert(htl->ht_pairs, (void *)to_insert);
+      if (res != 0)
+        fprintf(stderr, "dos.c: hash table insert failed!");
+    } else {
+      // the energy-index pair is already in the list.
+      int list_index = lookup_result->index;
+      htl->list_counts[list_index] += count;
+    }
+    free(to_check.structure);
+  }
+}
+
+void reduce_lm_two_neighborhood(vrna_fold_compound_t *fc, hashtable_list_strings *lm, int verbose /*= False*/){
+    int cnt       = 1;
+    int cnt_max   = (int)lm->length; //len(lm)
+    int lm_remove_allocated = 10;
+    int lm_remove_length = 0;
+    int* lm_remove = vrna_alloc(sizeof(int)*(lm_remove_allocated)); // = list()
+    hashtable_list_strings lm_novel = create_hashtable_list_strings(13); //  = dict()
+
+    if(verbose == 1){
+        fprintf(stderr, "Applying 2-Neighborhood Filter...\n");
+    }
+    int i;
+    for(i=0; lm->length; i++){ //s in lm:
+        char *s = lm->list_key_value_pairs[i]->structure;
+        int s_count = lm->list_counts[i];
+        if(verbose){
+            fprintf(stderr, "\rApplying 2-Neighborhood Filter...%6d / %6d\n", cnt, cnt_max);
+        }
+        char *ss = detect_local_minimum_two(fc, s);
+        if(s != ss){
+            // store structure for removal
+            //lm_remove.append(s)
+            if(lm_remove_length >= lm_remove_allocated){
+                lm_remove_allocated += 100;
+                lm_remove = vrna_realloc(lm_remove, sizeof(int)*lm_remove_allocated);
+            }
+            lm_remove[lm_remove_length++] = i;
+            //if ss not in lm:
+            structure_and_index to_check;
+            to_check.structure = ss;
+            structure_and_index *lookup_result = NULL;
+            lookup_result = vrna_ht_get(lm->ht_pairs, (void *)&to_check);
+            if (lookup_result == NULL) {
+              //value is not in list.
+                // store structure for novel insertion
+                //if ss not in lm_novel:
+                lookup_result = vrna_ht_get(lm_novel.ht_pairs, (void *)&to_check);
+                if (lookup_result == NULL) {
+                    //lm_novel[ss] = { 'count' : lm[s]['count'], 'energy' : fc.eval_structure(ss) }
+                    float energy_kcal = vrna_eval_structure(fc,ss);
+                    int count = 1;
+                    short *ss_pt = vrna_ptable(ss);
+                    hashtable_list_strings_add_structure_and_count(&lm_novel, ss_pt, energy_kcal, count);
+                    free(ss_pt);
+                }
+                else{
+                    int lm_ss_count = lm_novel.list_counts[lookup_result->index];
+                    //lm_novel[ss]['count'] = lm_novel[ss]['count'] + lm[s]['count']
+                    lm_novel.list_counts[lookup_result->index] = lm_ss_count + s_count;
+                }
+            }
+            else{
+                // update current minima list
+                //lm[ss]['count'] = lm[ss]['count'] + lm[s]['count']
+                lm->list_counts[lookup_result->index] += s_count;
+            }
+        }
+        cnt = cnt + 1;
+    }
+    // remove obsolete local minima
+    //for a in lm_remove:
+    //    del lm[a]
+    for(i = 0; i < lm_remove_length; i++){
+        int lm_index_to_remove = lm_remove[i];
+        //remove at index and fill the empty locations in the subsequent merge process.
+        lm->list_counts[lm_index_to_remove] = -1;
+        lm->list_energies[lm_index_to_remove] = -1;
+        structure_and_index* key_to_remove = lm->list_key_value_pairs[lm_index_to_remove];
+        vrna_ht_remove(lm->ht_pairs, (void*)key_to_remove);
+        free(key_to_remove->structure);
+        free(key_to_remove);
+        lm->list_key_value_pairs[lm_index_to_remove] = NULL;
+    }
+    free(lm_remove);
+
+    // add newly detected local minima
+    //lm.update(lm_novel)
+    //TODO: merge lm and lm_novel
+
+    //get empty places
+    int length_empty_places = 0;
+    int allocated_empty_places = 10;
+    int *lm_empty_places = vrna_alloc(sizeof(int)*allocated_empty_places);
+    for(i=0; i < lm->length; i++){
+        if(lm->list_key_value_pairs[i] == NULL){
+            if(length_empty_places >= allocated_empty_places){
+                allocated_empty_places += 100;
+                lm_empty_places = vrna_realloc(lm_empty_places, sizeof(int)*allocated_empty_places);
+            }
+            lm_empty_places[length_empty_places++] = i;
+        }
+    }
+
+    int insert_index = 0;
+    for(i=0; i < lm_novel.length; i++){
+        structure_and_index *to_check = lm_novel.list_key_value_pairs[i];
+        structure_and_index *lookup_result = vrna_ht_get(lm->ht_pairs, (void *)to_check);
+        if (lookup_result == NULL) {
+            if(insert_index < length_empty_places){
+                int empty_place = lm_empty_places[insert_index];
+                lm->list_counts[empty_place] = lm_novel.list_counts[i];
+                lm->list_energies[empty_place] = lm_novel.list_energies[i];
+                structure_and_index *to_insert = vrna_alloc(sizeof(structure_and_index));
+                to_insert->structure = vrna_alloc(sizeof(char)*(strlen(lm_novel.list_key_value_pairs[i]->structure)+1));
+                strcpy(to_insert->structure, lm_novel.list_key_value_pairs[i]->structure);
+                to_insert->index = empty_place;
+                lm->list_key_value_pairs[empty_place] = to_insert;
+            }
+            else{
+                //insert at the end
+                short *pt = vrna_ptable(lm_novel.list_key_value_pairs[i]->structure);
+                float energy = lm_novel.list_energies[i];
+                int count = lm_novel.list_counts[i];
+                hashtable_list_strings_add_structure_and_count(lm,pt, energy, count);
+                free(pt);
+            }
+            insert_index++;
+        }
+    }
+    free(lm_empty_places);
+    free_hashtable_list_strings(&lm_novel);
+
+    if(verbose){
+       fprintf(stderr, "\rApplying 2-Neighborhood Filter...done             \n");
+    }
+}
+
+char ** generate_samples(vrna_fold_compound_t *fc, int number, int non_redundant /*=False */){
+    char **samples;
 
     if(non_redundant){
-        //TODO: samples = fc.pbacktrack_nr(number)
+        samples = vrna_pbacktrack_num(fc, number, VRNA_PBACKTRACK_NON_REDUNDANT);
     }
     else{
+        samples = vrna_alloc(sizeof(char*)*(number+1));
         int i;
         for(i =0; i < number; i++){
-            //TODO samples.append(fc.pbacktrack())
+            char *structure = vrna_pbacktrack(fc);
+            samples[i] = structure;
         }
+        samples[number] = NULL;
     }
     return samples;
 }
+
+
+int find_max_count(hashtable_list_strings *htl){
+    int max_count = 0;
+    int res_index = 0;
+    int i;
+    for(i=0; i < (int)htl->length; i++){
+        if(htl->list_key_value_pairs[i] != NULL && htl->list_counts[i] > max_count){
+            max_count = htl->list_counts[i];
+            res_index = i;
+        }
+    }
+    return res_index;
+}
+
+int find_min_count(hashtable_list_strings *htl){
+    int min_count = 0;
+    int res_index = 0;
+    int i;
+    for(i=0; i < (int)htl->length; i++){
+        if(htl->list_key_value_pairs[i] != NULL && htl->list_counts[i] < min_count){
+            min_count = htl->list_counts[i];
+            res_index = i;
+        }
+    }
+    return res_index;
+}
+
+int find_max_energy(hashtable_list_strings *htl){
+    float max_energy = 0;
+    int res_index = 0;
+    int i;
+    for(i=0; i < (int)htl->length; i++){
+        if(htl->list_key_value_pairs[i] != NULL && htl->list_energies[i] > max_energy){
+            max_energy = htl->list_energies[i];
+            res_index = i;
+        }
+    }
+    return res_index;
+}
+
+int find_min_energy(hashtable_list_strings *htl){
+    float min_energy = 0;
+    int res_index = 0;
+    int i;
+    for(i=0; i < (int)htl->length; i++){
+        if(htl->list_key_value_pairs[i] != NULL && htl->list_energies[i] < min_energy){
+            min_energy = htl->list_energies[i];
+            res_index = i;
+        }
+    }
+    return res_index;
+}
+
+void RNAlocmin_output(char *sequence, hashtable_list_strings htl, char *filename /*= None*/){
+    FILE *f;
+    if(filename)
+        f = fopen(filename, "w");
+    else
+        f = stdout;
+
+    fprintf(f, "     %s\n", sequence);
+    //for i,s in enumerate(sorted(m.keys(), key=lambda x: m[x]['energy'])):
+    int i;
+    for(i=0; i < (int)htl.length; i++){
+        char *s = htl.list_key_value_pairs[i]->structure;
+        int count = htl.list_counts[i];
+        float energy = htl.list_energies[i];
+        fprintf(f, "%4d %s %6.2f %6d\n", i, s, energy, count);
+    }
+    if(filename)
+        fclose(f);
+}
+
+void RNA2Dfold_output(char *sequence, char *s_mfe, float mfe, char *s1, char *s2, hashtable_list_strings m, char *filename /*= None*/){
+    int n         =strlen(sequence); //= len(sequence)
+    //int *distances = vrna_alloc(sizeof(int)*n*n); //= [ [ None for j in range(0, n) ] for i in range(0, n) ];
+    char **structures = vrna_alloc(sizeof(char*)*n*n);
+    float *energies = vrna_alloc(sizeof(float)*n*n);
+    float inf = 1000000;
+    int i;
+    for(i=0; i < n*n; i++)
+        energies[i] = inf;
+
+    //for s in m.keys():
+    for(i=0; i < m.length; i++){
+        if(m.list_key_value_pairs[i] == NULL)
+            continue;
+        int d1 = vrna_bp_distance(s1, m.list_key_value_pairs[i]->structure);
+        int d2 = vrna_bp_distance(s2, m.list_key_value_pairs[i]->structure);
+        float energy = m.list_energies[i];
+        int index = d1*n + d2;
+        if(energies[index] != inf || energy < energies[index]){
+            energies[index] = energy;
+            structures[index] = m.list_key_value_pairs[i]->structure;
+        }
+
+        //if not distances[d1][d2] or m[s]['energy'] < distances[d1][d2]['e']:
+        //    distances[d1][d2] = { 's': s, 'e': m[s]['energy'] }
+    }
+    FILE *f;
+    if(filename)
+        f = fopen(filename, "w");
+    else
+        f = stdout;
+
+    fprintf(f, "%s\n%s (%6.2f)\n%s\n%s\n\n\n", sequence, s_mfe, mfe, s1, s2);
+
+    int j;
+    for(i=0; i<n; i++){ // i in range(0, n):
+        for(j=0; j < n; j++){ // j in range(0, n):
+            int index = i*n + j;
+            if(structures[index] != NULL)  //distances[i][j] != None:
+                fprintf(f, "%d\t%d\ta\tb\tc\t%6.2f\td\t%s\n", i, j, energies[index], structures[index]);
+
+        }
+    }
+    if(filename)
+        fclose(f);
+}
+
 
 int
 sampling_repellent_heuristic(const char       *rec_id,
@@ -1410,7 +1865,7 @@ sampling_repellent_heuristic(const char       *rec_id,
             // count only
         }
         if(i>=1 && strlen(orig_sequence) == strlen(structures[0]) && strlen(orig_sequence) == strlen(structures[1])){
-            sequence = vrna_alloc(strlen(orig_sequence));
+            sequence = vrna_alloc(sizeof(char)*(strlen(orig_sequence)+1));
             strcpy(sequence, orig_sequence);
             structure1 = structures[0];
             structure2 = structures[1];
@@ -1418,7 +1873,7 @@ sampling_repellent_heuristic(const char       *rec_id,
     }
     if(sequence == NULL && opt->sequence != NULL && opt->struc1 != NULL && opt->struc1 != NULL &&
             strlen(opt->sequence) == strlen(opt->struc1) && strlen(orig_sequence) == strlen(opt->struc2)){
-        sequence = vrna_alloc(strlen(opt->sequence));
+        sequence = vrna_alloc(sizeof(char)*(strlen(opt->sequence)+1));
         strcpy(sequence, opt->sequence);
         structure1 = opt->struc1;
         structure2 = opt->struc2;
@@ -1431,353 +1886,409 @@ sampling_repellent_heuristic(const char       *rec_id,
 
 
     //struct sc_data *my_sc_sdata;
-    //my_sc_sdata.base_pairs = create_hashtable(27);
-    hashtable_list sc_data = create_hashtable_list(27);
-
-/*
-
-sc_data = {
-  'base_pairs': {},
-  'weights': {},
-}
+    //my_sc_sdata.base_pairs = create_hashtable(13);
+    hashtable_list sc_data = create_hashtable_list(13);
 
 
-def store_basepair_sc(fc, data, structure, weight, distance_based = False):
-    if distance_based:
-        return
-    else:
-        pt = RNA.ptable(structure)
-        # count number of pairs in structure to repell
-        cnt = 0
-        for i in range(1, len(pt)):
-            if pt[i] > i:
-                cnt = cnt + 1
 
-        if cnt > 0:
-            weight = weight / cnt
+    /*
+    Do main stuff
+    */
+    // init random number generator in RNAlib
+    vrna_init_rand();
 
-        # add repulsion
-        for i in range(1, len(pt)):
-            if pt[i] > i:
-                key = (i, pt[i])
-                if key not in data['base_pairs']:
-                    data['base_pairs'][key] = 1
-                    data['weights'][key] = weight
+    // prepare RNAlib fold_compound
+    vrna_md_t md;
+    vrna_md_set_default(&md);
+    md.uniq_ML = 1;
+    md.compute_bpp = 0;
+
+    vrna_exp_param_t *exp_param = vrna_exp_params(&md);
+    double kT =  exp_param->kT;
+
+    vrna_fold_compound_t *fc = vrna_fold_compound(sequence, &md, VRNA_OPTION_DEFAULT | VRNA_OPTION_MFE | VRNA_OPTION_PF);
+    vrna_fold_compound_t *fc_base = vrna_fold_compound(sequence, &md, VRNA_OPTION_DEFAULT | VRNA_OPTION_MFE | VRNA_OPTION_PF);
+
+    // compute MFE structure
+    char *ss_mfe = vrna_alloc(sizeof(char)*(strlen(sequence)+1));
+    float mfe = vrna_mfe(fc,ss_mfe);
+    vrna_pf(fc,ss_mfe);
+
+    hashtable_list_strings minima = create_hashtable_list_strings(13);// = dict()
+
+    int sample_list_length=0;
+    int sample_list_allocated = 100;
+    char **sample_list = vrna_alloc(sizeof(char *) * sample_list_allocated); // = []
+
+    hashtable_list_strings pending_lm = create_hashtable_list_strings(13);// = dict()
+    int num_sc = 1;
+
+    int num_iter      = (int)(ceil(opt->num_samples / (float)opt->granularity));
+    int samples_left  = opt->num_samples;
+
+    int current_num_samples = 0;
+    int it;
+    for(it = 0; it < num_iter; it++){ // in range(0, num_iter):
+        // determine number of samples for this round
+        // usually, this is 'granularity'
+        if(samples_left < opt->granularity)
+            current_num_samples = samples_left;
+        else
+            current_num_samples = opt->granularity;
+
+        samples_left = samples_left - current_num_samples;
+
+        // generate samples through stocastic backtracing
+        char **sample_set = generate_samples(fc, current_num_samples, opt->non_red);
+
+        fprintf(stderr, "\rsamples so far: %6d / %6d", opt->num_samples - samples_left, opt->num_samples);
+
+        // store samples of this round to global list of samples
+        //sample_list = sample_list + sample_set;
+        int i;
+        for(i = 0; sample_set[i]; i++){
+            if(sample_list_length >= sample_list_allocated){
+                sample_list_allocated += 1000;
+                sample_list = vrna_realloc(sample_list, sizeof(char*)*sample_list_allocated);
+            }
+            sample_list[sample_list_length++] = sample_set[i];
+        }
+
+        hashtable_list_strings current_lm = create_hashtable_list_strings(13); // = dict()
+
+        // go through list of sampled structures and determine corresponding local minima
+        for(i=0; sample_set[i]; i++){ // s in sample_set:
+            char *s = sample_set[i];
+            short *s_pt = vrna_ptable(s);
+            short *ss = detect_local_minimum(fc_base, s_pt);
+            free(s_pt);
+
+            char *ss_string = vrna_db_from_ptable(ss);
+            structure_and_index to_check;
+            to_check.structure = ss_string;
+            structure_and_index *lookup_result = vrna_ht_get(current_lm.ht_pairs, (void *)&to_check);
+            if (lookup_result == NULL) {
+                float energy_kcal = vrna_eval_structure(fc, ss_string);
+                int count = 1;
+                hashtable_list_strings_add_structure_and_count(&current_lm, ss, energy_kcal, count);
+            }
+            else{
+                int index = lookup_result->index;
+                current_lm.list_counts[index] += 1;
+            }
+            /*
+            if ss not in current_lm:
+                current_lm[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
+            else:
+                current_lm[ss]['count'] = current_lm[ss]['count'] + 1
+            */
+            free(ss_string);
+            free(ss);
+        }
+
+        // explore the 2-neighborhood of current local minima to reduce total number of local minima
+        if(opt->explore_two_neighborhood)
+            reduce_lm_two_neighborhood(fc_base, &current_lm, opt->verbose);
+
+        // transfer local minima obtained in this iteration to list of pending local minima
+        for(i=0; i < (int)current_lm.length; i++){ // ss in current_lm:
+            char *ss_string = current_lm.list_key_value_pairs[i]->structure;
+            structure_and_index to_check;
+            to_check.structure = ss_string;
+            structure_and_index *lookup_result = vrna_ht_get(pending_lm.ht_pairs, (void *)&to_check);
+            if (lookup_result == NULL) {
+                short *ss = vrna_ptable(ss_string);
+                float energy_kcal = current_lm.list_energies[i];
+                int count = current_lm.list_counts[i];
+                hashtable_list_strings_add_structure_and_count(&current_lm, ss, energy_kcal, count);
+            }
+            else{
+                pending_lm.list_counts[lookup_result->index] += current_lm.list_counts[i];
+            }
+            /*
+            if ss not in pending_lm:
+                pending_lm[ss] = current_lm[ss]
+            else:
+                pending_lm[ss]['count'] = pending_lm[ss]['count'] + current_lm[ss]['count']
+            */
+        }
+        free_hashtable_list_strings(&current_lm);
+        //del current_lm
+
+        if(it < num_iter - 1){
+            // find out which local minima we've seen the most in this sampling round
+            int struct_cnt_max_index = find_max_count(&pending_lm); // max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
+            int struct_cnt_min_index = find_min_count(&pending_lm); //min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
+            int struct_en_max_index = find_max_energy(&pending_lm); // max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
+            int struct_en_min_index = find_min_energy(&pending_lm); // min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
+
+            int cnt_once  = 0;
+            int cnt_other = 0;
+
+            //for key, value in sorted(pending_lm.iteritems(), key=lambda (k, v): v['energy']):
+            int i;
+            for(i=0; i < (int)pending_lm.length; i++){
+                if(pending_lm.list_key_value_pairs[i] == NULL)
+                    continue;
+                int count = pending_lm.list_counts[i];
+                if(count == 1)
+                    cnt_once = cnt_once + 1;
+                else
+                    cnt_other = cnt_other + 1;
+
+                // check whether we've seen other local minim way more often than those we've seen just once
+                if(cnt_other > 0 && cnt_once > 0){
+                    if(cnt_once <= (opt->mu * cnt_other)){
+                        float repell_en = 0;
+                        if(opt->ediff_penalty){
+                            //repell_en = kt_fact * (value['energy'] - pending_lm[struct_en_min]['energy'])
+                            float energy = pending_lm.list_energies[i];
+                            float en_min = pending_lm.list_energies[struct_en_min_index];
+                            repell_en = opt->exploration_factor * (energy - en_min);
+                        }
+                        else{
+                            //repell_en = kt_fact * kT / 1000.
+                            repell_en = (float)(opt->exploration_factor * kT / 1000.0);
+                        }
+                        char *struct_cnt_max = pending_lm.list_key_value_pairs[struct_cnt_max_index]->structure;
+                        store_basepair_sc(fc, &sc_data, struct_cnt_max, repell_en, 0);
+
+                        vrna_pf(fc, ss_mfe);
+
+                        //for cmk in pending_lm.keys():
+                        int j;
+                        for(j = 0; j < (int)pending_lm.length; j++){
+                            structure_and_index to_check;
+                            to_check.structure = pending_lm.list_key_value_pairs[i]->structure;
+                            structure_and_index *lookup_result = vrna_ht_get(minima.ht_pairs, (void *)&to_check);
+                            if (lookup_result == NULL) {
+                                int counts = pending_lm.list_counts[i];
+                                float energy = pending_lm.list_energies[i];
+                                short *s_pt = vrna_ptable(to_check.structure);
+                                hashtable_list_strings_add_structure_and_count(&minima, s_pt,energy, counts);
+                            }
+                            else{
+                                minima.list_counts[lookup_result->index] += pending_lm.list_counts[i];
+                            }
+                            /*
+                            if cmk not in minima:
+                                minima[cmk] = pending_lm[cmk]
+                            else:
+                                minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
+                            */
+                        }
+                        if(pending_lm.ht_pairs){
+                            free_hashtable_list_strings(&pending_lm);
+                            pending_lm = create_hashtable_list_strings(13);
+                        }
+                        //pending_lm = dict()
+                        break;
+                    }
+                }
+            }
+        }
+        else{
+            //for cmk in pending_lm.keys():
+            int j;
+            for(j = 0; j < (int)pending_lm.length; j++){
+                structure_and_index to_check;
+                to_check.structure = pending_lm.list_key_value_pairs[i]->structure;
+                structure_and_index *lookup_result = vrna_ht_get(minima.ht_pairs, (void *)&to_check);
+                if (lookup_result == NULL) {
+                    int counts = pending_lm.list_counts[i];
+                    float energy = pending_lm.list_energies[i];
+                    short *s_pt = vrna_ptable(to_check.structure);
+                    hashtable_list_strings_add_structure_and_count(&minima, s_pt,energy, counts);
+                }
+                else{
+                    minima.list_counts[lookup_result->index] += pending_lm.list_counts[i];
+                }
+                /*
+                if cmk not in minima:
+                    minima[cmk] = pending_lm[cmk]
                 else:
-                    data['base_pairs'][key] = data['base_pairs'][key] + 1
-                    data['weights'][key] = data['weights'][key] + weight
+                    minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
+                */
+            }
+            if(pending_lm.ht_pairs)
+                free_hashtable_list_strings(&pending_lm);
+        }
+    }
+    fprintf(stderr," ... done\n");
 
-        # remove previous soft constraints
-        fc.sc_remove()
+    if(opt->post_filter_two)
+        reduce_lm_two_neighborhood(fc_base, &minima, opt->verbose);
 
-        # add latest penalties for base pairs
-        for k in data['weights'].keys():
-            i = k[0]
-            j = k[1]
-            fc.sc_add_bp(i, j, data['weights'][k])
-
-
-def move_apply(structure_in, move):
-    #s_length = structure_in[0]
-    output_structure = list(structure_in)
-    if(move.pos_5 > 0 and move.pos_3 > 0):
-        output_structure[move.pos_5] = move.pos_3
-        output_structure[move.pos_3] = move.pos_5
-    elif(move.pos_5 < 0 and move.pos_3 < 0):
-        output_structure[-move.pos_5] = 0
-        output_structure[-move.pos_3] = 0
-    else:
-        print("Error: shfit moves are not supported")
-    res = output_structure
-    return res
+    if(opt->lmin_file){
+        RNAlocmin_output(sequence, minima, opt->lmin_file);
 
 
-def detect_local_minimum(fc, structure):
-    # perform gradient walk from sample to determine direct local minimum
-    pt = RNA.IntVector(RNA.ptable(structure))
-    fc.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
-    return RNA.db_from_ptable(list(pt))
+        char *sample_file= vrna_alloc(sizeof(char)*1);
+        sample_file[0] = '\n';
+        int rind = 0;
+        char *pch = strrchr(opt->lmin_file, 's');
+        rind = pch - opt->lmin_file;
+
+        //lmin_file.rfind(".")
+        if(pch != NULL){
+            sample_file = strncat(sample_file, opt->lmin_file, rind);
+            sample_file = strncat(sample_file, ".samples", 8);
+        }
+        else{
+            sample_file = strncat(sample_file, opt->lmin_file, strlen(opt->lmin_file));
+            sample_file = strncat(sample_file, ".samples", 8);
+        }
+        FILE *f = fopen(sample_file, "w");
+        fprintf(f, "     %s\n", sequence);
+        int i;
+        for(i=0; sample_list[i]; i++){ // s in sample_list:
+            fprintf(f,"%s\n",sample_list[i]);
+        }
+        fclose(f);
+    }
 
 
-def detect_local_minimum_two(fc, structure):
-    """
-    Take a local minimum and detect nearby local minimum via extended gradient walks.
-    If a lower energy structure within radius 2 is detected (lower than the local minimum
-    of a normal gradient walk), then another gradient walk is applied for the lower structure.
-    """
-    deepest_neighbor      = None
-    deepest_neighbor_ddG  = 1
-    pt                    = RNA.IntVector(RNA.ptable(structure))
-    neigh                 = fc.neighbors(pt, RNA.MOVESET_DELETION | RNA.MOVESET_INSERTION)
+    if(opt->TwoD_file){
+        //(ss, mfe) = fc_base.mfe()
+        char *ss = vrna_alloc(sizeof(char)*(strlen(sequence)+1));
+        float mfe = vrna_mfe(fc_base, ss);
 
-    for nb in neigh:
-        dG_nb   = fc.eval_move_pt(pt, nb.pos_5, nb.pos_3)
-        pt_nb   = RNA.IntVector(move_apply(pt, nb))
-        neigh_2 = fc.neighbors(pt_nb, RNA.MOVESET_DELETION | RNA.MOVESET_INSERTION)
+        RNA2Dfold_output(sequence, ss, mfe, structure1, structure2, minima, opt->TwoD_file);
+    }
 
-        for nb_2 in neigh_2:
-            dG_nb2  = fc.eval_move_pt(pt_nb, nb_2.pos_5, nb_2.pos_3)
-            ddG     = dG_nb + dG_nb2
-            if ddG < 0 and ddG < deepest_neighbor_ddG:
-                deepest_neighbor_ddG  = ddG
-                deepest_neighbor      = move_apply(pt_nb, nb_2)
+    // read a list of sample structures and produce list of local minima for it
+    if(opt->non_red){
+        char *lmin_nonred_file = "local_minima_nonred.txt";
+        int nr_samples_count = 0;
+        int nr_samples_allocated = 100;
+        char **nonredundant_samples = vrna_alloc(sizeof(char*)*nr_samples_allocated); // = []
+        FILE *f = fopen(opt->non_red_file, "r");
+        if (f == NULL){
+            fprintf(stderr, "Error: non-redundant file option has been chose, but no non-redundant file name is given!\n");
+            exit(EXIT_FAILURE);
+        }
+        char * line = NULL;
+        size_t len = 0;
+        ssize_t read;
+        int n_lines = 0;
+        while ((read = getline(&line, &len, f)) != -1) {
+            if (n_lines > 0){
+              //printf("Retrieved line of length %zu:\n", read);
+              //printf("%s", line);
+              char * buf = vrna_alloc(sizeof(char)*(strlen(line)+1));
+              sscanf(line, "%s", buf);
 
-    if deepest_neighbor:
-        deepest_neighbor = detect_local_minimum(fc, RNA.db_from_ptable(deepest_neighbor))
-        return detect_local_minimum_two(fc, deepest_neighbor)
-    else:
-        return structure
+              if(nr_samples_count >= nr_samples_allocated){
+                nr_samples_allocated += 100;
+                nonredundant_samples = vrna_realloc(nonredundant_samples, sizeof(char*)*nr_samples_allocated);
+              }
+              nonredundant_samples[nr_samples_count++] = buf;
+            }
+            n_lines++;
+        }
+        fclose(f);
+        if (line)
+            free(line);
+        //with open(nonredundant_sample_file) as f:
+        //    nonredundant_samples = f.readlines()
+        //nonredundant_samples = [x.strip() for x in nonredundant_samples]
+        //nonredundant_samples.pop(0)
 
+        hashtable_list_strings nonredundant_minima = create_hashtable_list_strings(13); //= dict()
 
-def reduce_lm_two_neighborhood(fc, lm, verbose = False):
-    cnt       = 1;
-    cnt_max   = len(lm)
-    lm_remove = list()
-    lm_novel  = dict()
+        //for s in nonredundant_samples:
+        int i;
+        for(i=0; nonredundant_samples[i]; i++){
+            char *s = nonredundant_samples[i];
+            short *pt =vrna_ptable(s); //= RNA.IntVector(RNA.ptable(s))
+            //fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
+            vrna_path_gradient(fc, pt, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
 
-    if verbose:
-        sys.stderr.write("Applying 2-Neighborhood Filter...")
-        sys.stderr.flush()
+            char *ss = vrna_db_from_ptable(pt); //RNA.db_from_ptable(list(pt))
 
-    for s in lm:
-        if verbose:
-            sys.stderr.write("\rApplying 2-Neighborhood Filter...%6d / %6d" % (cnt, cnt_max))
-            sys.stderr.flush()
-
-        ss = detect_local_minimum_two(fc, s)
-        if s != ss:
-            # store structure for removal
-            lm_remove.append(s)
-            if ss not in lm:
-                # store structure for novel insertion
-                if ss not in lm_novel:
-                    lm_novel[ss] = { 'count' : lm[s]['count'], 'energy' : fc.eval_structure(ss) }
-                else:
-                    lm_novel[ss]['count'] = lm_novel[ss]['count'] + lm[s]['count']
+            structure_and_index to_check;
+            to_check.structure = ss;
+            structure_and_index *lookup_result = vrna_ht_get(nonredundant_minima.ht_pairs, (void *)&to_check);
+            int count = 1;
+            if (lookup_result == NULL) {
+                float energy = vrna_eval_structure(fc,ss);
+                hashtable_list_strings_add_structure_and_count(&nonredundant_minima, pt, energy, count);
+                //new_minima = new_minima + 1;
+            }
+            else{
+                nonredundant_minima.list_counts[lookup_result->index] += 1;
+            }
+            free(pt);
+            /*
+            if ss not in nonredundant_minima:
+                 nonredundant_minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
+                 new_minima = new_minima + 1
             else:
-                # update current minima list
-                lm[ss]['count'] = lm[ss]['count'] + lm[s]['count']
+                 nonredundant_minima[ss]['count'] = nonredundant_minima[ss]['count'] + 1
+            */
+        }
+        //f = open(lmin_nonred_file, 'w')
+        f =fopen(lmin_nonred_file, "w");
+        //f.write("     %s\n" % sequence)
+        fprintf(f, "     %s\n", sequence);
 
-        cnt = cnt + 1
+        //for i,s in enumerate(sorted(nonredundant_minima.keys(), key=lambda x: nonredundant_minima[x]['energy'])):
+        //    f.write("%4d %s %6.2f %6d\n" % (i, s, nonredundant_minima[s]['energy'], nonredundant_minima[s]['count']))
+        //f.close()
+        for(i=0; i < nonredundant_minima.length; i++){
+            char *s = nonredundant_minima.list_key_value_pairs[i]->structure;
+            int count = nonredundant_minima.list_counts[i];
+            float energy = nonredundant_minima.list_energies[i];
+            fprintf(f, "%4d %s %6.2f %6d\n", i, s, energy, count);
+        }
+        fclose(f);
 
-    # remove obsolete local minima
-    for a in lm_remove:
-        del lm[a]
+        if(opt->TwoD_file){
+            //distances = [ [ None for j in range(0, 200) ] for i in range(0, 200) ];
+            int n = strlen(sequence);
+            float *energies = vrna_alloc(sizeof(float)*n*n);
+            int inf = 1000000;
+            int i;
+            for(i=0; i < n*n; i++)
+                energies[i] = inf;
 
-    # add newly detected local minima
-    lm.update(lm_novel)
+            for(i=0; i < nonredundant_minima.length; i++){
+                char *s = nonredundant_minima.list_key_value_pairs[i]->structure;
+                int d1 = vrna_bp_distance(structure1, s);
+                int d2 = vrna_bp_distance(structure2, s);
+                int index = d1 * n + d2;
+                int energy = nonredundant_minima.list_energies[i];
+                if(energies[index] != inf || energy < energies[index])
+                    energies[index] = energy;
 
-    if verbose:
-        sys.stderr.write("\rApplying 2-Neighborhood Filter...done             \n")
-
-
-def generate_samples(fc, number, non_redundant=False):
-    samples = list()
-
-    if non_redundant:
-        samples = fc.pbacktrack_nr(number)
-    else:
-        for i in range(0, number):
-            samples.append(fc.pbacktrack())
-
-    return samples
-
-
-"""
-Do main stuff
-"""
-# init random number generator in RNAlib
-RNA.init_rand()
-
-# prepare RNAlib fold_compound
-md = RNA.md()
-md.uniq_ML = 1
-md.compute_bpp = 0
-
-kT = RNA.exp_param(md).kT
-
-fc = RNA.fold_compound(sequence, md)
-fc_base = RNA.fold_compound(sequence, md)
-
-# compute MFE structure
-(ss, mfe) = fc.mfe()
-fc.pf()
-
-
-minima = dict()
-sample_list = []
-
-pending_lm = dict()
-num_sc = 1
-
-num_iter      = int(math.ceil(float(num_samples) / float(granularity)))
-samples_left  = num_samples
-
-for it in range(0, num_iter):
-    # determine number of samples for this round
-    # usually, this is 'granularity'
-    if samples_left < granularity:
-        current_num_samples = samples_left
-    else:
-        current_num_samples = granularity
-
-    samples_left = samples_left - current_num_samples
-
-    # generate samples through stocastic backtracing
-    sample_set = generate_samples(fc, current_num_samples, nonredundant)
-
-    sys.stderr.write("\rsamples so far: %6d / %6d" % (num_samples - samples_left, num_samples))
-    sys.stderr.flush()
-
-    # store samples of this round to global list of samples
-    sample_list = sample_list + sample_set
-
-    current_lm = dict()
-
-    # go through list of sampled structures and determine corresponding local minima
-    for s in sample_set:
-        ss = detect_local_minimum(fc_base, s)
-
-        if ss not in current_lm:
-            current_lm[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
-        else:
-            current_lm[ss]['count'] = current_lm[ss]['count'] + 1
-
-    # explore the 2-neighborhood of current local minima to reduce total number of local minima
-    if explore_two_neighborhood:
-        reduce_lm_two_neighborhood(fc_base, current_lm, verbose)
-
-    # transfer local minima obtained in this iteration to list of pending local minima
-    for ss in current_lm:
-        if ss not in pending_lm:
-            pending_lm[ss] = current_lm[ss]
-        else:
-            pending_lm[ss]['count'] = pending_lm[ss]['count'] + current_lm[ss]['count']
-
-    del current_lm
-
-    if it < num_iter - 1:
-        # find out which local minima we've seen the most in this sampling round
-        struct_cnt_max = max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
-        struct_cnt_min = min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
-        struct_en_max = max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
-        struct_en_min = min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
-
-        cnt_once  = 0
-        cnt_other = 0
-
-        for key, value in sorted(pending_lm.iteritems(), key=lambda (k, v): v['energy']):
-            if value['count'] == 1:
-                cnt_once = cnt_once + 1
-            else:
-                cnt_other = cnt_other + 1
-
-            # check whether we've seen other local minim way more often than those we've seen just once
-            if cnt_other > 0 and cnt_once > 0:
-                if cnt_once <= (mu * cnt_other):
-                    if ediff_penalty:
-                        repell_en = kt_fact * (value['energy'] - pending_lm[struct_en_min]['energy'])
-                    else:
-                        repell_en = kt_fact * kT / 1000.
-
-                    store_basepair_sc(fc, sc_data, struct_cnt_max, repell_en)
-
-                    fc.pf()
-
-                    for cmk in pending_lm.keys():
-                        if cmk not in minima:
-                            minima[cmk] = pending_lm[cmk]
-                        else:
-                            minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
-
-                    pending_lm = dict()
-
-                    break
-    else:
-        for cmk in pending_lm.keys():
-            if cmk not in minima:
-                minima[cmk] = pending_lm[cmk]
-            else:
-                minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
-
-eprint(" ... done")
-
-if post_filter_two:
-    reduce_lm_two_neighborhood(fc_base, minima, verbose)
-
-
-RNAlocmin_output(sequence, minima, lmin_file)
-
-
-sample_file=""
-rind = lmin_file.rfind(".")
-if rind >= 0 :
-    sample_file = lmin_file[:rind] + ".samples"
-else:
-    sample_file = lmin_file[:rind] + ".samples"
-f = open(sample_file, 'w')
-f.write("     %s\n" % sequence)
-for s in sample_list:
-    f.write(s+"\n")
-f.close()
-
-
-if fake_2D_file:
-    (ss, mfe) = fc_base.mfe()
-    RNA2Dfold_output(sequence, ss, mfe, structure1, structure2, minima, TwoD_file)
-
-
-# read a list of sample structures and produce list of local minima for it
-if nonredundant_sample_file:
-    lmin_nonred_file = "local_minima_nonred.txt"
-    nonredundant_samples = []
-    with open(nonredundant_sample_file) as f:
-        nonredundant_samples = f.readlines()
-
-    nonredundant_samples = [x.strip() for x in nonredundant_samples]
-
-    nonredundant_samples.pop(0)
-
-    nonredundant_minima = dict()
-
-    for s in nonredundant_samples:
-        pt = RNA.IntVector(RNA.ptable(s))
-        fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
-        ss = RNA.db_from_ptable(list(pt))
-        if ss not in nonredundant_minima:
-             nonredundant_minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
-             new_minima = new_minima + 1
-        else:
-             nonredundant_minima[ss]['count'] = nonredundant_minima[ss]['count'] + 1
-
-    f = open(lmin_nonred_file, 'w')
-    f.write("     %s\n" % sequence)
-    for i,s in enumerate(sorted(nonredundant_minima.keys(), key=lambda x: nonredundant_minima[x]['energy'])):
-        f.write("%4d %s %6.2f %6d\n" % (i, s, nonredundant_minima[s]['energy'], nonredundant_minima[s]['count']))
-    f.close()
-
-    if fake_2D_file:
-        distances = [ [ None for j in range(0, 200) ] for i in range(0, 200) ];
-
-        for s in nonredundant_minima.keys():
-            d1 = RNA.bp_distance(structure1, s)
-            d2 = RNA.bp_distance(structure2, s)
-            if not distances[d1][d2] or nonredundant_minima[s]['energy'] < distances[d1][d2]:
-                distances[d1][d2] = nonredundant_minima[s]['energy']
-
-        f = open("sv11_fake_nonred.2D.out", 'w')
-        f.write("%s\n%s (%6.2f)\n%s\n%s\n\n\n" % (sequence, structure1, mfe, structure1, structure2))
-        for i in range(0, 200):
-            for j in range(0, 200):
-                if distances[i][j] != None:
-                    f.write("%d\t%d\ta\tb\tc\t%6.2f\n" % (i, j, distances[i][j]))
-        f.close()
-
-*/
-
+                //if not distances[d1][d2] or nonredundant_minima[s]['energy'] < distances[d1][d2]:
+                //    distances[d1][d2] = nonredundant_minima[s]['energy']
+            }
+            f = fopen("sv11_fake_nonred.2D.out", "w");
+            fprintf(f, "%s\n%s (%6.2f)\n%s\n%s\n\n\n", sequence, structure1, mfe, structure1, structure2);
+            int j;
+            for(i = 0; i < n; i++){ // in range(0, 200):
+                for(j = 0; j < n; j++){ // in range(0, 200):
+                    //if distances[i][j] != None:
+                    //    f.write("%d\t%d\ta\tb\tc\t%6.2f\n" % (i, j, distances[i][j]))
+                    if(energies[i*n + j] != inf)
+                        fprintf(f,"%d\t%d\ta\tb\tc\t%6.2f\n", i, j, energies[i*n + j]);
+                }
+            }
+            fclose(f);
+        }
+    }
 
     /* free */
     free(sequence);
+    free(ss_mfe);
+    free_hashtable_list(&sc_data);
+    free_hashtable_list_strings(&minima);
+    free_hashtable_list_strings(&pending_lm);
+    free(sample_list);
+    vrna_fold_compound_free(fc);
+    vrna_fold_compound_free(fc_base);
+    free(exp_param);
 
     return EXIT_SUCCESS;
 }
