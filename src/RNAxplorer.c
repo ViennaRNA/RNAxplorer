@@ -295,6 +295,24 @@ main(int  argc,
       break;
     }
 
+  // read records from stdin only if not sufficient parameteres are given for the repellant sampling heuristic!
+  if(processing_func == sampling_repellent_heuristic && !(options->sequence == NULL || options->struc1 == NULL || options->struc2 == NULL ||
+      strlen(options->sequence) != strlen(options->struc1) || strlen(options->sequence) != strlen(options->struc2))){
+    processing_func("", options->sequence, NULL, options);
+
+    /* free options */
+    free(options->TwoD_file);
+    free(options->non_red_file);
+    free(options->lmin_file);
+    free(options->parameter_file);
+    free(options->sequence);
+    free(options->struc1);
+    free(options->struc2);
+    free(options);
+    exit(EXIT_SUCCESS);
+  }
+
+
   int           istty_in  = isatty(fileno(input_stream));
   int           istty_out = isatty(fileno(stdout));
 
@@ -334,6 +352,9 @@ main(int  argc,
         }
         free(rec_sequence);
         free(rec_id);
+        int i;
+        for(i=0; rec_rest[i]; i++)
+          free(rec_rest[i]);
         free(rec_rest);
         break;
     }
@@ -358,7 +379,6 @@ main(int  argc,
 
     free(rec_sequence);
     free(rec_id);
-    free(rec_rest);
 
     /* free the rest of current dataset */
     if (structures) {
@@ -374,6 +394,8 @@ main(int  argc,
   /* free options */
   free(options->TwoD_file);
   free(options->non_red_file);
+  free(options->lmin_file);
+  free(options->parameter_file);
   free(options->sequence);
   free(options->struc1);
   free(options->struc2);
@@ -1465,8 +1487,8 @@ int
 ht_db_free_entry_strings(void *hash_entry)
 {
     if(hash_entry){
-        if(((structure_and_index *)hash_entry)->structure)
-            free(((structure_and_index *)hash_entry)->structure);
+        //if(((structure_and_index *)hash_entry)->structure)
+        //    free(((structure_and_index *)hash_entry)->structure);
     }
   return 0;
 }
@@ -1516,13 +1538,15 @@ free_hashtable_list_strings(hashtable_list_strings *ht_list)
 {
     if(ht_list){
       vrna_ht_free(ht_list->ht_pairs);
+      ht_list->ht_pairs = NULL;
       free(ht_list->list_counts);
       free(ht_list->list_energies);
 
       int i = 0;
-      for (; i < ht_list->length; i++)
+      for (; i < (int)ht_list->length; i++){
+        free(ht_list->list_key_value_pairs[i]->structure);
         free(ht_list->list_key_value_pairs[i]);
-
+      }
       free(ht_list->list_key_value_pairs);
     }
 }
@@ -1770,6 +1794,33 @@ int find_min_energy(hashtable_list_strings *htl){
     return res_index;
 }
 
+typedef struct index_energy_ {
+  int index;
+  float energy;
+} index_energy;
+
+int compare_energy_index(const void * elem1, const void * elem2)
+{
+  index_energy* f = (index_energy*)elem1;
+  index_energy* s = (index_energy*)elem2;
+    if (f->energy > s->energy) return  1;
+    if (f->energy < s->energy) return -1;
+    return 0;
+}
+
+index_energy *sort_key_values_by_energy(hashtable_list_strings htl){
+
+  index_energy *index_energy_list = vrna_alloc(sizeof(index_energy)*(htl.length+1));
+  int i;
+  for(i=0;i<htl.length;i++){
+    index_energy_list[i].index = i;
+    index_energy_list[i].energy = htl.list_energies[i];
+  }
+  qsort(index_energy_list, htl.length, sizeof(index_energy), compare_energy_index);
+  index_energy_list[htl.length].index = -1;
+  return index_energy_list;
+}
+
 void RNAlocmin_output(char *sequence, hashtable_list_strings htl, char *filename /*= None*/){
     FILE *f;
     if(filename)
@@ -1779,8 +1830,12 @@ void RNAlocmin_output(char *sequence, hashtable_list_strings htl, char *filename
 
     fprintf(f, "     %s\n", sequence);
     //for i,s in enumerate(sorted(m.keys(), key=lambda x: m[x]['energy'])):
+    index_energy * sorted_indices = sort_key_values_by_energy(htl);
+
     int i;
-    for(i=0; i < (int)htl.length; i++){
+    int si;
+    for(si=0; sorted_indices[si].index > -1; si++){
+        i = sorted_indices[si].index;
         char *s = htl.list_key_value_pairs[i]->structure;
         int count = htl.list_counts[i];
         float energy = htl.list_energies[i];
@@ -1788,6 +1843,7 @@ void RNAlocmin_output(char *sequence, hashtable_list_strings htl, char *filename
     }
     if(filename)
         fclose(f);
+    free(sorted_indices);
 }
 
 void RNA2Dfold_output(char *sequence, char *s_mfe, float mfe, char *s1, char *s2, hashtable_list_strings m, char *filename /*= None*/){
@@ -1864,15 +1920,15 @@ sampling_repellent_heuristic(const char       *rec_id,
         for(i = 0; structures[i]; i++){
             // count only
         }
-        if(i>=1 && strlen(orig_sequence) == strlen(structures[0]) && strlen(orig_sequence) == strlen(structures[1])){
+        if(i>=2 && orig_sequence && strlen(orig_sequence) == strlen(structures[0]) && strlen(orig_sequence) == strlen(structures[1])){
             sequence = vrna_alloc(sizeof(char)*(strlen(orig_sequence)+1));
             strcpy(sequence, orig_sequence);
             structure1 = structures[0];
             structure2 = structures[1];
         }
     }
-    if(sequence == NULL && opt->sequence != NULL && opt->struc1 != NULL && opt->struc1 != NULL &&
-            strlen(opt->sequence) == strlen(opt->struc1) && strlen(orig_sequence) == strlen(opt->struc2)){
+    if(sequence == NULL && opt->sequence != NULL && opt->struc1 != NULL && opt->struc2 != NULL &&
+            strlen(opt->sequence) == strlen(opt->struc1) && strlen(opt->sequence) == strlen(opt->struc2)){
         sequence = vrna_alloc(sizeof(char)*(strlen(opt->sequence)+1));
         strcpy(sequence, opt->sequence);
         structure1 = opt->struc1;
@@ -1882,7 +1938,7 @@ sampling_repellent_heuristic(const char       *rec_id,
         fprintf(stderr, "Error: provide at least a fasta file with structures as standard input or use the command line parameters for sequence, structure 1 and structure 2!\n");
         exit(EXIT_FAILURE);
     }
-    printf("%s\n%s\n%s\n",opt->sequence,opt->struc1,opt->struc2);
+    printf("%s\n%s\n%s\n", sequence, structure1, structure2);
 
 
     //struct sc_data *my_sc_sdata;
@@ -1951,7 +2007,9 @@ sampling_repellent_heuristic(const char       *rec_id,
                 sample_list_allocated += 1000;
                 sample_list = vrna_realloc(sample_list, sizeof(char*)*sample_list_allocated);
             }
-            sample_list[sample_list_length++] = sample_set[i];
+            sample_list[sample_list_length] = vrna_alloc(sizeof(char)*(strlen(sample_set[i])+1));
+            strcpy(sample_list[sample_list_length], sample_set[i]);
+            sample_list_length++;
         }
 
         hashtable_list_strings current_lm = create_hashtable_list_strings(13); // = dict()
@@ -1986,6 +2044,12 @@ sampling_repellent_heuristic(const char       *rec_id,
             free(ss);
         }
 
+        /* free tmp sample set */
+        for(i=0; sample_set[i]; i++){
+            free(sample_set[i]);
+        }
+        free(sample_set);
+
         // explore the 2-neighborhood of current local minima to reduce total number of local minima
         if(opt->explore_two_neighborhood)
             reduce_lm_two_neighborhood(fc_base, &current_lm, opt->verbose);
@@ -2000,7 +2064,8 @@ sampling_repellent_heuristic(const char       *rec_id,
                 short *ss = vrna_ptable(ss_string);
                 float energy_kcal = current_lm.list_energies[i];
                 int count = current_lm.list_counts[i];
-                hashtable_list_strings_add_structure_and_count(&current_lm, ss, energy_kcal, count);
+                hashtable_list_strings_add_structure_and_count(&pending_lm, ss, energy_kcal, count);
+                free(ss);
             }
             else{
                 pending_lm.list_counts[lookup_result->index] += current_lm.list_counts[i];
@@ -2026,8 +2091,12 @@ sampling_repellent_heuristic(const char       *rec_id,
             int cnt_other = 0;
 
             //for key, value in sorted(pending_lm.iteritems(), key=lambda (k, v): v['energy']):
+            index_energy * sorted_indices = sort_key_values_by_energy(pending_lm);
+
             int i;
-            for(i=0; i < (int)pending_lm.length; i++){
+            int si;
+            for(si=0; sorted_indices[si].index > -1; si++){
+                i = sorted_indices[si].index;
                 if(pending_lm.list_key_value_pairs[i] == NULL)
                     continue;
                 int count = pending_lm.list_counts[i];
@@ -2086,11 +2155,11 @@ sampling_repellent_heuristic(const char       *rec_id,
                     }
                 }
             }
+            free(sorted_indices);
         }
         else{
             //for cmk in pending_lm.keys():
-            int j;
-            for(j = 0; j < (int)pending_lm.length; j++){
+            for(i = 0; i < (int)pending_lm.length; i++){
                 structure_and_index to_check;
                 to_check.structure = pending_lm.list_key_value_pairs[i]->structure;
                 structure_and_index *lookup_result = vrna_ht_get(minima.ht_pairs, (void *)&to_check);
@@ -2099,6 +2168,7 @@ sampling_repellent_heuristic(const char       *rec_id,
                     float energy = pending_lm.list_energies[i];
                     short *s_pt = vrna_ptable(to_check.structure);
                     hashtable_list_strings_add_structure_and_count(&minima, s_pt,energy, counts);
+                    free(s_pt);
                 }
                 else{
                     minima.list_counts[lookup_result->index] += pending_lm.list_counts[i];
@@ -2124,17 +2194,19 @@ sampling_repellent_heuristic(const char       *rec_id,
 
 
         char *sample_file= vrna_alloc(sizeof(char)*1);
-        sample_file[0] = '\n';
+        sample_file[0] = '\0';
         int rind = 0;
-        char *pch = strrchr(opt->lmin_file, 's');
+        char *pch = strrchr(opt->lmin_file, '.');
         rind = pch - opt->lmin_file;
 
         //lmin_file.rfind(".")
         if(pch != NULL){
+            sample_file = vrna_realloc(sample_file, sizeof(char)*(strlen(sample_file)+1+rind+8));
             sample_file = strncat(sample_file, opt->lmin_file, rind);
             sample_file = strncat(sample_file, ".samples", 8);
         }
         else{
+            sample_file = vrna_realloc(sample_file, sizeof(char)*(strlen(opt->lmin_file)+1+8));
             sample_file = strncat(sample_file, opt->lmin_file, strlen(opt->lmin_file));
             sample_file = strncat(sample_file, ".samples", 8);
         }
@@ -2145,6 +2217,7 @@ sampling_repellent_heuristic(const char       *rec_id,
             fprintf(f,"%s\n",sample_list[i]);
         }
         fclose(f);
+        free(sample_file);
     }
 
 
@@ -2235,13 +2308,18 @@ sampling_repellent_heuristic(const char       *rec_id,
         //for i,s in enumerate(sorted(nonredundant_minima.keys(), key=lambda x: nonredundant_minima[x]['energy'])):
         //    f.write("%4d %s %6.2f %6d\n" % (i, s, nonredundant_minima[s]['energy'], nonredundant_minima[s]['count']))
         //f.close()
-        for(i=0; i < nonredundant_minima.length; i++){
+        index_energy * sorted_indices = sort_key_values_by_energy(nonredundant_minima);
+
+        int si;
+        for(si=0; sorted_indices[si].index > -1; si++){
+            i = sorted_indices[si].index;
             char *s = nonredundant_minima.list_key_value_pairs[i]->structure;
             int count = nonredundant_minima.list_counts[i];
             float energy = nonredundant_minima.list_energies[i];
             fprintf(f, "%4d %s %6.2f %6d\n", i, s, energy, count);
         }
         fclose(f);
+        free(sorted_indices);
 
         if(opt->TwoD_file){
             //distances = [ [ None for j in range(0, 200) ] for i in range(0, 200) ];
@@ -2282,9 +2360,15 @@ sampling_repellent_heuristic(const char       *rec_id,
     /* free */
     free(sequence);
     free(ss_mfe);
-    free_hashtable_list(&sc_data);
-    free_hashtable_list_strings(&minima);
-    free_hashtable_list_strings(&pending_lm);
+    if(sc_data.ht_pairs)
+      free_hashtable_list(&sc_data);
+    if(minima.ht_pairs)
+      free_hashtable_list_strings(&minima);
+    if(pending_lm.ht_pairs)
+      free_hashtable_list_strings(&pending_lm);
+    int i;
+    for(i=0; sample_list[i]; i++)
+      free(sample_list[i]);
     free(sample_list);
     vrna_fold_compound_free(fc);
     vrna_fold_compound_free(fc_base);
