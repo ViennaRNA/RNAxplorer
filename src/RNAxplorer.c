@@ -1106,7 +1106,7 @@ hash_function_base_pairs(void           *hash_entry,
 {
   key_value *kv = (key_value *)hash_entry;
   unsigned int  hash_value = ((unsigned int)kv->key->pos_5) << 16;
-  hash_value = hash_value & kv->key->pos_3;
+  hash_value = hash_value | kv->key->pos_3;
   return hash_value % hashtable_size;
 }
 
@@ -1179,19 +1179,20 @@ free_hashtable_list(hashtable_list *ht_list)
   free(ht_list->list_counts);
 
   int i = 0;
-  for (; i < ht_list->length; i++)
+  for (; i < ht_list->length; i++){
+    free(ht_list->list_key_value_pairs[i]->key);
     free(ht_list->list_key_value_pairs[i]);
-
+  }
   free(ht_list->list_key_value_pairs);
 }
 
 static
 void
-hashtable_list_add_weight_and_count(hashtable_list *htl, vrna_move_t key, float weight)
+hashtable_list_add_weight_and_count(hashtable_list *htl, vrna_move_t *key, float weight)
 {
   if (htl->ht_pairs != NULL) {
     key_value to_check;
-    to_check.key = &key;
+    to_check.key = key;
     //to_check->value = 0; //not checked anyways --> not set
 
     //to_check.key = energy;
@@ -1210,14 +1211,13 @@ hashtable_list_add_weight_and_count(hashtable_list *htl, vrna_move_t key, float 
                                                  sizeof(key_value *) * htl->allocated_size);
       }
 
-      float weight;
-      int           list_index = htl->length;
+      int           list_index = (int)htl->length;
       htl->list_weights[list_index]  = weight;
       htl->list_counts[list_index]  = 1;
       key_value *to_insert = vrna_alloc(sizeof(key_value));
       to_insert->key = vrna_alloc(sizeof(vrna_move_t));
-      to_insert->key->pos_5 = key.pos_5;
-      to_insert->key->pos_3 = key.pos_3;
+      to_insert->key->pos_5 = key->pos_5;
+      to_insert->key->pos_3 = key->pos_3;
       to_insert->value = list_index;
       htl->list_key_value_pairs[list_index] = to_insert;
       htl->length++;
@@ -1256,7 +1256,7 @@ void store_basepair_sc(vrna_fold_compound_t *fc, hashtable_list *data, char *str
                 vrna_move_t key;
                 key.pos_5 = i;
                 key.pos_3 = pt[i];
-                hashtable_list_add_weight_and_count(data, key, weight);
+                hashtable_list_add_weight_and_count(data, &key, weight);
                 /*
                 if key not in data['base_pairs']:
                     data['base_pairs'][key] = 1
@@ -1273,15 +1273,16 @@ void store_basepair_sc(vrna_fold_compound_t *fc, hashtable_list *data, char *str
 
         // add latest penalties for base pairs
         int j;
-        int list_index;
-        for(int k = 0; k < data->length; k++){ // in data['weights'].keys():
+        //int list_index;
+        for(int k = 0; k < (int)data->length; k++){ // in data['weights'].keys():
             i = data->list_key_value_pairs[k]->key->pos_5;
             j = data->list_key_value_pairs[k]->key->pos_3;
-            list_index = data->list_key_value_pairs[k]->value;
-            int pair_weight = data->list_weights[list_index];
+            //list_index = data->list_key_value_pairs[k]->value;
+            float pair_weight = data->list_weights[k];
             //fc->sc_add_bp(i, j, pair_weight);
             vrna_sc_add_bp(fc, i, j, pair_weight, VRNA_OPTION_DEFAULT);
         }
+        free(pt);
     }
 }
 
@@ -1486,10 +1487,6 @@ ht_db_comp_strings(void  *x,
 int
 ht_db_free_entry_strings(void *hash_entry)
 {
-    if(hash_entry){
-        //if(((structure_and_index *)hash_entry)->structure)
-        //    free(((structure_and_index *)hash_entry)->structure);
-    }
   return 0;
 }
 
@@ -1586,7 +1583,7 @@ hashtable_list_strings_add_structure_and_count(hashtable_list_strings *htl, shor
       htl->length++;
       int           res         = vrna_ht_insert(htl->ht_pairs, (void *)to_insert);
       if (res != 0)
-        fprintf(stderr, "dos.c: hash table insert failed!");
+        fprintf(stderr, "Error: hash table insert failed!");
     } else {
       // the energy-index pair is already in the list.
       int list_index = lookup_result->index;
@@ -1839,7 +1836,7 @@ void RNAlocmin_output(char *sequence, hashtable_list_strings htl, char *filename
         char *s = htl.list_key_value_pairs[i]->structure;
         int count = htl.list_counts[i];
         float energy = htl.list_energies[i];
-        fprintf(f, "%4d %s %6.2f %6d\n", i, s, energy, count);
+        fprintf(f, "%4d %s %6.2f %6d\n", si, s, energy, count);
     }
     if(filename)
         fclose(f);
@@ -1974,7 +1971,7 @@ sampling_repellent_heuristic(const char       *rec_id,
 
     int sample_list_length=0;
     int sample_list_allocated = 100;
-    char **sample_list = vrna_alloc(sizeof(char *) * sample_list_allocated); // = []
+    char **sample_list = vrna_alloc(sizeof(char *) * (sample_list_allocated+1)); // = []
 
     hashtable_list_strings pending_lm = create_hashtable_list_strings(13);// = dict()
     int num_sc = 1;
@@ -2001,16 +1998,29 @@ sampling_repellent_heuristic(const char       *rec_id,
 
         // store samples of this round to global list of samples
         //sample_list = sample_list + sample_set;
+        /*
         int i;
         for(i = 0; sample_set[i]; i++){
             if(sample_list_length >= sample_list_allocated){
                 sample_list_allocated += 1000;
-                sample_list = vrna_realloc(sample_list, sizeof(char*)*sample_list_allocated);
+                sample_list = vrna_realloc(sample_list, sizeof(char*)*(sample_list_allocated+1));
             }
             sample_list[sample_list_length] = vrna_alloc(sizeof(char)*(strlen(sample_set[i])+1));
             strcpy(sample_list[sample_list_length], sample_set[i]);
             sample_list_length++;
         }
+        */
+        int i;
+        for(i = 0; sample_set[i]; i++){}
+        if(sample_list_length + i >= sample_list_allocated){
+                        sample_list_allocated += i;
+                        sample_list = vrna_realloc(sample_list, sizeof(char*)*(sample_list_allocated+1));
+                    }
+                    //sample_list[sample_list_length] = vrna_alloc(sizeof(char)*(strlen(sample_set[i])+1));
+                    //strcpy(sample_list[sample_list_length], sample_set[i])
+        memcpy(sample_list + sample_list_length, sample_set, sizeof(char*)*(i));
+        sample_list_length += i;
+        sample_list[sample_list_length] = NULL;
 
         hashtable_list_strings current_lm = create_hashtable_list_strings(13); // = dict()
 
@@ -2045,9 +2055,9 @@ sampling_repellent_heuristic(const char       *rec_id,
         }
 
         /* free tmp sample set */
-        for(i=0; sample_set[i]; i++){
+        /*for(i=0; sample_set[i]; i++){
             free(sample_set[i]);
-        }
+        }*/
         free(sample_set);
 
         // explore the 2-neighborhood of current local minima to reduce total number of local minima
@@ -2120,6 +2130,7 @@ sampling_repellent_heuristic(const char       *rec_id,
                             repell_en = (float)(opt->exploration_factor * kT / 1000.0);
                         }
                         char *struct_cnt_max = pending_lm.list_key_value_pairs[struct_cnt_max_index]->structure;
+
                         store_basepair_sc(fc, &sc_data, struct_cnt_max, repell_en, 0);
 
                         vrna_pf(fc, ss_mfe);
@@ -2135,6 +2146,7 @@ sampling_repellent_heuristic(const char       *rec_id,
                                 float energy = pending_lm.list_energies[i];
                                 short *s_pt = vrna_ptable(to_check.structure);
                                 hashtable_list_strings_add_structure_and_count(&minima, s_pt,energy, counts);
+                                free(s_pt);
                             }
                             else{
                                 minima.list_counts[lookup_result->index] += pending_lm.list_counts[i];
@@ -2213,9 +2225,10 @@ sampling_repellent_heuristic(const char       *rec_id,
         FILE *f = fopen(sample_file, "w");
         fprintf(f, "     %s\n", sequence);
         int i;
-        for(i=0; sample_list[i]; i++){ // s in sample_list:
-            fprintf(f,"%s\n",sample_list[i]);
-        }
+        if ((sample_list) && (sample_list[0]))
+          for(i=0; sample_list[i]; i++){ // s in sample_list:
+              fprintf(f,"%s\n",sample_list[i]);
+          }
         fclose(f);
         free(sample_file);
     }
@@ -2316,7 +2329,7 @@ sampling_repellent_heuristic(const char       *rec_id,
             char *s = nonredundant_minima.list_key_value_pairs[i]->structure;
             int count = nonredundant_minima.list_counts[i];
             float energy = nonredundant_minima.list_energies[i];
-            fprintf(f, "%4d %s %6.2f %6d\n", i, s, energy, count);
+            fprintf(f, "%4d %s %6.2f %6d\n", si, s, energy, count);
         }
         fclose(f);
         free(sorted_indices);
@@ -2367,8 +2380,9 @@ sampling_repellent_heuristic(const char       *rec_id,
     if(pending_lm.ht_pairs)
       free_hashtable_list_strings(&pending_lm);
     int i;
-    for(i=0; sample_list[i]; i++)
-      free(sample_list[i]);
+    if ((sample_list) && (sample_list[0]))
+      for(i=0; sample_list[i]; i++)
+        free(sample_list[i]);
     free(sample_list);
     vrna_fold_compound_free(fc);
     vrna_fold_compound_free(fc_base);
