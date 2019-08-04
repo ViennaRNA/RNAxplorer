@@ -569,6 +569,20 @@ process_arguments(int   argc,
   }
 
   /* repulsive sampling args */
+  options->granularity = 1;
+  options->num_samples = 1;
+  options->exploration_factor = 1;
+  options->cluster = 0;
+  options->TwoD_file = NULL;
+  options->ediff_penalty = 0;
+  options->verbose = 0;
+  options->lmin_file = NULL;
+  options->TwoD_file = NULL;
+  options->non_red_file = NULL;
+  options->non_red = 0;
+  options->mu = 0.1;
+  options->post_filter_two = 0;
+
   if(args_info.sequence_given){
       options->sequence = vrna_alloc(strlen(args_info.sequence_arg)+1);
       strcpy(options->sequence, args_info.sequence_arg);
@@ -588,6 +602,7 @@ process_arguments(int   argc,
   if(args_info.num_samples_given){
       options->num_samples = args_info.num_samples_arg;
   }
+
   if(args_info.exploration_factor_given){
       options->exploration_factor = args_info.exploration_factor_arg;
   }
@@ -1573,7 +1588,7 @@ hashtable_list_strings_add_structure_and_count(hashtable_list_strings *htl, shor
                                                  sizeof(structure_and_index *) * htl->allocated_size);
       }
 
-      int           list_index = htl->length;
+      int           list_index = (int)htl->length;
       htl->list_counts[list_index]  = count;
       htl->list_energies[list_index]  = energy;
       structure_and_index *to_insert = vrna_alloc(sizeof(structure_and_index));
@@ -1740,11 +1755,11 @@ char ** generate_samples(vrna_fold_compound_t *fc, int number, int non_redundant
 
 
 int find_max_count(hashtable_list_strings *htl){
-    int max_count = 0;
-    int res_index = 0;
+    int max_count = (int)htl->length > 0 ? htl->list_counts[0] : 0;
+    int res_index = -1;
     int i;
     for(i=0; i < (int)htl->length; i++){
-        if(htl->list_key_value_pairs[i] != NULL && htl->list_counts[i] > max_count){
+        if(htl->list_key_value_pairs[i] != NULL && htl->list_counts[i] >= max_count){
             max_count = htl->list_counts[i];
             res_index = i;
         }
@@ -1753,11 +1768,11 @@ int find_max_count(hashtable_list_strings *htl){
 }
 
 int find_min_count(hashtable_list_strings *htl){
-    int min_count = 0;
-    int res_index = 0;
+    int min_count = (int)htl->length > 0 ? htl->list_counts[0] : 0;
+    int res_index = -1;
     int i;
     for(i=0; i < (int)htl->length; i++){
-        if(htl->list_key_value_pairs[i] != NULL && htl->list_counts[i] < min_count){
+        if(htl->list_key_value_pairs[i] != NULL && htl->list_counts[i] <= min_count){
             min_count = htl->list_counts[i];
             res_index = i;
         }
@@ -1766,11 +1781,11 @@ int find_min_count(hashtable_list_strings *htl){
 }
 
 int find_max_energy(hashtable_list_strings *htl){
-    float max_energy = 0;
-    int res_index = 0;
+    float max_energy = (int)htl->length > 0 ? htl->list_energies[0] : 0.f;
+    int res_index = -1;
     int i;
     for(i=0; i < (int)htl->length; i++){
-        if(htl->list_key_value_pairs[i] != NULL && htl->list_energies[i] > max_energy){
+        if(htl->list_key_value_pairs[i] != NULL && htl->list_energies[i] >= max_energy){
             max_energy = htl->list_energies[i];
             res_index = i;
         }
@@ -1779,11 +1794,11 @@ int find_max_energy(hashtable_list_strings *htl){
 }
 
 int find_min_energy(hashtable_list_strings *htl){
-    float min_energy = 0;
-    int res_index = 0;
+    float min_energy = (int)htl->length > 0 ? htl->list_energies[0] : 0.f;
+    int res_index = -1;
     int i;
     for(i=0; i < (int)htl->length; i++){
-        if(htl->list_key_value_pairs[i] != NULL && htl->list_energies[i] < min_energy){
+        if(htl->list_key_value_pairs[i] != NULL && htl->list_energies[i] <= min_energy){
             min_energy = htl->list_energies[i];
             res_index = i;
         }
@@ -2133,23 +2148,23 @@ sampling_repellent_heuristic(const char       *rec_id,
 
                         store_basepair_sc(fc, &sc_data, struct_cnt_max, repell_en, 0);
 
-                        vrna_pf(fc, ss_mfe);
+                        vrna_pf(fc, NULL);
 
                         //for cmk in pending_lm.keys():
                         int j;
                         for(j = 0; j < (int)pending_lm.length; j++){
                             structure_and_index to_check;
-                            to_check.structure = pending_lm.list_key_value_pairs[i]->structure;
+                            to_check.structure = pending_lm.list_key_value_pairs[j]->structure;
                             structure_and_index *lookup_result = vrna_ht_get(minima.ht_pairs, (void *)&to_check);
                             if (lookup_result == NULL) {
-                                int counts = pending_lm.list_counts[i];
-                                float energy = pending_lm.list_energies[i];
+                                int counts = pending_lm.list_counts[j];
+                                float energy = pending_lm.list_energies[j];
                                 short *s_pt = vrna_ptable(to_check.structure);
                                 hashtable_list_strings_add_structure_and_count(&minima, s_pt,energy, counts);
                                 free(s_pt);
                             }
                             else{
-                                minima.list_counts[lookup_result->index] += pending_lm.list_counts[i];
+                                minima.list_counts[lookup_result->index] += pending_lm.list_counts[j];
                             }
                             /*
                             if cmk not in minima:
