@@ -577,7 +577,6 @@ process_arguments(int   argc,
   options->ediff_penalty = 0;
   options->verbose = 0;
   options->lmin_file = NULL;
-  options->TwoD_file = NULL;
   options->non_red_file = NULL;
   options->non_red = 0;
   options->mu = 0.1;
@@ -2051,7 +2050,7 @@ sampling_repellent_heuristic(const char       *rec_id,
             to_check.structure = ss_string;
             structure_and_index *lookup_result = vrna_ht_get(current_lm.ht_pairs, (void *)&to_check);
             if (lookup_result == NULL) {
-                float energy_kcal = vrna_eval_structure(fc, ss_string);
+                float energy_kcal = vrna_eval_structure(fc_base, ss_string);
                 int count = 1;
                 hashtable_list_strings_add_structure_and_count(&current_lm, ss, energy_kcal, count);
             }
@@ -2303,7 +2302,7 @@ sampling_repellent_heuristic(const char       *rec_id,
             char *s = nonredundant_samples[i];
             short *pt =vrna_ptable(s); //= RNA.IntVector(RNA.ptable(s))
             //fc_base.path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
-            vrna_path_gradient(fc, pt, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
+            vrna_path_gradient(fc_base, pt, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
 
             char *ss = vrna_db_from_ptable(pt); //RNA.db_from_ptable(list(pt))
 
@@ -2312,7 +2311,7 @@ sampling_repellent_heuristic(const char       *rec_id,
             structure_and_index *lookup_result = vrna_ht_get(nonredundant_minima.ht_pairs, (void *)&to_check);
             int count = 1;
             if (lookup_result == NULL) {
-                float energy = vrna_eval_structure(fc,ss);
+                float energy = vrna_eval_structure(fc_base,ss);
                 hashtable_list_strings_add_structure_and_count(&nonredundant_minima, pt, energy, count);
                 //new_minima = new_minima + 1;
             }
