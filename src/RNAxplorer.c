@@ -1914,6 +1914,8 @@ void RNA2Dfold_output(char *sequence, char *s_mfe, float mfe, char *s1, char *s2
     }
     if(filename)
         fclose(f);
+    free(structures);
+    free(energies);
 }
 
 
@@ -2270,6 +2272,7 @@ sampling_repellent_heuristic(const char       *rec_id,
         float mfe = vrna_mfe(fc_base, ss);
 
         RNA2Dfold_output(sequence, ss, mfe, structure1, structure2, minima, opt->TwoD_file);
+        free(ss);
     }
 
     // read a list of sample structures and produce list of local minima for it
