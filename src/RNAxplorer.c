@@ -2278,8 +2278,8 @@ sampling_repellent_heuristic(const char       *rec_id,
     // read a list of sample structures and produce list of local minima for it
     if(opt->non_red){
         char *lmin_nonred_file = "local_minima_nonred.txt";
-        int nr_samples_count = 0;
-        int nr_samples_allocated = 100;
+        unsigned int nr_samples_count = 0;
+        unsigned int nr_samples_allocated = 100;
         char **nonredundant_samples = vrna_alloc(sizeof(char*)*nr_samples_allocated); // = []
         FILE *f = fopen(opt->non_red_file, "r");
         if (f == NULL){
@@ -2289,15 +2289,19 @@ sampling_repellent_heuristic(const char       *rec_id,
         char * line = NULL;
         size_t len = 0;
         ssize_t read;
-        int n_lines = 0;
+        unsigned int n_lines = 0;
         while ((read = getline(&line, &len, f)) != -1) {
             if (n_lines > 0){
               //printf("Retrieved line of length %zu:\n", read);
               //printf("%s", line);
               char * buf = vrna_alloc(sizeof(char)*(strlen(line)+1));
-              sscanf(line, "%s", buf);
+              int scan_r = sscanf(line, "%s", buf);
+              if(scan_r != 1){
+                free(buf);
+                continue;
+              }
 
-              if(nr_samples_count >= nr_samples_allocated){
+              if(nr_samples_count >= nr_samples_allocated-1){
                 nr_samples_allocated += 100;
                 nonredundant_samples = vrna_realloc(nonredundant_samples, sizeof(char*)*nr_samples_allocated);
               }
@@ -2305,6 +2309,7 @@ sampling_repellent_heuristic(const char       *rec_id,
             }
             n_lines++;
         }
+        nonredundant_samples[nr_samples_count] = NULL;
         fclose(f);
         if (line)
             free(line);
@@ -2338,6 +2343,8 @@ sampling_repellent_heuristic(const char       *rec_id,
                 nonredundant_minima.list_counts[lookup_result->index] += 1;
             }
             free(pt);
+            free(s);
+            free(ss);
             /*
             if ss not in nonredundant_minima:
                  nonredundant_minima[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
@@ -2346,6 +2353,8 @@ sampling_repellent_heuristic(const char       *rec_id,
                  nonredundant_minima[ss]['count'] = nonredundant_minima[ss]['count'] + 1
             */
         }
+        free(nonredundant_samples);
+
         //f = open(lmin_nonred_file, 'w')
         f =fopen(lmin_nonred_file, "w");
         //f.write("     %s\n" % sequence)
@@ -2400,7 +2409,9 @@ sampling_repellent_heuristic(const char       *rec_id,
                 }
             }
             fclose(f);
+            free(energies);
         }
+        free_hashtable_list_strings(&nonredundant_minima);
     }
 
     /* free */
