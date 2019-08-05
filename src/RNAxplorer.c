@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <regex.h>
 
 #include <ViennaRNA/model.h>
 #include <ViennaRNA/fold_compound.h>
@@ -2286,6 +2287,30 @@ sampling_repellent_heuristic(const char       *rec_id,
             fprintf(stderr, "Error: non-redundant file option has been chose, but no non-redundant file name is given!\n");
             exit(EXIT_FAILURE);
         }
+        regex_t re;
+        regmatch_t rm[1];
+        int length = strlen(sequence);
+        int buffer_size = ceil(log10(length));
+        char * buffer = vrna_alloc(sizeof(char)*(buffer_size+1));
+        sprintf(buffer,"%d",length);
+        buffer[buffer_size] = '\0';
+        /* create structure pattern with exact sequene length */
+        char *pattern_start = "([\\.\\(\\)]{";
+        char *tofind = vrna_alloc(sizeof(char)*(sizeof(pattern_start) + (buffer_size+1)*2 + 1 + 2 + 1));
+        strcpy(tofind,pattern_start);
+        strcat(tofind,buffer);
+        strcat(tofind,",");
+        strcat(tofind,buffer);
+        strcat(tofind,"})");
+        //fprintf(stderr, "pattern %s\n", tofind);
+        if (regcomp(&re, tofind, REG_EXTENDED) != 0)
+        {
+            fprintf(stderr, "Failed to compile regex '%s'\n", tofind);
+            exit(EXIT_FAILURE);
+        }
+        free(buffer);
+        free(tofind);
+
         char * line = NULL;
         size_t len = 0;
         ssize_t read;
@@ -2294,21 +2319,27 @@ sampling_repellent_heuristic(const char       *rec_id,
             if (n_lines > 0){
               //printf("Retrieved line of length %zu:\n", read);
               //printf("%s", line);
-              char * buf = vrna_alloc(sizeof(char)*(strlen(line)+1));
-              int scan_r = sscanf(line, "%s", buf);
-              if(scan_r != 1){
-                free(buf);
-                continue;
-              }
+              int retval = 0;
+              if ((retval = regexec(&re, line, 1, rm, REG_EXTENDED)) == 0)
+              {
+                  //int length = rm[0].rm_eo - rm[0].rm_so;
+                  //if(length == strlen(sequence)){
+                /* copy the structure match (which is as long as the sequence) into a new string */
+                    char *structure = vrna_alloc(sizeof(char)*(length+1));
+                    strncpy(structure, line + rm[0].rm_so, sizeof(char) * (length));
+                    structure[length] = '\0';
 
-              if(nr_samples_count >= nr_samples_allocated-1){
-                nr_samples_allocated += 100;
-                nonredundant_samples = vrna_realloc(nonredundant_samples, sizeof(char*)*nr_samples_allocated);
+                    if(nr_samples_count >= nr_samples_allocated-1){
+                      nr_samples_allocated += 100;
+                      nonredundant_samples = vrna_realloc(nonredundant_samples, sizeof(char*)*nr_samples_allocated);
+                    }
+                    nonredundant_samples[nr_samples_count++] = structure;
+                  //}
               }
-              nonredundant_samples[nr_samples_count++] = buf;
             }
             n_lines++;
         }
+        regfree(&re);
         nonredundant_samples[nr_samples_count] = NULL;
         fclose(f);
         if (line)
