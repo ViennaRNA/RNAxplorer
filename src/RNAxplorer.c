@@ -1330,11 +1330,12 @@ char * detect_local_minimum_two(vrna_fold_compound_t *fc, char *structure){
         int dG_nb   = vrna_eval_move_pt(fc, structure_pt, nb->pos_5, nb->pos_3);
         short *pt_nb = vrna_ptable_copy(structure_pt);
         vrna_move_apply(pt_nb, nb);
+
         vrna_move_t *neigh_2                = vrna_neighbors(fc, pt_nb, VRNA_MOVESET_DELETION | VRNA_MOVESET_INSERTION);
 
          vrna_move_t *nb_2;
         for(nb_2 = neigh_2; nb_2->pos_5 != 0 && nb_2->pos_3 != 0; nb_2++){
-            int dG_nb2   = vrna_eval_move_pt(fc, pt_nb, nb->pos_5, nb->pos_3);
+            int dG_nb2   = vrna_eval_move_pt(fc, pt_nb, nb_2->pos_5, nb_2->pos_3);
 
             int ddG     = dG_nb + dG_nb2;
             if(ddG < 0 && ddG < deepest_neighbor_ddG){
@@ -1345,13 +1346,19 @@ char * detect_local_minimum_two(vrna_fold_compound_t *fc, char *structure){
             }
         }
         free(neigh_2);
+        free(pt_nb);
     }
     free(neigh);
+
     if(memcmp(deepest_neighbor, structure_pt, sizeof(short)*(structure_pt[0]+1)) != 0){
-        deepest_neighbor = detect_local_minimum(fc, deepest_neighbor);
-        char * deepest_neighbor_string = vrna_db_from_ptable(deepest_neighbor);
+        short *tmp_deepest = detect_local_minimum(fc, deepest_neighbor);
         free(deepest_neighbor);
-        return detect_local_minimum_two(fc, deepest_neighbor_string);
+        char * deepest_neighbor_string = vrna_db_from_ptable(tmp_deepest);
+        free(tmp_deepest);
+        char * result = detect_local_minimum_two(fc, deepest_neighbor_string);
+        free(deepest_neighbor_string);
+        free(structure_pt);
+        return result;
     }
     else{
         free(deepest_neighbor);
@@ -1555,8 +1562,10 @@ free_hashtable_list_strings(hashtable_list_strings *ht_list)
 
       int i = 0;
       for (; i < (int)ht_list->length; i++){
-        free(ht_list->list_key_value_pairs[i]->structure);
-        free(ht_list->list_key_value_pairs[i]);
+        if(ht_list->list_key_value_pairs[i] != NULL){
+          free(ht_list->list_key_value_pairs[i]->structure);
+          free(ht_list->list_key_value_pairs[i]);
+        }
       }
       free(ht_list->list_key_value_pairs);
     }
@@ -1619,14 +1628,16 @@ void reduce_lm_two_neighborhood(vrna_fold_compound_t *fc, hashtable_list_strings
         fprintf(stderr, "Applying 2-Neighborhood Filter...\n");
     }
     int i;
-    for(i=0; lm->length; i++){ //s in lm:
+    for(i=0; i < (int)lm->length; i++){ //s in lm:
         char *s = lm->list_key_value_pairs[i]->structure;
         int s_count = lm->list_counts[i];
         if(verbose){
             fprintf(stderr, "\rApplying 2-Neighborhood Filter...%6d / %6d\n", cnt, cnt_max);
         }
+
         char *ss = detect_local_minimum_two(fc, s);
-        if(s != ss){
+
+        if(strcmp(s, ss) != 0){ //(s != ss){
             // store structure for removal
             //lm_remove.append(s)
             if(lm_remove_length >= lm_remove_allocated){
@@ -1664,6 +1675,7 @@ void reduce_lm_two_neighborhood(vrna_fold_compound_t *fc, hashtable_list_strings
                 lm->list_counts[lookup_result->index] += s_count;
             }
         }
+        free(ss);
         cnt = cnt + 1;
     }
     // remove obsolete local minima
@@ -2078,8 +2090,12 @@ sampling_repellent_heuristic(const char       *rec_id,
         if(opt->explore_two_neighborhood)
             reduce_lm_two_neighborhood(fc_base, &current_lm, opt->verbose);
 
+
         // transfer local minima obtained in this iteration to list of pending local minima
         for(i=0; i < (int)current_lm.length; i++){ // ss in current_lm:
+          if(current_lm.list_key_value_pairs[i] == NULL)
+            continue; // maybe it was removed in 2-neighborhood filter.
+
             char *ss_string = current_lm.list_key_value_pairs[i]->structure;
             structure_and_index to_check;
             to_check.structure = ss_string;
@@ -2229,12 +2245,12 @@ sampling_repellent_heuristic(const char       *rec_id,
         if(pch != NULL){
             sample_file = vrna_realloc(sample_file, sizeof(char)*(strlen(sample_file)+1+rind+8));
             sample_file = strncat(sample_file, opt->lmin_file, rind);
-            sample_file = strncat(sample_file, ".samples", 8);
+            sample_file = strcat(sample_file, ".samples");
         }
         else{
             sample_file = vrna_realloc(sample_file, sizeof(char)*(strlen(opt->lmin_file)+1+8));
             sample_file = strncat(sample_file, opt->lmin_file, strlen(opt->lmin_file));
-            sample_file = strncat(sample_file, ".samples", 8);
+            sample_file = strcat(sample_file, ".samples");
         }
         FILE *f = fopen(sample_file, "w");
         fprintf(f, "     %s\n", sequence);
