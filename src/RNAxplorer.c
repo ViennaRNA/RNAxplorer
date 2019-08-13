@@ -297,8 +297,7 @@ main(int  argc,
     }
 
   // read records from stdin only if not sufficient parameteres are given for the repellant sampling heuristic!
-  if(processing_func == sampling_repellent_heuristic && !(options->sequence == NULL || options->struc1 == NULL || options->struc2 == NULL ||
-      strlen(options->sequence) != strlen(options->struc1) || strlen(options->sequence) != strlen(options->struc2))){
+  if(processing_func == sampling_repellent_heuristic && options->sequence != NULL && strcmp(options->sequence,"") != 0){
     processing_func("", options->sequence, NULL, options);
 
     /* free options */
@@ -1953,16 +1952,40 @@ sampling_repellent_heuristic(const char       *rec_id,
             structure2 = structures[1];
         }
     }
-    if(sequence == NULL && opt->sequence != NULL && opt->struc1 != NULL && opt->struc2 != NULL &&
-            strlen(opt->sequence) == strlen(opt->struc1) && strlen(opt->sequence) == strlen(opt->struc2)){
-        sequence = vrna_alloc(sizeof(char)*(strlen(opt->sequence)+1));
-        strcpy(sequence, opt->sequence);
-        structure1 = opt->struc1;
-        structure2 = opt->struc2;
+    // if sequence was not in stdinput, read it from parameters
+    if(sequence == NULL && opt->sequence != NULL){
+      sequence = vrna_alloc(sizeof(char)*(strlen(opt->sequence)+1));
+      strcpy(sequence, opt->sequence);
     }
+
     if(sequence == NULL){
-        fprintf(stderr, "Error: provide at least a fasta file with structures as standard input or use the command line parameters for sequence, structure 1 and structure 2!\n");
+        fprintf(stderr, "Error: please enter an RNA sequence as input!\n");
         exit(EXIT_FAILURE);
+    }
+
+    if(opt->TwoD_file)
+    {
+      if(structure1 == NULL || structure2 == NULL){
+        if(sequence != NULL && opt->struc1 != NULL && opt->struc2 != NULL){
+          if(strlen(sequence) == strlen(opt->struc1) && strlen(opt->sequence) == strlen(opt->struc2))
+          {
+            sequence = vrna_alloc(sizeof(char)*(strlen(opt->sequence)+1));
+            strcpy(sequence, opt->sequence);
+            structure1 = opt->struc1;
+            structure2 = opt->struc2;
+          }
+          else{
+            //error
+            fprintf(stderr, "Error: sequence and structures have different lengths!\n");
+            exit(EXIT_FAILURE);
+          }
+        }
+        else{
+          //error
+          fprintf(stderr, "Error: provide at least a fasta file with structures as standard input or use the command line parameters for sequence, structure 1 and structure 2!\n");
+          exit(EXIT_FAILURE);
+        }
+      }
     }
     printf("%s\n%s\n%s\n", sequence, structure1, structure2);
 
@@ -2234,6 +2257,7 @@ sampling_repellent_heuristic(const char       *rec_id,
     if(opt->post_filter_two)
         reduce_lm_two_neighborhood(fc_base, &minima, opt->verbose);
 
+    /* write local minima file and samples file */
     if(opt->lmin_file){
         RNAlocmin_output(sequence, minima, opt->lmin_file);
 
@@ -2265,6 +2289,18 @@ sampling_repellent_heuristic(const char       *rec_id,
         fclose(f);
         free(sample_file);
     }
+    else{
+      // print samples and local minima to stdout
+      fprintf(stdout, "Samples: \n");
+      if ((sample_list) && (sample_list[0])){
+        int i;
+        for(i=0; sample_list[i]; i++){ // s in sample_list:
+            fprintf(stdout,"%s\n",sample_list[i]);
+        }
+      }
+      fprintf(stdout, "Local minima: \n");
+      RNAlocmin_output(sequence, minima, NULL);
+    }
 
 
     if(opt->TwoD_file){
@@ -2276,15 +2312,15 @@ sampling_repellent_heuristic(const char       *rec_id,
         free(ss);
     }
 
-    // read a list of sample structures and produce list of local minima for it
-    if(opt->non_red){
+    // read a list of sample structures and produce list of non redundant local minima for it
+    if(opt->non_red_file){
         char *lmin_nonred_file = "local_minima_nonred.txt";
         unsigned int nr_samples_count = 0;
         unsigned int nr_samples_allocated = 100;
         char **nonredundant_samples = vrna_alloc(sizeof(char*)*nr_samples_allocated); // = []
         FILE *f = fopen(opt->non_red_file, "r");
         if (f == NULL){
-            fprintf(stderr, "Error: non-redundant file option has been chose, but no non-redundant file name is given!\n");
+            fprintf(stderr, "Error: cannot open non-redundant file!\n");
             exit(EXIT_FAILURE);
         }
         regex_t re;
