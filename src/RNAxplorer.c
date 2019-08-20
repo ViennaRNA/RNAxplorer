@@ -379,6 +379,10 @@ main(int  argc,
 
     free(rec_sequence);
     free(rec_id);
+    int i;
+    for(i=0; rec_rest[i]; i++)
+      free(rec_rest[i]);
+    free(rec_rest);
 
     /* free the rest of current dataset */
     if (structures) {
@@ -1951,6 +1955,10 @@ sampling_repellent_heuristic(const char       *rec_id,
             structure1 = structures[0];
             structure2 = structures[1];
         }
+    }
+    if(sequence == NULL && orig_sequence != NULL){
+      sequence = vrna_alloc(sizeof(char)*(strlen(orig_sequence)+1));
+      strcpy(sequence, orig_sequence);
     }
     // if sequence was not in stdinput, read it from parameters
     if(sequence == NULL && opt->sequence != NULL){
