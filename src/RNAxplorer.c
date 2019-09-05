@@ -379,10 +379,6 @@ main(int  argc,
 
     free(rec_sequence);
     free(rec_id);
-    int i;
-    for(i=0; rec_rest[i]; i++)
-      free(rec_rest[i]);
-    free(rec_rest);
 
     /* free the rest of current dataset */
     if (structures) {
