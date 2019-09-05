@@ -22,11 +22,11 @@
 #include <unistd.h>
 
 PRIVATE void
-printStructure_pt(vrna_fold_compound_t *vc, short * pt)
+printStructure_pt(vrna_fold_compound_t *vc, short * pt, unsigned int index)
 {
   char * structure = vrna_db_from_ptable (pt);
   float energy = vrna_eval_structure_pt(vc,pt) / 100.0f;
-  printf ("%s %9.4g\n", structure,energy);
+  printf ("%d %s %4.2f\n", index, structure,energy);
   free (structure);
 }
 
@@ -60,7 +60,7 @@ gradient_walker(double temperature_celsius, int shift_moves, char *parameter_fil
   }
 
 long int cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
-
+printf("%s\n",vc->sequence);
 #pragma omp parallel num_threads(cpu_count)
 #pragma omp for
   for(i = 0; i < num_structures; i++){
@@ -68,7 +68,7 @@ long int cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
     short *pt = vrna_ptable (structure);
     vrna_move_t *moves = vrna_path_gradient(vc,pt, moveset);
     free(moves);
-    printStructure_pt(vc, pt);
+    printStructure_pt(vc, pt, i+1);
     free (pt);
   }
 
