@@ -415,7 +415,7 @@ default_options(void)
   struct options_s *options = (struct options_s *)vrna_alloc(sizeof(struct options_s));
 
   /* default strategy */
-  options->strategy = PATHFINDER_SADDLE_GRADIENT_WALK;
+  options->strategy = REPELLENT_SAMPLING_HEURISTIC;
 
   /* default energy model settings */
   vrna_md_set_default(&(options->md));

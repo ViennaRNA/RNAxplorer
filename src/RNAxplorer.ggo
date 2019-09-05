@@ -1,7 +1,7 @@
 # Name of your program
 package "RNAxplorer" # don't use package if you're using automake
 
-purpose "Compute folding trajectories and stuff"
+purpose "The RNAxplorer is a multitool, that offers different sampling and clustering methods to explore RNA energy landscapes."
 
 #usage "RNAxplorer [options]\n"
 version "0.9"   # don't use version if you're using automake
@@ -11,7 +11,19 @@ version "0.9"   # don't use version if you're using automake
 args "--file-name=RNAxplorer_cmdl --include-getopt --default-optional --func-name=RNAxplorer_cmdline_parser --arg-struct-name=RNAxplorer_args_info"
 
 
-description "Some blabla"
+description "The RNAxplorer is a multitool, that offers different methods to explore RNA\
+ energy landscapes. In default mode (or with -M RSH option) it takes an RNA sequence as\
+ input (either stdin or --sequence parameter) and outputs sampled secondary RNA structures.\
+ The repellant sampling heuristic iteratively penalizes base pairs of local minima of\
+ structures that have been seen too often. This results in a diverse sample set with the most\
+ important low free energy structures.\n\
+ Another important sampling method (-M RS option) is based on reference structures (--struc1\
+ and --struc2). This method produces structures in the vicinity of these two reference\
+ structures. Arbitrary many references can be added if a fasta file is used as input\
+ (via stdin).\n\
+ Often the output of sampling methods has to be coarse grained by local minima that are defined\
+ by a gradient walk. A parallelized gradient descent procedure can be used to retrieve\
+ local minima (-M RL option) of sampled structures (input via stdin)."
 
 
 # Options
@@ -123,7 +135,8 @@ optional
 
 
 section "Algorithms"
-sectiondesc="Select additional algorithms which should be included in the calculations.\n\n"
+sectiondesc="Select additional algorithms which should be included in the calculations.\
+ Default is the repellant sampling heuristic. Display more options with --detailed-help.\n\n"
 option "method" M
 "Set the method used to obtain meshpoint structures for the bisection algorithm\n"
 details="Available options are:\n GW        Gradient Walk             (default)\n\
@@ -138,7 +151,7 @@ details="Available options are:\n GW        Gradient Walk             (default)\
 string
 typestr="<method>"
 optional
-default="GW"
+default="RSH"
 
 option  "betaScale" -
 "Set the scaling of the Boltzmann factors\n"
