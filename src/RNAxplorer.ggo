@@ -43,6 +43,11 @@ string
 default=""
 optional
 
+option "penalize-structures" -
+"Penalize structures instead of base pairs of local minima, that occure too often."
+flag
+off
+
 option "struc1" -
 "Input structure 1"
 string

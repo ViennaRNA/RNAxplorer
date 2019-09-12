@@ -75,6 +75,7 @@ struct options_s {
 
   /* repulsive sampling options*/
   char *sequence;
+  int penalize_structures;
   char *struc1;
   char *struc2;
   int granularity;
@@ -386,7 +387,14 @@ main(int  argc,
         free(structures[i]);
       free(structures);
     }
-
+    else{
+      if(rec_rest){
+        int i;
+        for(i=0; rec_rest[i]; i++)
+          free(rec_rest[i]);
+        free(rec_rest);
+      }
+    }
     if (istty_in)
       vrna_message_input_seq("Input sequence (upper or lower case) followed by structures");
   } while (1);
@@ -569,6 +577,7 @@ process_arguments(int   argc,
   }
 
   /* repulsive sampling args */
+  options->penalize_structures = 0;
   options->granularity = 1;
   options->num_samples = 1;
   options->exploration_factor = 1;
@@ -586,6 +595,7 @@ process_arguments(int   argc,
       options->sequence = vrna_alloc(strlen(args_info.sequence_arg)+1);
       strcpy(options->sequence, args_info.sequence_arg);
   }
+  options-> penalize_structures = args_info.penalize_structures_flag;
   if(args_info.struc1_given){
       options->struc1 = vrna_alloc(strlen(args_info.struc1_arg)+1);
       strcpy(options->struc1, args_info.struc1_arg);
@@ -1218,9 +1228,9 @@ hashtable_list_add_weight_and_count(hashtable_list *htl, vrna_move_t *key, float
       if (htl->length >= htl->allocated_size) {
         htl->allocated_size           += 10;
         htl->list_weights  =
-          vrna_realloc(htl->list_weights, sizeof(int) * htl->allocated_size);
+          vrna_realloc(htl->list_weights, sizeof(float) * htl->allocated_size);
         htl->list_counts  =
-          vrna_realloc(htl->list_counts, sizeof(float) * htl->allocated_size);
+          vrna_realloc(htl->list_counts, sizeof(int) * htl->allocated_size);
         htl->list_key_value_pairs = vrna_realloc(htl->list_key_value_pairs,
                                                  sizeof(key_value *) * htl->allocated_size);
       }
@@ -1300,13 +1310,236 @@ void store_basepair_sc(vrna_fold_compound_t *fc, hashtable_list *data, char *str
     }
 }
 
+
+/* ----------------------------------------------------------------- */
+
+/*
+ * --------------------------------------------------------------------
+ * mix -- mix 3 32-bit values reversibly.
+ * For every delta with one or two bits set, and the deltas of all three
+ * high bits or all three low bits, whether the original value of a,b,c
+ * is almost all zero or is uniformly distributed,
+ * If mix() is run forward or backward, at least 32 bits in a,b,c
+ * have at least 1/4 probability of changing.
+ * If mix() is run forward, every bit of c will change between 1/3 and
+ * 2/3 of the time.  (Well, 22/100 and 78/100 for some 2-bit deltas.)
+ * mix() takes 36 machine instructions, but only 18 cycles on a superscalar
+ * machine (like a Pentium or a Sparc).  No faster mixer seems to work,
+ * that's the result of my brute-force search.  There were about 2^^68
+ * hashes to choose from.  I only tested about a billion of those.
+ * --------------------------------------------------------------------
+ */
+static void mix(unsigned int a, unsigned int b, unsigned int c)
+  {
+    a -= b; a -= c; a ^= (c >> 13);
+    b -= c; b -= a; b ^= (a << 8);
+    c -= a; c -= b; c ^= (b >> 13);
+    a -= b; a -= c; a ^= (c >> 12);
+    b -= c; b -= a; b ^= (a << 16);
+    c -= a; c -= b; c ^= (b >> 5);
+    a -= b; a -= c; a ^= (c >> 3);
+    b -= c; b -= a; b ^= (a << 10);
+    c -= a; c -= b; c ^= (b >> 15);
+  }
+
+typedef struct key_value_structure_ {
+  char *key;
+  int value;
+} key_value_structure;
+
+unsigned int
+hash_function_string(void           *x,
+                     unsigned long  hashtable_size)
+{
+  register unsigned char  *k;           /* the key */
+  register unsigned int   length;       /* the length of the key */
+  register unsigned int   initval = 0;  /* the previous hash, or an arbitrary value */
+  register unsigned int   a, b, c, len;
+
+  /* Set up the internal state */
+  k   = ((key_value_structure *)x)->key;
+  len = length = (unsigned int)strlen(k);
+  a   = b = 0x9e3779b9; /* the golden ratio; an arbitrary value */
+  c   = initval;        /* the previous hash value */
+
+  /*---------------------------------------- handle most of the key */
+  while (len >= 12) {
+    a +=
+      (k[0] + ((unsigned int)k[1] << 8) + ((unsigned int)k[2] << 16) + ((unsigned int)k[3] << 24));
+    b +=
+      (k[4] + ((unsigned int)k[5] << 8) + ((unsigned int)k[6] << 16) + ((unsigned int)k[7] << 24));
+    c +=
+      (k[8] + ((unsigned int)k[9] << 8) + ((unsigned int)k[10] << 16) +
+       ((unsigned int)k[11] << 24));
+    mix(a, b, c);
+    k   += 12;
+    len -= 12;
+  }
+
+  /*------------------------------------- handle the last 11 bytes */
+  c += length;
+  switch (len) {
+    /* all the case statements fall through */
+    case 11:
+      c += ((unsigned int)k[10] << 24);
+    case 10:
+      c += ((unsigned int)k[9] << 16);
+    case 9:
+      c += ((unsigned int)k[8] << 8);
+    /* the first byte of c is reserved for the length */
+    case 8:
+      b += ((unsigned int)k[7] << 24);
+    case 7:
+      b += ((unsigned int)k[6] << 16);
+    case 6:
+      b += ((unsigned int)k[5] << 8);
+    case 5:
+      b += k[4];
+    case 4:
+      a += ((unsigned int)k[3] << 24);
+    case 3:
+      a += ((unsigned int)k[2] << 16);
+    case 2:
+      a += ((unsigned int)k[1] << 8);
+    case 1:
+      a += k[0];
+      /* case 0: nothing left to add */
+  }
+  mix(a, b, c);
+  /*-------------------------------------------- report the result */
+  return c % hashtable_size;
+}
+
+
+/* ----------------------------------------------------------------- */
+int
+hash_compare_string(void  *x,
+                void  *y)
+{
+  return strcmp(((key_value_structure *)x)->key,
+                ((key_value_structure *)y)->key);
+}
+
+
+int
+hash_free_string(void *hash_entry)
+{
+  //free(((key_value_structure *)hash_entry)->key);
+  return 0;
+}
+
+static vrna_hash_table_t
+create_hashtable_string(int hashbits)
+{
+  vrna_callback_ht_free_entry       *my_free          = hash_free_string;
+  vrna_callback_ht_compare_entries  *my_comparison    = hash_compare_string;
+  vrna_callback_ht_hash_function    *my_hash_function = hash_function_string;
+  vrna_hash_table_t                 ht                = vrna_ht_init(hashbits,
+                                                                     my_comparison,
+                                                                     my_hash_function,
+                                                                     my_free);
+
+  return ht;
+}
+
+typedef struct hashtable_list_index_weight_ {
+  unsigned long     length;
+  unsigned long     allocated_size;
+  double      *list_weights;
+  int        *list_index;
+  key_value_structure         **list_key_value_pairs;
+  vrna_hash_table_t ht_pairs; // lookup table;
+} hashtable_list_index_weight;
+
+static hashtable_list_index_weight
+create_hashtable_list_index_weight(int hashbits)
+{
+  hashtable_list_index_weight ht_list;
+
+  ht_list.allocated_size          = 10;
+  ht_list.length                  = 0;
+  ht_list.list_weights = vrna_alloc(sizeof(double) * ht_list.allocated_size);
+  ht_list.list_index    = vrna_alloc(sizeof(int) * ht_list.allocated_size);
+  ht_list.list_key_value_pairs    = vrna_alloc(sizeof(key_value_structure *) * ht_list.allocated_size);
+  ht_list.ht_pairs         = create_hashtable_string(hashbits);
+  return ht_list;
+}
+
+
+static
+void
+free_hashtable_list_index_weight(hashtable_list_index_weight *ht_list)
+{
+  vrna_ht_free(ht_list->ht_pairs);
+  free(ht_list->list_weights);
+  free(ht_list->list_index);
+
+  int i = 0;
+  for (; i < ht_list->length; i++){
+    free(ht_list->list_key_value_pairs[i]->key);
+    free(ht_list->list_key_value_pairs[i]);
+  }
+  free(ht_list->list_key_value_pairs);
+}
+
+
+static
+key_value_structure* hashtable_list_index_weight_lookup(hashtable_list_index_weight *htl, char *structure_key){
+  if (htl->ht_pairs != NULL) {
+    key_value_structure to_check;
+    to_check.key = structure_key;
+    key_value_structure *lookup_result = NULL;
+    lookup_result = vrna_ht_get(htl->ht_pairs, (void *)&to_check);
+    return lookup_result;
+  }
+  else{
+    return NULL;
+  }
+}
+
+static
+void
+hashtable_list_add_weight_and_index(hashtable_list_index_weight *htl, char *structure_key, int index, double weight)
+{
+  if (htl->ht_pairs != NULL) {
+    key_value_structure *lookup_result = hashtable_list_index_weight_lookup(htl, structure_key);
+    if (lookup_result == NULL) {
+      //value is not in list.
+      if (htl->length >= htl->allocated_size) {
+        htl->allocated_size           += 10;
+        htl->list_weights  =
+          vrna_realloc(htl->list_weights, sizeof(double) * htl->allocated_size);
+        htl->list_index  =
+          vrna_realloc(htl->list_index, sizeof(int) * htl->allocated_size);
+        htl->list_key_value_pairs = vrna_realloc(htl->list_key_value_pairs,
+                                                 sizeof(key_value_structure *) * htl->allocated_size);
+      }
+
+      int           list_index = (int)htl->length;
+      htl->list_weights[list_index]  = weight;
+      htl->list_index[list_index]  = index;
+      key_value_structure *to_insert = vrna_alloc(sizeof(key_value_structure));
+      to_insert->key = vrna_alloc(sizeof(char)*(strlen(structure_key)+1));
+      to_insert->key = strcpy(to_insert->key, structure_key);
+      to_insert->value = list_index;
+      htl->list_key_value_pairs[list_index] = to_insert;
+      htl->length++;
+      int           res         = vrna_ht_insert(htl->ht_pairs, (void *)to_insert);
+      if (res != 0)
+        fprintf(stderr, "dos.c: hash table insert failed!");
+    } else {
+      // the energy-index pair is already in the list.
+      int list_index = lookup_result->value;
+      htl->list_index[list_index] = index;
+      htl->list_weights[list_index] = weight;
+    }
+  }
+}
+
 short * detect_local_minimum(vrna_fold_compound_t *fc, short *structure_pt){
     short * result_pt = vrna_ptable_copy(structure_pt);
-    // perform gradient walk from sample to determine direct local minimum
-    //pt = RNA.IntVector(RNA.ptable(structure))
-    //fc->path(pt, 0, RNA.PATH_DEFAULT | RNA.PATH_NO_TRANSITION_OUTPUT)
     vrna_path_gradient(fc, result_pt, VRNA_PATH_DEFAULT | VRNA_PATH_NO_TRANSITION_OUTPUT);
-    return result_pt; //RNA.db_from_ptable(list(pt))
+    return result_pt;
 }
 
 /**
@@ -1373,36 +1606,6 @@ typedef struct structure_and_index_{
     int index;
 } structure_and_index;
 
-/* ----------------------------------------------------------------- */
-
-/*
- * --------------------------------------------------------------------
- * mix -- mix 3 32-bit values reversibly.
- * For every delta with one or two bits set, and the deltas of all three
- * high bits or all three low bits, whether the original value of a,b,c
- * is almost all zero or is uniformly distributed,
- * If mix() is run forward or backward, at least 32 bits in a,b,c
- * have at least 1/4 probability of changing.
- * If mix() is run forward, every bit of c will change between 1/3 and
- * 2/3 of the time.  (Well, 22/100 and 78/100 for some 2-bit deltas.)
- * mix() takes 36 machine instructions, but only 18 cycles on a superscalar
- * machine (like a Pentium or a Sparc).  No faster mixer seems to work,
- * that's the result of my brute-force search.  There were about 2^^68
- * hashes to choose from.  I only tested about a billion of those.
- * --------------------------------------------------------------------
- */
-#define mix(a, b, c) \
-  { \
-    a -= b; a -= c; a ^= (c >> 13); \
-    b -= c; b -= a; b ^= (a << 8); \
-    c -= a; c -= b; c ^= (b >> 13); \
-    a -= b; a -= c; a ^= (c >> 12);  \
-    b -= c; b -= a; b ^= (a << 16); \
-    c -= a; c -= b; c ^= (b >> 5); \
-    a -= b; a -= c; a ^= (c >> 3);  \
-    b -= c; b -= a; b ^= (a << 10); \
-    c -= a; c -= b; c ^= (b >> 15); \
-  }
 
 /*
  * --------------------------------------------------------------------
@@ -1696,7 +1899,7 @@ void reduce_lm_two_neighborhood(vrna_fold_compound_t *fc, hashtable_list_strings
 
     // add newly detected local minima
     //lm.update(lm_novel)
-    //TODO: merge lm and lm_novel
+    //merge lm and lm_novel
 
     //get empty places
     int length_empty_places = 0;
@@ -1993,11 +2196,10 @@ sampling_repellent_heuristic(const char       *rec_id,
     }
     printf("%s\n%s\n%s\n", sequence, structure1, structure2);
 
-
-    //struct sc_data *my_sc_sdata;
-    //my_sc_sdata.base_pairs = create_hashtable(13);
-    hashtable_list sc_data = create_hashtable_list(13);
-
+    // table for penalizing base pairs
+    hashtable_list sc_data;
+    if(!opt->penalize_structures)
+      sc_data = create_hashtable_list(13);
 
 
     /*
@@ -2022,6 +2224,10 @@ sampling_repellent_heuristic(const char       *rec_id,
     char *ss_mfe = vrna_alloc(sizeof(char)*(strlen(sequence)+1));
     float mfe = vrna_mfe(fc,ss_mfe);
     vrna_pf(fc,ss_mfe);
+
+    hashtable_list_index_weight penalized_structures;
+    if(opt->penalize_structures)
+      penalized_structures = create_hashtable_list_index_weight(13);
 
     hashtable_list_strings minima = create_hashtable_list_strings(13);// = dict()
 
@@ -2054,26 +2260,12 @@ sampling_repellent_heuristic(const char       *rec_id,
 
         // store samples of this round to global list of samples
         //sample_list = sample_list + sample_set;
-        /*
-        int i;
-        for(i = 0; sample_set[i]; i++){
-            if(sample_list_length >= sample_list_allocated){
-                sample_list_allocated += 1000;
-                sample_list = vrna_realloc(sample_list, sizeof(char*)*(sample_list_allocated+1));
-            }
-            sample_list[sample_list_length] = vrna_alloc(sizeof(char)*(strlen(sample_set[i])+1));
-            strcpy(sample_list[sample_list_length], sample_set[i]);
-            sample_list_length++;
-        }
-        */
         int i;
         for(i = 0; sample_set[i]; i++){}
         if(sample_list_length + i >= sample_list_allocated){
                         sample_list_allocated += i;
                         sample_list = vrna_realloc(sample_list, sizeof(char*)*(sample_list_allocated+1));
                     }
-                    //sample_list[sample_list_length] = vrna_alloc(sizeof(char)*(strlen(sample_set[i])+1));
-                    //strcpy(sample_list[sample_list_length], sample_set[i])
         memcpy(sample_list + sample_list_length, sample_set, sizeof(char*)*(i));
         sample_list_length += i;
         sample_list[sample_list_length] = NULL;
@@ -2100,20 +2292,10 @@ sampling_repellent_heuristic(const char       *rec_id,
                 int index = lookup_result->index;
                 current_lm.list_counts[index] += 1;
             }
-            /*
-            if ss not in current_lm:
-                current_lm[ss] = { 'count' : 1, 'energy' : fc_base.eval_structure(ss) }
-            else:
-                current_lm[ss]['count'] = current_lm[ss]['count'] + 1
-            */
             free(ss_string);
             free(ss);
         }
 
-        /* free tmp sample set */
-        /*for(i=0; sample_set[i]; i++){
-            free(sample_set[i]);
-        }*/
         free(sample_set);
 
         // explore the 2-neighborhood of current local minima to reduce total number of local minima
@@ -2140,15 +2322,8 @@ sampling_repellent_heuristic(const char       *rec_id,
             else{
                 pending_lm.list_counts[lookup_result->index] += current_lm.list_counts[i];
             }
-            /*
-            if ss not in pending_lm:
-                pending_lm[ss] = current_lm[ss]
-            else:
-                pending_lm[ss]['count'] = pending_lm[ss]['count'] + current_lm[ss]['count']
-            */
         }
         free_hashtable_list_strings(&current_lm);
-        //del current_lm
 
         if(it < num_iter - 1){
             // find out which local minima we've seen the most in this sampling round
@@ -2190,8 +2365,31 @@ sampling_repellent_heuristic(const char       *rec_id,
                             repell_en = (float)(opt->exploration_factor * kT / 1000.0);
                         }
                         char *struct_cnt_max = pending_lm.list_key_value_pairs[struct_cnt_max_index]->structure;
+                        if(opt->penalize_structures){
+                          int is_penalized = 0;
+                          key_value_structure *kv = hashtable_list_index_weight_lookup(&penalized_structures, struct_cnt_max);
+                          int last_reference_id;
+                          double last_reference_weight;
+                          if(kv != NULL){
+                            is_penalized = 1;
+                            int last_reference_id = penalized_structures.list_index[kv->value];
+                            double last_reference_weight = penalized_structures.list_weights[kv->value];
+                          }
 
-                        store_basepair_sc(fc, &sc_data, struct_cnt_max, repell_en, 0);
+                          if(is_penalized == 0){
+                            last_reference_id = rnax_add_repulsion(fc, struct_cnt_max, repell_en);
+                            last_reference_weight = repell_en;
+                            //TODO: hashmap add: {strucutre: id, weight}
+                            hashtable_list_add_weight_and_index(&penalized_structures, struct_cnt_max, last_reference_id, last_reference_weight);
+                          }
+                          else{
+                            last_reference_weight = last_reference_weight * opt->exploration_factor;
+                            rnax_change_repulsion(fc, last_reference_id, last_reference_weight);
+                          }
+                        }
+                        else{
+                          store_basepair_sc(fc, &sc_data, struct_cnt_max, repell_en, 0);
+                        }
 
                         vrna_pf(fc, NULL);
 
@@ -2211,18 +2409,11 @@ sampling_repellent_heuristic(const char       *rec_id,
                             else{
                                 minima.list_counts[lookup_result->index] += pending_lm.list_counts[j];
                             }
-                            /*
-                            if cmk not in minima:
-                                minima[cmk] = pending_lm[cmk]
-                            else:
-                                minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
-                            */
                         }
                         if(pending_lm.ht_pairs){
                             free_hashtable_list_strings(&pending_lm);
                             pending_lm = create_hashtable_list_strings(13);
                         }
-                        //pending_lm = dict()
                         break;
                     }
                 }
@@ -2245,12 +2436,6 @@ sampling_repellent_heuristic(const char       *rec_id,
                 else{
                     minima.list_counts[lookup_result->index] += pending_lm.list_counts[i];
                 }
-                /*
-                if cmk not in minima:
-                    minima[cmk] = pending_lm[cmk]
-                else:
-                    minima[cmk]['count'] = minima[cmk]['count'] + pending_lm[cmk]['count']
-                */
             }
             if(pending_lm.ht_pairs)
                 free_hashtable_list_strings(&pending_lm);
@@ -2488,8 +2673,14 @@ sampling_repellent_heuristic(const char       *rec_id,
     /* free */
     free(sequence);
     free(ss_mfe);
-    if(sc_data.ht_pairs)
-      free_hashtable_list(&sc_data);
+    if(!opt->penalize_structures){
+      if(sc_data.ht_pairs)
+        free_hashtable_list(&sc_data);
+    }
+    else{
+      if(penalized_structures.ht_pairs)
+        free_hashtable_list_index_weight(&penalized_structures);
+    }
     if(minima.ht_pairs)
       free_hashtable_list_strings(&minima);
     if(pending_lm.ht_pairs)
