@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """
 Diana Clustering module for clustering RNA structures according to their basepairdistance.
 The cluster distance function computes the distance between the centroids of the clusters.
@@ -8,7 +9,7 @@ A second reason is that the object with maximal average distance is not unique.
 
 """
 
-import sys, math, RNA, numpy
+import sys, math, RNA, numpy, argparse, re
 
 class Cluster:
     """
@@ -231,16 +232,49 @@ class DIANA:
         """
         print a list of lists.
         """
+        if clusters == None:
+            return
         cid = 0
         for c in clusters:
             cid +=1
-            print "ClusterID:",cid
+            print("ClusterID:",cid)
             for s in c:
-                print s
+                print(s)
 
+def parseFile(fpath):
+    """
+    Parses a FASTA-ish file and extract a list of secondary structures.
 
+    Args:
+        fpath (string): Path to file in FASTA-ish notation, featuring a list
+        of Vienna-formatted secondary structures.
 
+    Returns:
+        list: List of secondary structures, each represented as a pair `(v,bps)`,
+        where `v` is the Vienna notation and `bps` is a set of base-pairs.
+    """
+    res = []
+    for l in open(fpath):
+        if not l.startswith("#") and not l.startswith(";") and not l.startswith(">"):
+            match = re.search('([\.\(\)]+)', l)
+            if match:
+                sequence = match.group(1)
+                res.append(sequence.strip())
+    return res
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Implememntation of the DIANA divisive clustering for RNA secondary structures.')
+    parser.add_argument("-f", "--file", type=str, required=True, help="Fasta file with secondary structures")
+    parser.add_argument("-d", "--diameter-threshold", type=int, default=0, required=False, help="Cluster diameter threshold (max bp distance within a cluster)")
+    parser.add_argument("-m", "--average-diameter-threshold", type=float, default=0, required=False, help="Average diameter threshold")
+    args = parser.parse_args()
+    structureFileName = args.file #sys.argv[1]
+    structs = parseFile(structureFileName)
+    maxDiameter = args.diameter_threshold
+    maxAverageDiameter = args.average_diameter_threshold
+    d = DIANA()
+    cluster = d.doClustering(structs, maxDiameter, maxAverageDiameter)
+    d.printClusters(cluster)
 
 
 
