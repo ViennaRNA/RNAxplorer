@@ -264,7 +264,10 @@ def createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiamet
                     return # ch index > last ch index --> first local min --> break
                 print(hierarchy, "ch", "{:10.3f}".format(ch))
                 do_ch_first_local_min = ch
-
+        
+        #remove c_m.structures because it is an inner node
+        c_m.structures.clear()
+        
         # build the subtrees for each child
         createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiameterThreshold, structs, do_ch_first_local_min, hierarchy)
 
