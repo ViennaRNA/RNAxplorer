@@ -294,16 +294,7 @@ def createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiamet
         
         # build the subtrees for each child
         createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiameterThreshold, do_ch_first_local_min, prev_ch, structures_bp_sets, dataset_centroid, hierarchy)
-    
 
-def convertTreeToListOfClusters(clusterTree, structs, clusterList=[]):
-    if len(clusterTree.childNodes) > 0:
-        for cn in clusterTree.childNodes:
-            convertTreeToListOfClusters(cn, structs, clusterList)
-    else:
-        cluster = [ structs[c] for c in clusterTree.structures]
-        clusterList.append(cluster)
-    return clusterList
 
 def convertTreeToListOfClusters_indices(clusterTree, clusterList=[]):
     if len(clusterTree.childNodes) > 0:
@@ -343,7 +334,7 @@ class DIANA:
         createClusterTree(c_root, dissMatrix, maxDiameter, maxAverageDiameter, do_ch_first_local_min, None, structures_bp_sets, dataset_centroid, 1)
         # end DIANA
               
-        clusters = convertTreeToListOfClusters(c_root, structures, [])
+        clusters = convertTreeToListOfClusters_indices(c_root, [])
         
         #cis = convertTreeToListOfClusters_indices(c_root, structs)
         #if len(cis) > 1:
@@ -354,7 +345,7 @@ class DIANA:
         return clusters
     
     @staticmethod
-    def printClusters(clusters):
+    def printClusters(clusters, structures_db):
         """
         print a list of lists.
         """
@@ -364,8 +355,47 @@ class DIANA:
         for c in clusters:
             cid +=1
             print("ClusterID:",cid)
-            for s in c:
+            for i in c:
+                s = structures_db[i]
                 print(s)
+    
+    @staticmethod
+    def printClustersMFEs(sequence, clusters, structures_db):
+        if clusters == None:
+            return
+        cid = 0
+        for c in clusters:
+            cid +=1
+            print("ClusterID:",cid)
+            
+            mfe = sys.float_info.max
+            mfe_str = None
+            for i in c:
+                s = structures_db[i]
+                energy = RNA.energy_of_struct(sequence, s)
+                if energy < mfe:
+                    mfe = energy
+                    mfe_str = s
+            print(s, "{:10.2f}".format(mfe))
+    
+    @staticmethod
+    def printClustersCentroids(clusters, structures_db):
+        structures_bp_sets = [ db_structure_to_bp_set(ss) for ss in structures_db ]
+        if clusters == None:
+            return
+        cid = 0
+        str_len = len(structures_db[0])
+        for c in clusters:
+            cid +=1
+            print("ClusterID:",cid)
+            cent = centroid(c, structures_bp_sets)
+            cent_list = ["."] * str_len
+            for bp in list(cent):
+                x, y = sorted(list(bp))
+                cent_list[x] = "("
+                cent_list[y] = ")"
+            print("".join(cent_list))
+        
 
 def parseFile(fpath):
     """
@@ -394,6 +424,9 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--diameter-threshold", type=int, default=0, required=False, help="Cluster diameter threshold (max bp distance within a cluster)")
     parser.add_argument("-m", "--average-diameter-threshold", type=float, default=0, required=False, help="Average diameter threshold")
     parser.add_argument("-c", "--calinski-harabasz-threshold", action='store_true', default=False, required=False, help="Abort if the Calinski-Harabasz-Index reaches the first local minimum")
+    parser.add_argument("--mfe-output", action='store_true', default=False, required=False, help="Reduced output with mfe representatives. Requres an RNA sequence as input")
+    parser.add_argument("-s", "--sequence", type=str, required=False, help="RNA sequence (ACGU)")
+    parser.add_argument("--centroid-output", action='store_true', default=False, required=False, help="Reduced output with centroid representatives")
     args = parser.parse_args()
     structureFileName = args.file #sys.argv[1]
     structs = parseFile(structureFileName)
@@ -401,7 +434,12 @@ if __name__ == "__main__":
     maxAverageDiameter = args.average_diameter_threshold
     d = DIANA()
     clusters = d.doClustering(structs, maxDiameter, maxAverageDiameter, args.calinski_harabasz_threshold)
-    d.printClusters(clusters)
+    if args.mfe_output:
+        d.printClustersMFEs(args.sequence, clusters, structs)
+    elif args.centroid_output:
+        d.printClustersCentroids(clusters, structs)
+    else:
+        d.printClusters(clusters, structs)
     
 
 
