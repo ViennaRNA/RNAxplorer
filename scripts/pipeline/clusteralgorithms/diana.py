@@ -9,7 +9,12 @@ A second reason is that the object with maximal average distance is not unique.
 
 """
 
-import sys, math, RNA, numpy, argparse, re
+import sys, math, RNA, numpy, argparse, re, resource
+from multiprocessing import Pool
+
+sys.setrecursionlimit(int(pow(2,31)-1))
+resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
+
 
 class Cluster:
     """
@@ -21,12 +26,22 @@ class Cluster:
         self.childNodes = []
 
 def computeBasePairDistanceMatrix(structs):
-    matrix = numpy.zeros((len(structs), len(structs)), dtype=numpy.int)
-    for i in range(len(structs)):
-        for j in range(i + 1, len(structs)):
-            dist = RNA.bp_distance(structs[i], structs[j])
+    len_structs = len(structs)
+    matrix = numpy.zeros((len_structs, len_structs), dtype=numpy.int)
+    pool = Pool(4)
+    res_list = []
+    for i in range(len_structs):
+        for j in range(i + 1, len_structs):
+            func = pool.apply_async(RNA.bp_distance, args=(structs[i], structs[j]))
+            res_list.append(func)
+    res_index = 0
+    for i in range(len_structs):
+        for j in range(i + 1, len_structs):
+            dist = res_list[res_index].get()
+            #dist = RNA.bp_distance(structs[i], structs[j])
             matrix[i][j] = dist
             matrix[j][i] = dist
+            res_index += 1
     return matrix
 
 def averageDissimilarity(index, cluster, dissMatrix):
@@ -70,8 +85,53 @@ def diameter(cluster, dissMatrix):
                 maxDist = dist
     return maxDist
 
-def WmAll(c, dissMatrix):
-    """Computes the 'within-ness' measure for a cluster, with all pairwise comparisons.
+def db_structure_to_bp_set(ss):
+    p = []
+    res = set()
+    for i,c in enumerate(ss):
+        if c == "(":
+            p.append(i)
+        elif  c == ")":
+            j = p.pop()
+            res.add((j,i))
+    return res
+
+def computeDistance(ss1,ss2):
+    """
+    Computes the base-pair distance between to secondary structures.
+
+    Args:
+        ss1 (list): Secondary structure represented as a list of parenthesis.
+        ss2 (list): Secondary structure represented as a list of parenthesis.
+
+    Returns:
+        int: Distance between `ss1` and `ss2`.
+    """
+    return len(ss1^ss2)
+
+def centroid(cluster, structures_bp_sets):
+    """
+    Computes the centroid structure (~the median) for a given structure.
+
+    Args:
+        cluster (list): List of secondary structures.
+
+    Returns:
+        set: Set of base-pairs defining the centroid structure.
+    """    
+    allBPs = set()
+    for si in cluster:
+        allBPs |= structures_bp_sets[si]
+    counts = {b:0 for b in allBPs}
+    for si in cluster:
+        ss = structures_bp_sets[si]
+        for b in ss:
+            counts[b] += 1
+    return set([b for b in counts if counts[b]>len(cluster)/2.])
+
+def Wm(c, cent, structures_bp_sets):
+    """Computes the 'within-ness' measure for a cluster, computed
+    with respect to the centroid to avoid pairwise comparisons.
 
     Args:
         c (list): List of secondary structures.
@@ -79,87 +139,55 @@ def WmAll(c, dissMatrix):
     Returns:
         set: The within-ness measure.
     """
-    distanceSum = 0.0
-    for i in range(0, len(c)):
-        for j in range(i + 1, len(c)):
-            distanceSum += math.pow(dissMatrix[c[i]][c[j]], 2)
-    return distanceSum
-
-def sum_distance_in_cluster(c, dissMatrix):
-    sum_dist = 0.0
-    for i in range(0, len(c)):
-        for j in range(i + 1, len(c)):
-            sum_dist += abs(dissMatrix[c[i]][c[j]])
+    #cent = centroid(c, structures_bp_sets)
+    sum_dist = 0
+    for si in c:
+        sum_dist += computeDistance(structures_bp_sets[si],cent)
     return sum_dist
 
-def mean_distance_in_cluster(c, dissMatrix):
-    mean_dist = sum_distance_in_cluster(c, dissMatrix)
-    elements = ((len(c) * (len(c) -1)) / 2.0)
-    if elements <= 0:
-        return mean_dist
-    else:
-        mean_dist = mean_dist / elements
-    return mean_dist
-
-def mean_distance_in_matrix(dissMatrix, matrix_size):
-    avg_dist = 0
-    for i in range(matrix_size):
-        for j in range(i+1, matrix_size):
-            avg_dist += abs(dissMatrix[i][j])
-    n_dist = (float(matrix_size) * float(matrix_size-1))/2.0
-    avg_dist = avg_dist / n_dist
-    return avg_dist
-    
-
-def varianceRatio(parentCluster, clusterA, clusterB, dissMatrix):
-    """
-    compute the variance of the old clusters and the new cluster.
-    Args:
-        cl1 (list): Former clustering, list of lists of secondary structures.
-        cl2 (list): Current clustering, list of lists of secondary structures.
-    """
-    
-    wmA = WmAll(clusterA.structures, dissMatrix)
-    wmB = WmAll(clusterB.structures, dissMatrix)
-    wmParent = WmAll(parentCluster.structures, dissMatrix)
-    
-    withinRatio = (wmA + wmB) / wmParent
-    randomRatio = (pow(len(clusterA.structures), 2.) + pow(len(clusterB.structures), 2.)) / (pow(len(parentCluster.structures), 2.))
-    
-    return withinRatio, randomRatio
-
-def pooled_within_group_sum_of_squares(clusters, dissMatrix):
+def pooled_within_group_sum_of_squares(clusters, structures_bp_sets, len_clusters, cluster_centroids):
     pwgss = 0
     if clusters == None:
         return pwgss
-    for c in clusters:
-        pwgss += sum_distance_in_cluster(c, dissMatrix) / float(len(c))
+    for i in range(len(clusters)):
+        c = clusters[i]
+        len_c = len_clusters[i]
+        cent = cluster_centroids[i]
+        pwgss += Wm(c, cent, structures_bp_sets) / len_c
         """
         faster alternatice is could be sum_i_N(pow(bpdist(centroid_structure(c), structure(c_i)),2))
         """
     return pwgss
 
-def pooled_between_group_sum_of_squares(clusters, dissMatrix, matrix_size):
+def pooled_between_group_sum_of_squares(clusters, structures_bp_sets, dataset_centroid, len_clusters, cluster_centroids):
     pbgss = 0
     if clusters == None:
         return pbgss
-    avg_dist = mean_distance_in_matrix(dissMatrix, matrix_size)
-            
-    for c in clusters:
-        avg_dist_c = mean_distance_in_cluster(c, dissMatrix)
-        pbgss +=  abs(avg_dist_c - avg_dist) * float(len(c))
+    
+    for i in range(len(clusters)):
+        c = clusters[i]
+        len_c = len_clusters[i]
+        cluster_centoid = cluster_centroids[i]
+        pbgss += computeDistance(cluster_centoid, dataset_centroid) * len_c
         """
         faster alternatice is could be sum_i_N(pow(bpdist(centroid_structure(dataset), centroid_structure(c_i)),2)) /float(len(c))
         """
     return pbgss
 
-def calinski_harabasz_index(clusters, dissMatrix, matrix_size):
+def calinski_harabasz_index(clusters, structures_bp_sets, dataset_centroid):
     ch = 0
-    pbgss = pooled_between_group_sum_of_squares(clusters, dissMatrix, matrix_size)
-    pwgss = pooled_within_group_sum_of_squares(clusters, dissMatrix)
+    len_clusters = [ float(len(x)) for x in clusters ]
+    cluster_centroids = [ centroid(c, structures_bp_sets) for c in clusters ]
+    pbgss = pooled_between_group_sum_of_squares(clusters, structures_bp_sets, dataset_centroid, len_clusters, cluster_centroids)
+    pwgss = pooled_within_group_sum_of_squares(clusters, structures_bp_sets, len_clusters, cluster_centroids)
     number_of_clusters = len(clusters)
-    number_of_structures = matrix_size
-    ch =  ((pbgss) / (pwgss)) * ((number_of_structures - number_of_clusters) / float(number_of_clusters -1))
+    number_of_structures = len(structures_bp_sets)
+    if (number_of_clusters <= 1):
+        ch = 0
+    elif (pwgss == 0):
+        ch = float('inf')
+    else:
+        ch =  ((pbgss) / (pwgss)) * ((number_of_structures - number_of_clusters) / float(number_of_clusters -1))
     return ch
     
 
@@ -199,13 +227,14 @@ def averageDiameterInLeafNodes(clusterTree, dissMatrix):
     averageDiameter = sumDiameters / float(numberOfClusters)
     return averageDiameter
 
-def createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiameterThreshold, structs, do_ch_first_local_min = False, hierarchy=1):
+def createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiameterThreshold, do_ch_first_local_min = False, prev_ch = None, structures_bp_sets = None, dataset_centroid = None,  hierarchy=1):
     """
     The core of the diana algorithm (recursive function).
     c_root = the rootnode of the clusterTree. It contains the main cluster as childnode.
     """
     # 1. select cluster with the largest diameter from all leafnodes.
     dc = averageDiameterInLeafNodes(c_root, dissMatrix)
+    
     if dc < maxAverageDiameterThreshold:
         return
     if maxDiameterThreshold >= 0:
@@ -216,6 +245,7 @@ def createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiamet
     if c_m == None:
         return
     
+    #print(hierarchy, dc)
     if len(c_m.structures) > 1:
         hierarchy+=1
         # 2. object with highest dissimilarity to all others defines the new cluster (c_newA).
@@ -243,34 +273,28 @@ def createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiamet
                 c_newA.structures.append(bestElement)
                 c_newB.structures.remove(bestElement)
         
-        # ratios = varianceRatio(c_m, c_newA, c_newB, dissMatrix)
-        # criterion = ratios[0] < ratios[1]
-        # print ratios[0], ratios[1]
-        # if(criterion):
         c_m.childNodes.append(c_newB)
         c_m.childNodes.append(c_newA)
 
-        if do_ch_first_local_min != False:
-            if do_ch_first_local_min == True:
-                do_ch_first_local_min = sys.float_info.max
-            cis = convertTreeToListOfClusters_indices(c_root, structs, [])
+        if do_ch_first_local_min:
+            cis = convertTreeToListOfClusters_indices(c_root, [])
             #print(cis, len(cis))
             if len(cis) > 1:
-                ch = calinski_harabasz_index(cis, dissMatrix, len(structs))
-                if ch > do_ch_first_local_min:
+                ch = calinski_harabasz_index(cis, structures_bp_sets, dataset_centroid)
+                if prev_ch != None and ch < prev_ch:
                     if len(c_m.childNodes) > 0:
                         c_m.childNodes = []
                         print(hierarchy, "ch", "{:10.3f}".format(ch))
                     return # ch index > last ch index --> first local min --> break
                 print(hierarchy, "ch", "{:10.3f}".format(ch))
-                do_ch_first_local_min = ch
+                prev_ch = ch
         
         #remove c_m.structures because it is an inner node
         c_m.structures.clear()
         
         # build the subtrees for each child
-        createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiameterThreshold, structs, do_ch_first_local_min, hierarchy)
-
+        createClusterTree(c_root, dissMatrix, maxDiameterThreshold, maxAverageDiameterThreshold, do_ch_first_local_min, prev_ch, structures_bp_sets, dataset_centroid, hierarchy)
+    
 
 def convertTreeToListOfClusters(clusterTree, structs, clusterList=[]):
     if len(clusterTree.childNodes) > 0:
@@ -281,10 +305,10 @@ def convertTreeToListOfClusters(clusterTree, structs, clusterList=[]):
         clusterList.append(cluster)
     return clusterList
 
-def convertTreeToListOfClusters_indices(clusterTree, structs, clusterList=[]):
+def convertTreeToListOfClusters_indices(clusterTree, clusterList=[]):
     if len(clusterTree.childNodes) > 0:
         for cn in clusterTree.childNodes:
-            convertTreeToListOfClusters_indices(cn, structs, clusterList)
+            convertTreeToListOfClusters_indices(cn, clusterList)
     else:
         cluster = [ c for c in clusterTree.structures]
         clusterList.append(cluster)
@@ -292,7 +316,7 @@ def convertTreeToListOfClusters_indices(clusterTree, structs, clusterList=[]):
          
 class DIANA:
     @staticmethod
-    def doClustering(structs, maxDiameter, maxAverageDiameter, do_ch_first_local_min = False):
+    def doClustering(structures, maxDiameter, maxAverageDiameter, do_ch_first_local_min = False):
         """
         Computes the DIANA clustering
         
@@ -301,18 +325,25 @@ class DIANA:
             maxAverageDiameter = "
         """
     
-        structs = list(structs)
+        structures = list(structures)
         # start DIANA
         # 1. initialization
-        dissMatrix = computeBasePairDistanceMatrix(structs)
+        dissMatrix = computeBasePairDistanceMatrix(structures)
         c_root = Cluster()
-        c_root.structures.extend([x for x in range(0, len(structs))])
+        c_root.structures.extend([x for x in range(0, len(structures))])
         
         # start the real DIANA algorithm.
-        createClusterTree(c_root, dissMatrix, maxDiameter, maxAverageDiameter, structs, do_ch_first_local_min)
+        structures_bp_sets = None
+        #print(c_root.structures,structures_bp_sets)
+        dataset_centroid = None
+        if do_ch_first_local_min:
+            structures_bp_sets = [ db_structure_to_bp_set(ss) for ss in structures ]
+            dataset_centroid = centroid(c_root.structures, structures_bp_sets)
+        #print("dc",dataset_centroid)
+        createClusterTree(c_root, dissMatrix, maxDiameter, maxAverageDiameter, do_ch_first_local_min, None, structures_bp_sets, dataset_centroid, 1)
         # end DIANA
               
-        clusters = convertTreeToListOfClusters(c_root, structs, [])
+        clusters = convertTreeToListOfClusters(c_root, structures, [])
         
         #cis = convertTreeToListOfClusters_indices(c_root, structs)
         #if len(cis) > 1:
