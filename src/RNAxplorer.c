@@ -595,7 +595,7 @@ process_arguments(int   argc,
       options->sequence = vrna_alloc(strlen(args_info.sequence_arg)+1);
       strcpy(options->sequence, args_info.sequence_arg);
   }
-  options-> penalize_structures = args_info.penalize_structures_flag;
+  options->penalize_structures = args_info.penalize_structures_flag;
   if(args_info.struc1_given){
       options->struc1 = vrna_alloc(strlen(args_info.struc1_arg)+1);
       strcpy(options->struc1, args_info.struc1_arg);
@@ -2373,7 +2373,7 @@ sampling_repellent_heuristic(const char       *rec_id,
                           if(kv != NULL){
                             is_penalized = 1;
                             int last_reference_id = penalized_structures.list_index[kv->value];
-                            double last_reference_weight = penalized_structures.list_weights[kv->value];
+                            last_reference_weight = penalized_structures.list_weights[kv->value];
                           }
 
                           if(is_penalized == 0){
