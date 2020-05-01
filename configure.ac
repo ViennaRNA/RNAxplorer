@@ -1,4 +1,4 @@
-AC_INIT([RNAxplorer],[0.9],[ronny@tbi.univie.ac.at],[RNAxplorer])
+AC_INIT([RNAxplorer],[0.9.0],[ronny@tbi.univie.ac.at],[RNAxplorer],[https://github.com/ViennaRNA/RNAxplorer])
 AC_PREREQ([2.59])
 AC_CONFIG_AUX_DIR(config)
 
@@ -89,15 +89,14 @@ dnl Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS([malloc.h float.h limits.h stdlib.h string.h strings.h unistd.h unistd.h math.h])
 
-dnl Checks for funtions
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
-AC_FUNC_STRTOD
-AC_CHECK_FUNCS([floor strdup strstr strchr strrchr strstr strtol strtoul pow rint sqrt erand48 memset memmove erand48])
-
+###############################################################################
+# help2man check
+###############################################################################
+AX_PROG_HELP2MAN([src/RNAxplorer])
+AC_CONFIG_FILES([doc/Makefile])
 AC_RXP_INIT
 
-AC_OUTPUT
+AC_OUTPUT([packaging/RNAxplorer.spec packaging/PKGBUILD])
 
 AC_RXP_NOTICE
 

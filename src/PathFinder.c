@@ -636,7 +636,7 @@ destroy_heap(min_heap_t *heap)
 }
 
 
-heap_insert(min_heap_t  *heap,
+void heap_insert(min_heap_t  *heap,
             heap_elem_t *d)
 {
   if (heap->num_elem < heap->storage_size) {

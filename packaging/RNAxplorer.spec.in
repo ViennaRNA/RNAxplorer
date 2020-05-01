@@ -1,0 +1,76 @@
+# RNAxplorer.spec
+
+%{!?_pkgdocdir: %global _pkgdocdir %%{_docdir}/%{name}}
+
+Name:           RNAxplorer
+Version:        @PACKAGE_VERSION@
+Release:        1%{?dist}
+Summary:        Sample RNA secondary structures and explore the RNA energy landscape.
+
+Vendor:         Gregor Entzian <entzian@tbi.univie.ac.at>
+#Packager:       Gregor Entzian <entzian@tbi.univie.ac.at>
+
+Group:          -
+License:        GPLv3
+URL:            https://github.com/ViennaRNA/RNAxplorer
+Source0:        RNAxplorer_%{version}.tar.gz
+BuildRoot:      %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
+
+BuildRequires:  autoconf
+BuildRequires:  automake
+BuildRequires:  rpm-devel
+
+BuildRequires:  libstdc++-devel gcc gcc-c++ gengetopt gcc-fortran lapack-devel
+%if 0%{?suse_version}
+BuildRequires:  viennarna-devel
+%else
+BuildRequires:  viennarna-devel (>=2.4.11)
+%endif
+
+
+%description
+Sample RNA secondary structures and explore the RNA energy landscape.
+
+Requires: glibc lapack libgfortran
+%if 0%{?suse_version}
+Requires:  viennarna
+%else
+Requires: viennarna (>=2.4.11)
+%endif
+
+%package -n python2-rnaxplorer
+Summary:  Python 2 bindings for RNAxplorerlib
+Group:    Development/Libraries/Python
+Requires: %{name} = %{version}-%{release}
+Requires: python2
+
+%description -n python2rnaxplorerrna
+Python 2 bindings for RNAxplorerlib.
+
+%prep
+%setup -n RNAxplorer-%{version} -q
+
+%build
+%configure --prefix=%{_prefix} --docdir=%{_pkgdocdir} --mandir=%{_mandir}
+make
+
+%install
+rm -rf $RPM_BUILD_ROOT
+
+%{__make} install DESTDIR=$RPM_BUILD_ROOT
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+
+%files
+%defattr(-,root,root,-)
+%{_bindir}/*
+%{_datadir}/RNAxplorer/
+%doc README.md
+%{_mandir}/*/*
+
+
+%files -n python2-rnaxplorer
+%defattr(-,root,root,-)
+%{python2_sitearch}/RNAxplorer/
+

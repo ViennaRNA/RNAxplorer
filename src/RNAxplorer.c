@@ -2465,7 +2465,7 @@ sampling_repellent_heuristic(const char       *rec_id,
         }
         else{
             sample_file = vrna_realloc(sample_file, sizeof(char)*(strlen(opt->lmin_file)+1+8));
-            sample_file = strncat(sample_file, opt->lmin_file, strlen(opt->lmin_file));
+            sample_file = strcat(sample_file, opt->lmin_file);
             sample_file = strcat(sample_file, ".samples");
         }
         FILE *f = fopen(sample_file, "w");
