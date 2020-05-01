@@ -22,11 +22,6 @@ Dependencies:
   - [ViennaRNA library (>= 2.4.11)](https://www.tbi.univie.ac.at/RNA/#download)
 
 
-If you installed the ViennaRNA library in a non-standard directory, you have to give the path to the main directory of the ViennaRNA library:
-```
-./configure --with-RNA=/path/to/ViennaRNA
-```
-
 
 ### From github Source
 
