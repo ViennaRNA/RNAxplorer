@@ -1,6 +1,47 @@
 
 # RNAxplorer
-The RNAxplorer is a multitool, that offers different methods to explore RNA energy landscapes. 
+RNAxplorer is a multitool, that offers different methods to explore RNA energy landscapes.
+The main use case is sampling of representative structures of the RNA conformation space,
+in order to compute RNA folding kinetics. The workflow consists of several steps which 
+is depicted in the following figure.
+
+![depiction of the RNA folding kinetics workflow](doc/figures/kinetics_workflow.svg)
+
+## Installation
+### From [release](https://github.com/ViennaRNA/RNAxplorer/releases) Source
+
+You can download the source tar balls for the individual releases from the [release page](https://github.com/ViennaRNA/RNAxplorer/releases).
+
+To configure, compile and install execute the following commands on your command line:
+```
+./configure [--help for additional configuration options]
+make
+make install
+```
+Dependencies:
+  - [ViennaRNA library (>= 2.4.11)](https://www.tbi.univie.ac.at/RNA/#download)
+
+
+If you installed the ViennaRNA library in a non-standard directory, you have to give the path to the main directory of the ViennaRNA library:
+```
+./configure --with-RNA=/path/to/ViennaRNA
+```
+
+
+### From github Source
+
+To configure, compile and install execute the following commands on your command line:
+```
+autoreconf -i
+./configure [--help for additional configuration options]
+make
+make install
+```
+Dependencies:
+  - [ViennaRNA library (>= 2.4.11)](https://www.tbi.univie.ac.at/RNA/#download)
+  - [gengetopt](https://www.gnu.org/software/gengetopt/gengetopt.html)
+
+
 
 ## Use cases
 - repellant sampling with guiding potentials on base pair level
@@ -144,6 +185,27 @@ GGGCACCCCCCUUCGGGGGGUCACCUCGCGUAGCUAGCUACGCGAGGGUUAAAGCGCCUUUCUCCCUCGCGUAGCUAACC
 1 (((((((((((...)))))))..((((((((((....))))))))))........)))).....((((((((........)))))))).((((((((.....))))))))..... -66.00
 ```
 
+
+You can adjust the output and speed up the computation by using additional command line parameters. All parameters are shown by
+```
+RNAxplorer --help
+```
+
+## Post-processing
+A usual post processing of the sampled structures is clustering or the rate computation (e.g. via determining the partition funktions of the contact surfaces or 
+via lowest saddles of paths between structures). The next step is the computation of of the RNA folding kinetics via numerical integration
+of the rate matrix (treekin).
+
+### recommended tools
+- [clustering] to reduce the number of representative structures (e.g. via the diana clustering script within RNAxplorer's scripts folder).
+- [pourRNA](https://github.com/ViennaRNA/pourRNA/)
+- [BHG](https://www.tbi.univie.ac.at/software/BHG/BHGbuilder.html#download)
+- [FindPath](https://www.tbi.univie.ac.at/RNA/index.html#download)
+  In the source folder of the viennaRNA package:
+  ```
+  viennarna/src/ViennaRNA/findpath.c
+  ```
+- [Treekin](https://www.tbi.univie.ac.at/RNA/Treekin/)
 
 
 
