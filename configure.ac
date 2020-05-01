@@ -76,7 +76,7 @@ CPPFLAGS="$CPPFLAGS $OPENMP_CFLAGS"
 LDFLAGS="$LDFLAGS $OPENMP_CFLAGS"        
 
 #Search for the RNAlib2 and set variables for Makefiles if found.  _CFLAGS and _LIBS can be overriden with the modue Name from PKG_CHECK_MODULES
-PKG_CHECK_MODULES([RNALIB], [RNAlib2 >= 2.2.0],
+PKG_CHECK_MODULES([RNALIB], [RNAlib2 >= 2.4.14],
                   [ AC_SUBST([RNALIB_CFLAGS])
                     AC_SUBST([RNALIB_LIBS])
                   ],
