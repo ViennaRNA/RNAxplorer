@@ -20,8 +20,8 @@ AC_DEFUN([RXP_ENABLE_SWIG_INTERFACES],[
 
 AC_DEFUN([RXP_ENABLE_SWIG_PYTHON],[
 
-  RXP_ADD_PACKAGE([python],
-                  [Python2 interface],
+  RXP_ADD_PACKAGE([python3],
+                  [Python3 interface],
                   [yes],
                   [with_python=no],
                   [with_python=yes],
@@ -43,19 +43,19 @@ AC_DEFUN([RXP_ENABLE_SWIG_PYTHON],[
   ])
 
   AS_IF([test "x$with_python" != "xno"],[
-    AX_PYTHON2_DEVEL
+    AX_PYTHON3_DEVEL
 
-    if test "x$python2_enabled_but_failed" != "x"
+    if test "x$python3_enabled_but_failed" != "x"
     then
       with_python="no"
     else
-      AC_SUBST(PYTHON2DIR,$python2dir)
-      AC_SUBST(PKGPYTHON2DIR,$pkgpython2dir)
-      AC_SUBST(PYEXEC2DIR,$py2execdir)
-      AC_SUBST(PKGPYEXEC2DIR,$pkgpy2execdir)
+      AC_SUBST(PYTHON3DIR,$python3dir)
+      AC_SUBST(PKGPYTHON3DIR,$pkgpython3dir)
+      AC_SUBST(PYEXEC3DIR,$py3execdir)
+      AC_SUBST(PKGPYEXEC3DIR,$pkgpy3execdir)
 
       AC_DEFINE([WITH_PYTHON_INTERFACE], [1], [Create the python interface to RNAxplorerlib])
-      AC_SUBST([PYTHON2_INTERFACE], [Python])
+      AC_SUBST([PYTHON3_INTERFACE], [Python])
       AC_CONFIG_FILES([interfaces/Python/Makefile])
     fi
   ])
