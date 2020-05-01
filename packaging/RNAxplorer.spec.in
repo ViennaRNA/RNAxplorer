@@ -24,7 +24,7 @@ BuildRequires:  libstdc++-devel gcc gcc-c++ gengetopt gcc-fortran lapack-devel
 %if 0%{?suse_version}
 BuildRequires:  viennarna-devel
 %else
-BuildRequires:  viennarna-devel (>=2.4.11)
+BuildRequires:  viennarna-devel (>=2.4.14)
 %endif
 
 
@@ -35,7 +35,7 @@ Requires: glibc lapack libgfortran
 %if 0%{?suse_version}
 Requires:  viennarna
 %else
-Requires: viennarna (>=2.4.11)
+Requires: viennarna (>=2.4.14)
 %endif
 
 %package -n python2-rnaxplorer
