@@ -20,7 +20,7 @@ BUILT_SOURCES = _RNAxplorer$(PYTHON3_SO)
 
 _RNAxplorer_la_CFLAGS = $(RNAxplorer_CFLAGS) $(PYTHON3_CFLAGS)
 _RNAxplorer_la_CXXFLAGS = $(RNAxplorer_CXXFLAGS)
-_RNAxplorer_la_CPPFLAGS =  $(PYTHON3_CPPFLAGS) -I$(top_srcdir)/src $(PYTHON3_INCLUDES)
+_RNAxplorer_la_CPPFLAGS = -I$(PYTHON3_INC) $(PYTHON3_CPPFLAGS) -I$(top_srcdir)/src
 
 _RNAxplorer_la_LIBADD = $(LDADD) $(top_builddir)/src/libRNAxplorer_conv.la $(PYTHON3_LDFLAGS)
 
