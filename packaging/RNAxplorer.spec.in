@@ -18,9 +18,10 @@ BuildRoot:      %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 BuildRequires:  autoconf
 BuildRequires:  automake
+BuildRequires:  libtool
 BuildRequires:  rpm-devel
 
-BuildRequires:  libstdc++-devel gcc gcc-c++ gengetopt gcc-fortran lapack-devel
+BuildRequires:  pkg-config liblapacke-dev gfortran python3 python3-dev swig gengetopt viennarna-dev (>=2.4.14) libgsl-dev libmpfr-dev
 %if 0%{?suse_version}
 BuildRequires:  viennarna-devel
 %else
@@ -38,14 +39,14 @@ Requires:  viennarna
 Requires: viennarna (>=2.4.14)
 %endif
 
-%package -n python2-rnaxplorer
-Summary:  Python 2 bindings for RNAxplorerlib
+%package -n python3-rnaxplorer
+Summary:  Python 3 bindings for RNAxplorerlib
 Group:    Development/Libraries/Python
 Requires: %{name} = %{version}-%{release}
-Requires: python2
+Requires: python3
 
-%description -n python2rnaxplorerrna
-Python 2 bindings for RNAxplorerlib.
+%description -n python3-rnaxplorer
+Python 3 bindings for RNAxplorerlib.
 
 %prep
 %setup -n RNAxplorer-%{version} -q
