@@ -7,6 +7,14 @@ is depicted in the following figure.
 
 ![depiction of the RNA folding kinetics workflow](doc/figures/kinetics_workflow.svg)
 
+The sampling method is the most crucial step, because the number of representative structures determines the runtime of the subsequent tasks.
+The RNAxplorer employs efficient dynamic programming based Boltzmann sampling, but improves on previous approaches by adding guiding potentials. These guiding potentials are used to avoid already well-sampled regions of the structure space and steer the sampling towards unexplored regions. 
+RNAxplorer offers 3 different sampling approaches, which use either attractive potentials that steer sampling towards regions of interest or repellant potentials that help avoid regions that are already well represented in the sample.
+
+Boltzmann sampling based methods for example produce lots of structures in the vicinity of the minimum free energy structure (MFE). The redundancy of similar structures can be avoided by using a repellant potential in order to increase the energy for structures in a certain region or with certain properties. A repellant potential that penalizes the MFE helps to quickly detect energetically higher minima in the energy  landscape. This is depicted in the following figure.
+
+![depiction of guiding potentials](doc/figures/guidingpotential.svg)
+
 ## Installation
 ### From [release](https://github.com/ViennaRNA/RNAxplorer/releases) Source
 
@@ -19,8 +27,8 @@ make
 make install
 ```
 Dependencies:
-  - [ViennaRNA library (>= 2.4.11)](https://www.tbi.univie.ac.at/RNA/#download)
-
+  - [ViennaRNA library (>= 2.4.14)](https://www.tbi.univie.ac.at/RNA/#download)
+  - [lapacke](http://www.netlib.org/lapack/lapacke.html)
 
 
 ### From github Source
@@ -33,13 +41,19 @@ make
 make install
 ```
 Dependencies:
-  - [ViennaRNA library (>= 2.4.11)](https://www.tbi.univie.ac.at/RNA/#download)
+  - [ViennaRNA library (>= 2.4.14)](https://www.tbi.univie.ac.at/RNA/#download)
   - [gengetopt](https://www.gnu.org/software/gengetopt/gengetopt.html)
-
-
+  - [lapacke](http://www.netlib.org/lapack/lapacke.html)
+  
+### With Python Interface
+In order to install the python interface for the sampling methods, the following
+dependencies are required:
+  - [swig](http://www.swig.org/)
+  - Python3 and Python3-dev
 
 ## Use cases
 - repellant sampling with guiding potentials on base pair level
+- repellant sampling with guiding potentials on structure level
 - repellant or attractive sampling with reference structures
 - retrieve local minima of secondary structures (via gradient walks in parallel)
 
@@ -58,8 +72,8 @@ Dependencies:
  by a gradient walk. A parallelized gradient descent procedure can be used to retrieve
  local minima (-M RL option) of sampled structures (input via stdin).
  
- 
-## Example Repellant Sampling Heuristic
+## Examples
+### Repellant Sampling Method (penalize base pairs)
 In order to use this method, we need a sequence or fastafile (text file) with the following content:
 ``` 
 >sv11
@@ -130,7 +144,38 @@ repellant_sampling.samples:
 (((.(((((((((((((((((((((((((((...((((((((((((((..((((...))))..))))))))))))))...)))))))))))))))))))..))))))))..))).
 ```
 
-## Example sampling with references
+### Repellant Sampling Method (penalize structures)
+The second sampling methods is based on guiding potentials that penalize whole structres, which have been seen too often.
+This method can be used with the following command:
+```
+cat sv11.fasta | RNAxplorer -M RSH -n 10 --penalize-structures --lmin-file=repellant_sampling.txt
+```
+Again the output is stored in the following files
+```
+repellant_sampling.txt:
+     GGGCACCCCCCUUCGGGGGGUCACCUCGCGUAGCUAGCUACGCGAGGGUUAAAGCGCCUUUCUCCCUCGCGUAGCUAACCACGCGAGGUGACCCCCCGAAAAGGGGGGUUUCCCA
+   0 (((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))..))). -97.70      7
+   1 (((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).))))))))))))))))))))..)))))))..))). -97.00      2
+   2 .((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))...)). -94.10      1
+```
+
+```
+repellant_sampling.samples:
+     GGGCACCCCCCUUCGGGGGGUCACCUCGCGUAGCUAGCUACGCGAGGGUUAAAGCGCCUUUCUCCCUCGCGUAGCUAACCACGCGAGGUGACCCCCCGAAAAGGGGGGUUUCCCA
+.((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))...)).
+(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))..))).
+(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))..))).
+(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..))))))))))))))..))))))))))))))))))))..))))))))..))).
+(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))..))).
+(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))..))).
+.((.((((((((((((((((((((((((((..(..(((((((((((((..((((...))))..)))))))))))))..)..)))))))))))))))))))..)))))))..))..
+(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).))))))))))))))))))))..)))))))..))).
+(((.(((((((((((((((((((((((((((.(.((((((((((((((...(((...)))...)))))))))))))).).)))))))))))))))))))..))))))))..))).
+(((.(((((((((((((((((((((((((((.(.((((((((((((((..((((...))))..)))))))))))))).).)))))))))))))))))))..))))))))..))).
+
+```
+
+### Sampling with References
 In order to produce structures in the vicinity of certain reference structures, you should first add the references to a fasta file:
 
 ```
@@ -166,7 +211,7 @@ In this example you can see that samples in the base pair vicinity of both refer
 produce only structures which are similar to the second reference.
 
 
-## Example retrieve local minima
+### retrieve local minima
 Local minima via gradient walks can be produced with the option `-M RL`. Input is a file with the sequence in the first line and structures in the next lines.
 
 ```
@@ -192,7 +237,7 @@ via lowest saddles of paths between structures). The next step is the computatio
 of the rate matrix (treekin).
 
 ### recommended tools
-- [clustering] to reduce the number of representative structures (e.g. via the diana clustering script within RNAxplorer's scripts folder).
+- [clustering](https://github.com/ViennaRNA/RNAxplorer/scripts/pipeline/clusteralgorithms/diana.py) to reduce the number of representative structures (e.g. via the diana clustering script within RNAxplorer's scripts folder).
 - [pourRNA](https://github.com/ViennaRNA/pourRNA/)
 - [BHG](https://www.tbi.univie.ac.at/software/BHG/BHGbuilder.html#download)
 - [FindPath](https://www.tbi.univie.ac.at/RNA/index.html#download)
