@@ -53,15 +53,18 @@ dependencies are required:
 
 ## Use cases
 - repellant sampling with guiding potentials on base pair level
-- repellant sampling with guiding potentials on structure level
+- repellant sampling with guiding potentials on structure base pair distance level
 - repellant or attractive sampling with reference structures
 - retrieve local minima of secondary structures (via gradient walks in parallel)
 
 ## Description
  In default mode (or with -M RSH option) it takes an RNA sequence as input (either stdin or --sequence parameter) 
- and outputs sampled secondary RNA structures. The repellant sampling heuristic iteratively penalizes base pairs of 
+ and outputs sampled secondary RNA structures. The repellant sampling method iteratively penalizes base pairs of 
  local minima of structures that have been seen too often. This results in a diverse sample set with the most
  important low free energy structures.
+ A second mode can be used with --penalize-structures, which uses a different kind of repellant guiding potentials.
+ Here the guiding potentials of depend on the inherent base pair distances between loop decompositions of overrepresented structures 
+ (More details can be found in the supplementary material of the corresponding publication).
  
  Another important sampling method (-M RS option) is based on reference structures (--struc1
  and --struc2). This method produces structures in the vicinity of these two reference
@@ -145,7 +148,7 @@ repellant_sampling.samples:
 ```
 
 ### Repellant Sampling Method (penalize structures)
-The second sampling methods is based on guiding potentials that penalize whole structres, which have been seen too often.
+The second sampling methods is based on guiding potentials that penalize structres, which have been seen too often, in terms of inherent base pair distances.
 This method can be used with the following command:
 ```
 cat sv11.fasta | RNAxplorer -M RSH -n 10 --penalize-structures --lmin-file=repellant_sampling.txt
