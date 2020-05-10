@@ -21,11 +21,14 @@ BuildRequires:  automake
 BuildRequires:  libtool
 BuildRequires:  rpm-devel
 
-BuildRequires:  pkg-config liblapacke-dev gfortran python3 python3-dev swig gengetopt viennarna-dev (>=2.4.14) libgsl-dev libmpfr-dev
+BuildRequires:  pkg-config lapack-devel swig gengetopt mpfr-devel
 %if 0%{?suse_version}
 BuildRequires:  viennarna-devel
+BuildRequires:  gcc-fortran lapacke-devel
+BuildRequires:  python3-devel python3
+#BuildRequires:  mpfr-devel
 %else
-BuildRequires:  viennarna-devel (>=2.4.14)
+BuildRequires:  viennarna-devel (>=2.4.14) liblapacke-dev python3 python3-dev libgsl-dev libmpfr-dev gfortran
 %endif
 
 %{!?__python3: %global __python3 /usr/bin/python3}
@@ -40,6 +43,12 @@ Requires: glibc lapack libgfortran
 Requires:  viennarna
 %else
 Requires: viennarna (>=2.4.14)
+%endif
+
+%if 0%{?suse_version}
+Requires:       libmpfr4
+%else
+Requires:       mpfr
 %endif
 
 %package -n python3-rnaxplorer
@@ -73,7 +82,7 @@ rm -rf $RPM_BUILD_ROOT
 %doc README.md
 %{_mandir}/*/*
 
-%files -n python2-rnaxplorer
+%files -n python3-rnaxplorer
 %defattr(-,root,root,-)
-%{python2_sitearch}/RNAxplorer/
+%{python3_sitearch}/RNAxplorer/
 
