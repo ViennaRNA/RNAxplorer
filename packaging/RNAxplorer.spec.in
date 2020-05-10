@@ -21,9 +21,9 @@ BuildRequires:  automake
 BuildRequires:  libtool
 BuildRequires:  rpm-devel
 
-BuildRequires:  pkg-config lapack-devel swig gengetopt mpfr-devel
+BuildRequires:  pkg-config gcc gcc-c++ lapack-devel swig gengetopt mpfr-devel help2man
 %if 0%{?suse_version}
-BuildRequires:  viennarna-devel
+BuildRequires:  viennarna-devel gsl-devel
 BuildRequires:  gcc-fortran lapacke-devel
 BuildRequires:  python3-devel python3
 #BuildRequires:  mpfr-devel
@@ -32,11 +32,13 @@ BuildRequires:  viennarna-devel (>=2.4.14) liblapacke-dev python3 python3-dev li
 %endif
 
 %{!?__python3: %global __python3 /usr/bin/python3}
+%{!?python3_sitelib: %global python3_sitelib %(%{__python3} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 %{!?python3_sitearch: %global python3_sitearch %(%{__python3} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
-
+%global python3_modext %(%{__python3} -c "from distutils.sysconfig import get_config_vars; print(get_config_vars('SO')[[0]])")
+%global __provides_exclude_from ^%{python3_sitearch}/.*\\.so$
 
 %description
-Sample RNA secondary structures and explore the RNA energy landscape.
+Sample RNA secondary structures and explore the RNA energy landscape
 
 Requires: glibc lapack libgfortran
 %if 0%{?suse_version}
@@ -58,7 +60,7 @@ Requires: %{name} = %{version}-%{release}
 Requires: python3
 
 %description -n python3-rnaxplorer
-Python 3 bindings for RNAxplorerlib.
+Python 3 bindings for RNAxplorerlib
 
 %prep
 %setup -n RNAxplorer-%{version} -q
@@ -84,5 +86,10 @@ rm -rf $RPM_BUILD_ROOT
 
 %files -n python3-rnaxplorer
 %defattr(-,root,root,-)
-%{python3_sitearch}/RNAxplorer/
-
+%if 0%{?suse_version}
+%{python_sitearch}/RNAxplorer/__init__.py
+%{python_sitearch}/_RNAxplorer.cpython-%{python3_version_nodots}*.so
+%else
+%{python_sitearch}/RNAxplorer/__init__.py
+%{python3_sitearch}/_RNAxplorer.cpython-%{python3_version_nodots}*.so
+%endif
