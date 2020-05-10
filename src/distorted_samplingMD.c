@@ -5,6 +5,7 @@
  * (c) Gregor Entzian
  */
 
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,13 +32,35 @@
 #include <ViennaRNA/mm.h>
 #include <ViennaRNA/pair_mat.h>
 
-#include <lapacke/lapacke.h>
+#ifdef HAVE_LAPACKE_H
+# include <lapacke.h>
+#else
+# ifdef HAVE_LAPACKE_LAPACKE_H
+#   include <lapacke/lapacke.h>
+# else
+#   ifdef HAVE_OPENBLAS_LAPACKE_H
+#     include <openblas/lapacke.h>
+#   endif
+# endif
+#endif
 
+
+#include "dist_class_sc.h"
 #include "distorted_samplingMD.h"
 
 #define max(x, y) (((x) > (y)) ? (x) : (y))
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 
+#define WITH_DIST_CLASS_SC  1
+
+#if WITH_DIST_CLASS_SC
+
+typedef struct {
+  size_t *maxDistances;
+  double *distortions;
+} kl_soft_constraints_MD;
+
+#else
 typedef struct {
   double kT;
   int *idx;
@@ -57,6 +80,7 @@ static FLT_OR_DBL kl_exp_pseudo_energy_MD(int i, int j, int k, int l, unsigned c
 static kl_soft_constraints_MD *kl_init_datastructures_MD(vrna_fold_compound_t *vc, const char **referenceStructures,
     int numberOfReferenceStructures, double *distortions,int repel);
 
+#endif
 
 static void
 fillGridStepwiseBothRef_MD(vrna_fold_compound_t *vc, gridLandscapeT *grid, float relaxFactor, int relax, int shift,
@@ -217,9 +241,7 @@ rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t *fc,
   /* printf( " DGELSD Example Program Results\n" ); */
   /* Query and allocate the optimal workspace */
   int     lwork = -1;
-  int     jpvt[n];
-  for (int i = 0; i < n; i++)
-    jpvt[i] = 0;
+
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, &wkopt, &lwork, iwork, &info); /* estimate workspace (=> lwork = -1). */
   lwork = (int)wkopt;
   work  = (double *)vrna_alloc(lwork * sizeof(double));
@@ -413,22 +435,13 @@ rxp_computeDistortions(vrna_fold_compound_t *fc,
   /* printf( " DGELSD Example Program Results\n" ); */
   /* Query and allocate the optimal workspace */
   int     lwork = -1;
-  int     jpvt[n];
-  for (int i = 0; i < n; i++)
-    jpvt[i] = 0;
 
-  /* dgesv_(&m,&nrhs,a,&lda,jpvt,b,&ldb,&info); */
-  /* dgetrs_('N',&m,&nrhs,a,&lda,jpvt,b,&ldb,&info); */
-
-  /* dgels_('N',&m, &n, &nrhs, a, &lda, b, &ldb, &wkopt, &lwork, &info); */
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, &wkopt, &lwork, iwork, &info); /* estimate workspace (=> lwork = -1). */
-  /* dgelsy_(&m, &n, &nrhs, a, &lda, b, &ldb, jpvt, &rcond, &rank, &wkopt, &lwork, &info); */
+
   lwork = (int)wkopt;
   work  = (double *)vrna_alloc(lwork * sizeof(double));
   /* Solve the equations A*X = B */
-  /* dgels_('N',&m, &n, &nrhs, a, &lda, b, &ldb, work, &lwork, &info); */
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, work, &lwork, iwork, &info);
-  /* dgelsy_(&m, &n, &nrhs, a, &lda, b, &ldb, jpvt, &rcond, &rank, work, &lwork, &info); */
 
   /*  printf("The linear system has rank %d;\n", rank); */
   /* Check for convergence */
@@ -511,6 +524,99 @@ print_matrix(char   *desc,
   }
 }
 
+#if WITH_DIST_CLASS_SC
+static int
+distortion_default(int i,
+                   int j,
+                   int k,
+                   int l,
+                   unsigned char decomp,
+                   int *distance,
+                   sc_dist_class_t *d)
+{
+  double result, *distortions;
+  int numberOfRefs;
+
+  distortions  = ((kl_soft_constraints_MD *)d->f_data)->distortions;
+  numberOfRefs = d->ref_num;
+
+  result = 0;
+  for (int r = 0; r < numberOfRefs; r++)
+    result += distortions[r] * distance[r];
+
+  result = result * 100;
+  return result;
+}
+
+static int
+distortion_repel(int i,
+                 int j,
+                 int k,
+                 int l,
+                 unsigned char decomp,
+                 int *distance,
+                 sc_dist_class_t *d)
+{
+  double  result, *distortions;
+  int     numberOfRefs;
+  size_t  *maxDist;
+
+  distortions  = ((kl_soft_constraints_MD *)d->f_data)->distortions;
+  maxDist      = ((kl_soft_constraints_MD *)d->f_data)->maxDistances;
+  numberOfRefs = d->ref_num;
+
+  result = 0;
+  for (int r = 0; r < numberOfRefs; r++)
+    result += distortions[r] * (maxDist[r] - distance[r]);
+
+  result = result * 100;
+  return result;
+}
+
+static void
+kl_datastructures_MD_destroy(void *data)
+{
+  kl_soft_constraints_MD *d = (kl_soft_constraints_MD *)data;
+
+  /* free(d->distortions); */
+  free(d->maxDistances);
+  free(d);
+}
+
+
+static sc_dist_class_t *
+kl_init_datastructures_MD(vrna_fold_compound_t  *vc,
+                          const char            **referenceStructures,
+                          int                   numberOfReferenceStructures,
+                          double                *distortions,
+                          int                   repel)
+{
+  sc_dist_class_t         *d;
+  kl_soft_constraints_MD  *data;
+
+  char                    *s = vc->sequence;
+
+  d = sc_dist_class_init(vc);
+
+  for (int i = 0; i < numberOfReferenceStructures; i++)
+    sc_dist_class_add_ref(d, referenceStructures[i]);
+
+  d->f = (repel) ? &distortion_repel : &distortion_default;
+
+  /* manage MD specific data structrue */
+  data                      = (kl_soft_constraints_MD *)vrna_alloc(sizeof(kl_soft_constraints_MD));
+  data->distortions         = distortions;
+  data->maxDistances        = vrna_alloc(sizeof(size_t *) * numberOfReferenceStructures);
+  for (int i = 0; i < numberOfReferenceStructures; i++)
+    data->maxDistances[i] = getMaximalPossibleBPdistance(s, referenceStructures[i]);
+
+  d->f_data = (void *)data;
+  d->f_free = &kl_datastructures_MD_destroy;
+
+  return d;
+}
+
+#else
 static kl_soft_constraints_MD *
 kl_init_datastructures_MD(vrna_fold_compound_t  *vc,
                           const char            **referenceStructures,
@@ -725,6 +831,7 @@ kl_exp_pseudo_energy_MD(int   i,
   return result;
 }
 
+#endif
 
 static void
 fillGridStepwiseBothRef_MD(vrna_fold_compound_t *vc,
@@ -742,11 +849,20 @@ fillGridStepwiseBothRef_MD(vrna_fold_compound_t *vc,
     return;
   }
 
+#if WITH_DIST_CLASS_SC
+  sc_dist_class_t         *d    = (sc_dist_class_t *)vc->sc->data;
+  kl_soft_constraints_MD  *data = (kl_soft_constraints_MD *)d->f_data;
+  char                    *s1   = d->references[0];
+  char                    *s2   = d->references[1];
+  double                  tmp_x = data->distortions[0];
+  double                  tmp_y = data->distortions[1];
+#else
   kl_soft_constraints_MD  *data = (kl_soft_constraints_MD *)vc->sc->data;
   char                    *s1   = data->references[0];
   char                    *s2   = data->references[1];
   double                  tmp_x = data->distortions[0];
   double                  tmp_y = data->distortions[1];
+#endif
 
   for (int j = 0; j < maxSteps; j++) {
     if (shift) {
@@ -792,10 +908,18 @@ fillGridStepwiseFirstRef_MD(vrna_fold_compound_t  *vc,
     return;
   }
 
+#if WITH_DIST_CLASS_SC
+  sc_dist_class_t         *d    = (sc_dist_class_t *)vc->sc->data;
+  kl_soft_constraints_MD  *data = (kl_soft_constraints_MD *)d->f_data;
+  char                    *s1   = d->references[0];
+  char                    *s2   = d->references[1];
+  double                  tmp_x = data->distortions[0];
+#else
   kl_soft_constraints_MD  *data = (kl_soft_constraints_MD *)vc->sc->data;
   char                    *s1   = data->references[0];
   char                    *s2   = data->references[1];
   double                  tmp_x = data->distortions[0];
+#endif
 
   for (int j = 0; j < maxSteps; j++) {
     if (relax)
@@ -827,10 +951,18 @@ fillGridStepwiseSecondRef_MD(vrna_fold_compound_t *vc,
     return;
   }
 
+#if WITH_DIST_CLASS_SC
+  sc_dist_class_t         *d    = (sc_dist_class_t *)vc->sc->data;
+  kl_soft_constraints_MD  *data = (kl_soft_constraints_MD *)d->f_data;
+  char                    *s1   = d->references[0];
+  char                    *s2   = d->references[1];
+  double                  tmp_y = data->distortions[1];
+#else
   kl_soft_constraints_MD  *data = (kl_soft_constraints_MD *)vc->sc->data;
   char                    *s1   = data->references[0];
   char                    *s2   = data->references[1];
   double                  tmp_y = data->distortions[1];
+#endif
 
   for (int j = 0; j < maxSteps; j++) {
     if (relax)
@@ -936,6 +1068,17 @@ estimate_landscapeMD(vrna_fold_compound_t *vc,
     vrna_exp_params_rescale(vc, &rescale);
 
     /* apply distortion soft constraints */
+#if WITH_DIST_CLASS_SC
+    sc_dist_class_t *data = kl_init_datastructures_MD(vc,
+                                                              refStructures,
+                                                              numberOfReferences,
+                                                              distortions,
+                                                              0);
+    vrna_sc_init(vc); /*  to remove old soft constraints */
+    vrna_sc_add_data(vc, (void *)data, &sc_dist_class_destroy);
+    vrna_sc_add_exp_f(vc, &sc_exp_f_dist_class);
+
+#else
     kl_soft_constraints_MD  *data = kl_init_datastructures_MD(vc,
                                                               refStructures,
                                                               numberOfReferences,
@@ -945,6 +1088,7 @@ estimate_landscapeMD(vrna_fold_compound_t *vc,
     vrna_sc_add_data(vc, (void *)data, &free_kl_soft_constraints_MD);
     vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);
 
+#endif
     if (normal) {
       /* with distortion, but no shift. */
       fillGridWithSamples(vc, grid, s1, s2, maxIterations);
@@ -1010,6 +1154,17 @@ addSoftconstraintsMD(vrna_fold_compound_t *vc,
                      int                  repel)
 {
   /* apply distortion soft constraints */
+#if WITH_DIST_CLASS_SC
+    sc_dist_class_t *data = kl_init_datastructures_MD(vc,
+                                                              structures,
+                                                              numberOfReferences,
+                                                              distortions,
+                                                              repel);
+    vrna_sc_init(vc); /*  to remove old soft constraints */
+    vrna_sc_add_data(vc, (void *)data, &sc_dist_class_destroy);
+    vrna_sc_add_exp_f(vc, &sc_exp_f_dist_class);
+
+#else
     kl_soft_constraints_MD  *data = kl_init_datastructures_MD(vc,
                                                               structures,
                                                               numberOfReferences,
@@ -1019,4 +1174,5 @@ addSoftconstraintsMD(vrna_fold_compound_t *vc,
     vrna_sc_init(vc); /*  to remove old soft constraints */
     vrna_sc_add_data(vc, (void *)data, &free_kl_soft_constraints_MD);
     vrna_sc_add_exp_f(vc, &kl_exp_pseudo_energy_MD);
+#endif
 }

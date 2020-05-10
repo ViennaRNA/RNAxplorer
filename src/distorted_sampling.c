@@ -12,21 +12,16 @@
 #include <unistd.h>
 #include <float.h>
 
-/*
- #include <ViennaRNA/fold_vars.h>
- #include <ViennaRNA/energy_const.h>
- #include <ViennaRNA/findpath.h>
- #include <ViennaRNA/2Dpfold.h>
- */
-#include <ViennaRNA/utils.h>
-#include <ViennaRNA/structure_utils.h>
-#include <ViennaRNA/constraints.h>
-#include <ViennaRNA/constraints_soft.h>
+#include <ViennaRNA/utils/basic.h>
+#include <ViennaRNA/utils/structures.h>
+#include <ViennaRNA/constraints/basic.h>
+#include <ViennaRNA/constraints/soft.h>
 #include <ViennaRNA/mfe.h>
 #include <ViennaRNA/eval.h>
 #include <ViennaRNA/part_func.h>
 #include <ViennaRNA/mm.h>
 #include <ViennaRNA/pair_mat.h>
+
 #include "distorted_sampling.h"
 
 kl_soft_constraints *kl_init_datastructures(vrna_fold_compound_t *vc, const char *s1, const char *s2, double x,
@@ -453,7 +448,7 @@ void addSoftconstraints(vrna_fold_compound_t *vc, const char *s1, const char *s2
 gridLandscapeT*
 estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int maxIterations, char *extended_options) {
 	/* parse extended options string */
-	int plain, do_more, both_at_once, relax, verbose, shift, shift_to_first;
+	int plain, both_at_once, relax, verbose, shift, shift_to_first;
 
 	both_at_once = 0;
 	relax = 0;
@@ -550,7 +545,6 @@ void addStructure(gridLandscapeT *grid, char *structure) {
 	uint l = vrna_bp_distance(grid->secondReference, structure);
 
 	if (k <= grid->size1 && l <= grid->size2) {
-		uint numStructures = grid->landscape[k][l].num_structs;
 		char *newStruct = (char*) vrna_alloc(strlen(structure));
 		strcpy(newStruct, structure);
 		gridpointT **landscape = grid->landscape;

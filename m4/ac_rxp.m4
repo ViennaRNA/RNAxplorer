@@ -36,12 +36,12 @@ eval _bindir=$(eval printf "%s" $bindir)
 
 
 AS_IF([test $with_python = "yes"],[
-  eval _python2_arch_dir=$(eval printf "%s" ${py2execdir})
-  eval _python2_lib_dir=$(eval printf "%s" ${python2dir})
+  eval _python3_arch_dir=$(eval printf "%s" ${py3execdir})
+  eval _python3_lib_dir=$(eval printf "%s" ${python3dir})
   ],[
-    _python2_arch_dir=""
-    _python2_lib_dir=""
-    _python2_install="Not to be installed"
+    _python3_arch_dir=""
+    _python3_lib_dir=""
+    _python3_install="Not to be installed"
 ])
 
 # Notify the user
@@ -51,15 +51,15 @@ AC_MSG_NOTICE([
 Configured successful with the following options:
 
 RNAxplorerlib Scripting Interfaces:
-  Python2 Interface:         ${with_python:-yes}     $python2_enabled_but_failed
+  Python3 Interface:         ${with_python:-yes}     $python3_enabled_but_failed
 
 
 Files will be installed in the following directories:
 
   Executables:       $_bindir
-  Python2 Interface: $_python2_install
-    (binaries):      $_python2_arch_dir
-    (scripts):       $_python2_lib_dir
+  Python3 Interface: $_python3_install
+    (binaries):      $_python3_arch_dir
+    (scripts):       $_python3_lib_dir
 ])
 
 ])

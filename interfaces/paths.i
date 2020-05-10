@@ -1,5 +1,5 @@
 /**********************************************/
-/* BEGIN interface for paths functions   */
+/* BEGIN interface for PathFinder functions   */
 /**********************************************/
 
 
@@ -29,4 +29,4 @@ vrna_path_t* convertVRNA_PATH_toList(vrna_path_t* path) {
 }
 %}
 
-%include "../src/paths.h"
+%include "../src/PathFinder.h"

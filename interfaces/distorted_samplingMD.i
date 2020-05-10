@@ -119,3 +119,4 @@
 
 
 %include "../src/distorted_samplingMD.h"
+%include "../src/dist_class_sc.h"
