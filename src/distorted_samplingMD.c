@@ -241,9 +241,7 @@ rxp_computeDistortionsWRTMaxDistance(vrna_fold_compound_t *fc,
   /* printf( " DGELSD Example Program Results\n" ); */
   /* Query and allocate the optimal workspace */
   int     lwork = -1;
-  int     jpvt[n];
-  for (int i = 0; i < n; i++)
-    jpvt[i] = 0;
+
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, &wkopt, &lwork, iwork, &info); /* estimate workspace (=> lwork = -1). */
   lwork = (int)wkopt;
   work  = (double *)vrna_alloc(lwork * sizeof(double));
@@ -437,22 +435,13 @@ rxp_computeDistortions(vrna_fold_compound_t *fc,
   /* printf( " DGELSD Example Program Results\n" ); */
   /* Query and allocate the optimal workspace */
   int     lwork = -1;
-  int     jpvt[n];
-  for (int i = 0; i < n; i++)
-    jpvt[i] = 0;
 
-  /* dgesv_(&m,&nrhs,a,&lda,jpvt,b,&ldb,&info); */
-  /* dgetrs_('N',&m,&nrhs,a,&lda,jpvt,b,&ldb,&info); */
-
-  /* dgels_('N',&m, &n, &nrhs, a, &lda, b, &ldb, &wkopt, &lwork, &info); */
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, &wkopt, &lwork, iwork, &info); /* estimate workspace (=> lwork = -1). */
-  /* dgelsy_(&m, &n, &nrhs, a, &lda, b, &ldb, jpvt, &rcond, &rank, &wkopt, &lwork, &info); */
+
   lwork = (int)wkopt;
   work  = (double *)vrna_alloc(lwork * sizeof(double));
   /* Solve the equations A*X = B */
-  /* dgels_('N',&m, &n, &nrhs, a, &lda, b, &ldb, work, &lwork, &info); */
   dgelsd_(&m, &n, &nrhs, a, &lda, b, &ldb, s, &rcond, &rank, work, &lwork, iwork, &info);
-  /* dgelsy_(&m, &n, &nrhs, a, &lda, b, &ldb, jpvt, &rcond, &rank, work, &lwork, &info); */
 
   /*  printf("The linear system has rank %d;\n", rank); */
   /* Check for convergence */
@@ -605,10 +594,7 @@ kl_init_datastructures_MD(vrna_fold_compound_t  *vc,
   sc_dist_class_t         *d;
   kl_soft_constraints_MD  *data;
 
-  unsigned int            n;
   char                    *s = vc->sequence;
-
-  n = vc->length;
 
   d = sc_dist_class_init(vc);
 
