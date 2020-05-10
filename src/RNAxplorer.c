@@ -315,7 +315,6 @@ main(int  argc,
 
 
   int           istty_in  = isatty(fileno(input_stream));
-  int           istty_out = isatty(fileno(stdout));
 
   unsigned int  read_opt = 0;
 
@@ -848,7 +847,7 @@ paths_pathfinder_gd(const char        *rec_id,
   vrna_seq_toupper(sequence);
 
 #if 1
-  vrna_path_t *foldingPath, *Saddle, *r;
+  vrna_path_t *foldingPath, *r;
   rnax_path_finder_opt_t *options = rnax_path_finder_options();
   options->md          = opt->md;
   options->iterations  = opt->iterations;
@@ -954,7 +953,7 @@ paths_pathfinder_db(const char        *rec_id,
                     struct options_s  *opt)
 {
   char        *sequence;
-  vrna_path_t *foldingPath, *Saddle, *r;
+  vrna_path_t *foldingPath, *r;
 
   if ((!structures) || (!structures[0]) || (!structures[1])) {
     vrna_message_warning("Too few structures to compute folding path");
@@ -1351,7 +1350,7 @@ unsigned int
 hash_function_string(void           *x,
                      unsigned long  hashtable_size)
 {
-  register unsigned char  *k;           /* the key */
+  register char  *k;           /* the key */
   register unsigned int   length;       /* the length of the key */
   register unsigned int   initval = 0;  /* the previous hash, or an arbitrary value */
   register unsigned int   a, b, c, len;
@@ -1365,11 +1364,11 @@ hash_function_string(void           *x,
   /*---------------------------------------- handle most of the key */
   while (len >= 12) {
     a +=
-      (k[0] + ((unsigned int)k[1] << 8) + ((unsigned int)k[2] << 16) + ((unsigned int)k[3] << 24));
+      ((unsigned int)k[0] + ((unsigned int)k[1] << 8) + ((unsigned int)k[2] << 16) + ((unsigned int)k[3] << 24));
     b +=
-      (k[4] + ((unsigned int)k[5] << 8) + ((unsigned int)k[6] << 16) + ((unsigned int)k[7] << 24));
+      ((unsigned int)k[4] + ((unsigned int)k[5] << 8) + ((unsigned int)k[6] << 16) + ((unsigned int)k[7] << 24));
     c +=
-      (k[8] + ((unsigned int)k[9] << 8) + ((unsigned int)k[10] << 16) +
+      ((unsigned int)k[8] + ((unsigned int)k[9] << 8) + ((unsigned int)k[10] << 16) +
        ((unsigned int)k[11] << 24));
     mix(a, b, c);
     k   += 12;
@@ -1402,7 +1401,7 @@ hash_function_string(void           *x,
     case 2:
       a += ((unsigned int)k[1] << 8);
     case 1:
-      a += k[0];
+      a += (unsigned int)k[0];
       /* case 0: nothing left to add */
   }
   mix(a, b, c);
@@ -1638,7 +1637,7 @@ unsigned int
 ht_db_hash_func_strings(void           *x,
                      unsigned long  hashtable_size)
 {
-  register unsigned char  *k;           /* the key */
+  register char  *k;           /* the key */
   register unsigned int   length;       /* the length of the key */
   register unsigned int   initval = 0;  /* the previous hash, or an arbitrary value */
   register unsigned int   a, b, c, len;
@@ -1652,11 +1651,11 @@ ht_db_hash_func_strings(void           *x,
   /*---------------------------------------- handle most of the key */
   while (len >= 12) {
     a +=
-      (k[0] + ((unsigned int)k[1] << 8) + ((unsigned int)k[2] << 16) + ((unsigned int)k[3] << 24));
+      ((unsigned int)k[0] + ((unsigned int)k[1] << 8) + ((unsigned int)k[2] << 16) + ((unsigned int)k[3] << 24));
     b +=
-      (k[4] + ((unsigned int)k[5] << 8) + ((unsigned int)k[6] << 16) + ((unsigned int)k[7] << 24));
+      ((unsigned int)k[4] + ((unsigned int)k[5] << 8) + ((unsigned int)k[6] << 16) + ((unsigned int)k[7] << 24));
     c +=
-      (k[8] + ((unsigned int)k[9] << 8) + ((unsigned int)k[10] << 16) +
+      ((unsigned int)k[8] + ((unsigned int)k[9] << 8) + ((unsigned int)k[10] << 16) +
        ((unsigned int)k[11] << 24));
     mix(a, b, c);
     k   += 12;
@@ -2236,7 +2235,7 @@ sampling_repellent_heuristic(const char       *rec_id,
     char **sample_list = vrna_alloc(sizeof(char *) * (sample_list_allocated+1)); // = []
 
     hashtable_list_strings pending_lm = create_hashtable_list_strings(13);// = dict()
-    int num_sc = 1;
+    //int num_sc = 1;
 
     int num_iter      = (int)(ceil(opt->num_samples / (float)opt->granularity));
     int samples_left  = opt->num_samples;
@@ -2308,28 +2307,28 @@ sampling_repellent_heuristic(const char       *rec_id,
           if(current_lm.list_key_value_pairs[i] == NULL)
             continue; // maybe it was removed in 2-neighborhood filter.
 
-            char *ss_string = current_lm.list_key_value_pairs[i]->structure;
-            structure_and_index to_check;
-            to_check.structure = ss_string;
-            structure_and_index *lookup_result = vrna_ht_get(pending_lm.ht_pairs, (void *)&to_check);
-            if (lookup_result == NULL) {
-                short *ss = vrna_ptable(ss_string);
-                float energy_kcal = current_lm.list_energies[i];
-                int count = current_lm.list_counts[i];
-                hashtable_list_strings_add_structure_and_count(&pending_lm, ss, energy_kcal, count);
-                free(ss);
-            }
-            else{
-                pending_lm.list_counts[lookup_result->index] += current_lm.list_counts[i];
-            }
+          char *ss_string = current_lm.list_key_value_pairs[i]->structure;
+          structure_and_index to_check;
+          to_check.structure = ss_string;
+          structure_and_index *lookup_result = vrna_ht_get(pending_lm.ht_pairs, (void *)&to_check);
+          if (lookup_result == NULL) {
+              short *ss = vrna_ptable(ss_string);
+              float energy_kcal = current_lm.list_energies[i];
+              int count = current_lm.list_counts[i];
+              hashtable_list_strings_add_structure_and_count(&pending_lm, ss, energy_kcal, count);
+              free(ss);
+          }
+          else{
+              pending_lm.list_counts[lookup_result->index] += current_lm.list_counts[i];
+          }
         }
         free_hashtable_list_strings(&current_lm);
 
         if(it < num_iter - 1){
             // find out which local minima we've seen the most in this sampling round
             int struct_cnt_max_index = find_max_count(&pending_lm); // max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
-            int struct_cnt_min_index = find_min_count(&pending_lm); //min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
-            int struct_en_max_index = find_max_energy(&pending_lm); // max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
+            //int struct_cnt_min_index = find_min_count(&pending_lm); //min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['count']))
+            //int struct_en_max_index = find_max_energy(&pending_lm); // max(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
             int struct_en_min_index = find_min_energy(&pending_lm); // min(pending_lm.iterkeys(), key=(lambda a: pending_lm[a]['energy']))
 
             int cnt_once  = 0;
@@ -2372,7 +2371,7 @@ sampling_repellent_heuristic(const char       *rec_id,
                           double last_reference_weight;
                           if(kv != NULL){
                             is_penalized = 1;
-                            int last_reference_id = penalized_structures.list_index[kv->value];
+                            last_reference_id = penalized_structures.list_index[kv->value];
                             last_reference_weight = penalized_structures.list_weights[kv->value];
                           }
 
@@ -2705,8 +2704,7 @@ retrieve_local_minima(const char       *rec_id,
   double temperature_celsius = opt->temperature_celsius;
   int shift_moves = opt->shift_moves;
   char *parameter_file = opt->parameter_file;
-  gradient_walker(temperature_celsius, shift_moves, parameter_file, orig_sequence, structures);
-
+  return gradient_walker(temperature_celsius, shift_moves, parameter_file, orig_sequence, structures);
 }
 
 

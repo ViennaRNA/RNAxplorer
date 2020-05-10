@@ -121,7 +121,6 @@ repellant_sampling(vrna_fold_compound_t *vc)
   /* compute 'real' MFE structure */
   char    *mfe_structure = (char *)vrna_alloc(sizeof(char) * (n + 1));
   double  mfe            = (double)vrna_mfe(fc, mfe_structure);
-  short   *mfe_pt        = vrna_ptable(mfe_structure);
 
   printf("%s [ %6.2f ]\n", mfe_structure, mfe);
 

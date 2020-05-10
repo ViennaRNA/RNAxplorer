@@ -68,7 +68,7 @@ rnax_path_finder( const char              *seq,
                   rnax_path_finder_opt_t  *opt)
 {
   char                          *transient_structure;
-  unsigned int                  n, i, saddle_pos, s1_pos, s2_pos, num_paths;
+  unsigned int                  n, i, saddle_pos, s1_pos, s2_pos;
   double                        saddle_en, s1_en, s2_en, transient_en;
   vrna_path_t                   *refolding_path, *p1, *p2, **alternative_paths;
   rnax_path_finder_opt_t        *options;
@@ -113,7 +113,6 @@ rnax_path_finder( const char              *seq,
     saddle_en       = refolding_path[saddle_pos].en;
 
     /* 2nd step, collect alternative routes */
-    num_paths             = 1;
     alternative_paths     = (vrna_path_t **)vrna_alloc(sizeof(vrna_path_t *) * (options->storage_size));
     alternative_paths[0]  = vrna_path_findpath(fc, s_source, s_target, options->max_keep);
 
@@ -541,7 +540,6 @@ find_saddle_point(vrna_path_t *folding_path)
 {
   unsigned int  i, position = 0;
   double        max_e, curr_e;
-  vrna_path_t   *ptr;
 
   max_e = folding_path[0].en;
 

@@ -448,7 +448,7 @@ void addSoftconstraints(vrna_fold_compound_t *vc, const char *s1, const char *s2
 gridLandscapeT*
 estimate_landscape(vrna_fold_compound_t *vc, const char *s1, const char *s2, int maxIterations, char *extended_options) {
 	/* parse extended options string */
-	int plain, do_more, both_at_once, relax, verbose, shift, shift_to_first;
+	int plain, both_at_once, relax, verbose, shift, shift_to_first;
 
 	both_at_once = 0;
 	relax = 0;
@@ -545,7 +545,6 @@ void addStructure(gridLandscapeT *grid, char *structure) {
 	uint l = vrna_bp_distance(grid->secondReference, structure);
 
 	if (k <= grid->size1 && l <= grid->size2) {
-		uint numStructures = grid->landscape[k][l].num_structs;
 		char *newStruct = (char*) vrna_alloc(strlen(structure));
 		strcpy(newStruct, structure);
 		gridpointT **landscape = grid->landscape;
