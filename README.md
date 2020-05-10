@@ -16,6 +16,57 @@ Boltzmann sampling based methods for example produce lots of structures in the v
 ![depiction of guiding potentials](doc/figures/guidingpotential.svg)
 
 ## Installation
+### From Linux Package
+<table><thead><tr>
+<th> Arch </th>
+<th> Debian </th>
+<th> Ubuntu </th>
+<th> openSUSE </th>
+</tr></thead><tbody><tr>
+<td style="vertical-align:top">
+<details><summary>Arch_Extra</summary><p><a href="https://download.opensuse.org/repositories/home:/entzian/Arch_Extra/x86_64/RNAxplorer-0.9.0-1-x86_64.pkg.tar.xz"> RNAxplorer - 0.9.0 - x86_64</a></p>
+</details></td>
+<td style="vertical-align:top">
+<details><summary>Debian_10.0</summary>
+<p><a href="https://download.opensuse.org/repositories/home:/entzian/Debian_10/amd64/rnaxplorer_0.9.0_amd64.deb"> rnaxplorer - 0.9.0 - 64 bit</a><br>
+<a href="https://download.opensuse.org/repositories/home:/entzian/Debian_10/amd64/python3-rnaxplorer_0.9.0_amd64.deb"> python3-rnaxplorer - 0.9.0 - 64 bit</a>
+</p>
+<details><summary>Debian_9.0</summary><p>
+<a href="https://download.opensuse.org/repositories/home:/entzian/Debian_9.0/i386/rnaxplorer_0.9.0_i386.deb"> rnaxplorer - 0.9.0 - 32 bit</a><br>
+<a href="https://download.opensuse.org/repositories/home:/entzian/Debian_9.0/i386/python3-rnaxplorer_0.9.0_i386.deb"> python3-rnaxplorer - 0.9.0 - 32 bit</a>
+</p>
+<p><a href="https://download.opensuse.org/repositories/home:/entzian/Debian_9.0/amd64/rnaxplorer_0.9.0_amd64.deb"> rnaxplorer - 0.9.0 - 64 bit</a><br>
+<a href="https://download.opensuse.org/repositories/home:/entzian/Debian_9.0/amd64/python3-rnaxplorer_0.9.0_amd64.deb"> python3-rnaxplorer - 0.9.0 - 64 bit</a>
+</p>
+</details></td>
+<td style="vertical-align:top">
+<details><summary>xUbuntu_19.10</summary><p>
+<a href="https://download.opensuse.org/repositories/home:/entzian/xUbuntu_19.10/amd64/rnaxplorer_0.9.0_amd64.deb"> rnaxplorer - 0.9.0 - 64 bit</a><br>
+<a href="https://download.opensuse.org/repositories/home:/entzian/xUbuntu_19.10/amd64/python3-rnaxplorer_0.9.0_amd64.deb"> python3-rnaxplorer - 0.9.0 - 64 bit</a>
+</p></details>
+<details><summary>xUbuntu_19.04</summary><p>
+<a href="https://download.opensuse.org/repositories/home:/entzian/xUbuntu_19.04/amd64/rnaxplorer_0.9.0_amd64.deb"> rnaxplorer - 0.9.0 - 64 bit</a><br>
+<a href="https://download.opensuse.org/repositories/home:/entzian/xUbuntu_19.04/amd64/python3-rnaxplorer_0.9.0_amd64.deb"> python3-rnaxplorer - 0.9.0 - 64 bit</a>
+</p></details>
+<details><summary>xUbuntu_18.10</summary><p>
+<a href="https://download.opensuse.org/repositories/home:/entzian/xUbuntu_18.10/amd64/rnaxplorer_0.9.0_amd64.deb"> rnaxplorer - 0.9.0 - 64 bit</a><br>
+<a href="https://download.opensuse.org/repositories/home:/entzian/xUbuntu_18.10/amd64/python3-rnaxplorer_0.9.0_amd64.deb"> python3-rnaxplorer - 0.9.0 - 64 bit</a>
+</p>
+</details><details><summary>xUbuntu_18.04</summary><p>
+<a href="https://download.opensuse.org/repositories/home:/entzian/xUbuntu_18.04/amd64/rnaxplorer_0.9.0_amd64.deb"> rnaxplorer - 0.9.0 - 64 bit</a><br>
+<a href="https://download.opensuse.org/repositories/home:/entzian/xUbuntu_18.04/amd64/python3-rnaxplorer_0.9.0_amd64.deb"> python3-rnaxplorer - 0.9.0 - 64 bit</a>
+</p>
+</details></td>
+<td style="vertical-align:top">
+<details><summary>openSUSE_Tumbleweed</summary><p>
+<a href="https://download.opensuse.org/repositories/home:/entzian/openSUSE_Tumbleweed/x86_64/RNAxplorer-0.9.0-187.1.x86_64.rpm"> RNAxplorer - 0.9.0 - x86_64</a><br>
+<a href="https://download.opensuse.org/repositories/home:/entzian/openSUSE_Tumbleweed/x86_64/python3-rnaxplorer-0.9.0-187.1.x86_64.rpm"> python3-RNAxplorer - 0.9.0 - x86_64</a>
+</p>
+</details></td>
+</tr></tbody></table>
+
+
+
 ### From [release](https://github.com/ViennaRNA/RNAxplorer/releases) Source
 
 You can download the source tar balls for the individual releases from the [release page](https://github.com/ViennaRNA/RNAxplorer/releases).
