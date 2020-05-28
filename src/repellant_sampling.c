@@ -26,7 +26,7 @@ static void
 destroy_repell_data(void *data);
 
 
-static int
+static double
 compute_repulsion(int i,
                   int j,
                   int k,
@@ -166,7 +166,7 @@ destroy_repell_data(void *data)
   free(d);
 }
 
-static int
+static double
 compute_repulsion(int i,
                   int j,
                   int k,
@@ -175,7 +175,7 @@ compute_repulsion(int i,
                   int *distance,
                   sc_dist_class_t *d)
 {
-  int           rr, r     = 0;
+  double        rr, r     = 0.;
   int           idx       = d->idx[i] - j;
   repell_data   *dd       = (repell_data *)d->f_data;
 
@@ -186,7 +186,7 @@ compute_repulsion(int i,
       for (int s = 0; s < d->ref_num; s++) {
         rr = dd->ref_bps[s][idx] +
              dd->mm1[s][idx];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 
@@ -196,7 +196,7 @@ compute_repulsion(int i,
              dd->mm1[s][idx] -
              dd->ref_bps[s][d->idx[k] - l] -
              dd->mm1[s][d->idx[k] - l];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 
@@ -206,7 +206,7 @@ compute_repulsion(int i,
              dd->mm1[s][idx] -
              dd->ref_bps[s][d->idx[k] - l] -
              dd->mm1[s][d->idx[k] - l];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 
@@ -217,7 +217,7 @@ compute_repulsion(int i,
              dd->mm1[s][idx] -
              dd->ref_bps[s][d->idx[k] - l] -
              dd->mm1[s][d->idx[k] - l];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 
@@ -230,7 +230,7 @@ compute_repulsion(int i,
              dd->mm1[s][d->idx[i] - k] -
              dd->ref_bps[s][d->idx[l] - j] -
              dd->mm1[s][d->idx[l] - j];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 
@@ -238,7 +238,7 @@ compute_repulsion(int i,
       for (int s = 0; s < d->ref_num; s++) {
         rr = dd->ref_bps[s][idx] +
              dd->mm1[s][idx];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 
@@ -252,7 +252,7 @@ compute_repulsion(int i,
              dd->mm1[s][idx] -
              dd->ref_bps[s][d->idx[k] - l] -
              dd->mm1[s][d->idx[k] - l];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 
@@ -260,7 +260,7 @@ compute_repulsion(int i,
       for (int s = 0; s < d->ref_num; s++) {
         rr = dd->ref_bps[s][idx] + /* This is how far we can be within this segment theoretically */
              dd->mm1[s][idx];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 
@@ -276,7 +276,7 @@ compute_repulsion(int i,
              dd->mm1[s][d->idx[i] - k] -
              dd->ref_bps[s][d->idx[l] - j] -
              dd->mm1[s][d->idx[l] - j];
-        r += (rr - distance[s]) * dd->repulsion[s];
+        r += (double)(rr - distance[s]) * dd->repulsion[s];
       }
       break;
 

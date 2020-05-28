@@ -4,7 +4,7 @@
 
 typedef struct sc_dist_class_s sc_dist_class_t;
 
-typedef int (dist_class_func)(int,
+typedef double (dist_class_func)(int,
                               int,
                               int,
                               int,

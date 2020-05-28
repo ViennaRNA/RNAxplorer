@@ -525,7 +525,7 @@ print_matrix(char   *desc,
 }
 
 #if WITH_DIST_CLASS_SC
-static int
+static double
 distortion_default(int i,
                    int j,
                    int k,
@@ -540,15 +540,15 @@ distortion_default(int i,
   distortions  = ((kl_soft_constraints_MD *)d->f_data)->distortions;
   numberOfRefs = d->ref_num;
 
-  result = 0;
+  result = 0.;
   for (int r = 0; r < numberOfRefs; r++)
-    result += distortions[r] * distance[r];
+    result += distortions[r] * (double)distance[r];
 
-  result = result * 100;
+  result = result * 100.;
   return result;
 }
 
-static int
+static double
 distortion_repel(int i,
                  int j,
                  int k,
@@ -565,11 +565,11 @@ distortion_repel(int i,
   maxDist      = ((kl_soft_constraints_MD *)d->f_data)->maxDistances;
   numberOfRefs = d->ref_num;
 
-  result = 0;
+  result = 0.;
   for (int r = 0; r < numberOfRefs; r++)
-    result += distortions[r] * (maxDist[r] - distance[r]);
+    result += distortions[r] * ((double)maxDist[r] - distance[r]);
 
-  result = result * 100;
+  result = result * 100.;
   return result;
 }
 

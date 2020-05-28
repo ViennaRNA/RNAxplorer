@@ -170,9 +170,19 @@ sc_exp_f_dist_class(int           i,
                     unsigned char decomp,
                     void          *data)
 {
-  double  kT      = ((sc_dist_class_t *)data)->kT;
+  int             *distancies;
+  double          kT;
+  FLT_OR_DBL      result;
+  sc_dist_class_t *d;
 
-  return (FLT_OR_DBL)exp((-10. * ((double)sc_f_dist_class(i, j, k, l, decomp, data))) / kT);
+  kT  = ((sc_dist_class_t *)data)->kT;
+  d   = ((sc_dist_class_t *)data);
+
+  distancies  = compute_distancies(i, j, k, l, decomp, d);
+  result      = (FLT_OR_DBL)exp(-10. * (d->f(i, j, k, l, decomp, distancies, d)) / kT);
+
+  free(distancies);
+  return result;
 }
 
 
@@ -192,7 +202,7 @@ sc_f_dist_class(int           i,
   result  = 0;
 
   distancies  = compute_distancies(i, j, k, l, decomp, d);
-  result      = d->f(i, j, k, l, decomp, distancies, d);
+  result      = (int)d->f(i, j, k, l, decomp, distancies, d);
 
   free(distancies);
 

@@ -1,7 +1,7 @@
 AC_INIT([RNAxplorer],[0.9.0],[ronny@tbi.univie.ac.at],[RNAxplorer],[https://github.com/ViennaRNA/RNAxplorer])
 
 dnl minimally required ViennaRNA version
-VRNA_Version=2.4.14
+VRNA_Version=2.4.12
 AC_PREREQ([2.59])
 AC_CONFIG_AUX_DIR(config)
 
