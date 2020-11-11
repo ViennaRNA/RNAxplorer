@@ -604,12 +604,8 @@ process_arguments(int   argc,
       strcpy(options->struc2, args_info.struc2_arg);
   }
 
-  if(args_info.granularity_given){
-      options->granularity = args_info.granularity_arg;
-  }
-  if(args_info.num_samples_given){
-      options->num_samples = args_info.num_samples_arg;
-  }
+  options->granularity = args_info.granularity_arg;
+  options->num_samples = args_info.num_samples_arg;
 
   if(args_info.exploration_factor_given){
       options->exploration_factor = args_info.exploration_factor_arg;
@@ -634,10 +630,7 @@ process_arguments(int   argc,
   options->explore_two_neighborhood = args_info.explore_two_neighborhood_flag;
   options->post_filter_two = args_info.post_filter_two_flag;
   options->ediff_penalty = args_info.ediff_penalty_flag;
-
-  if(args_info.mu_given){
-      options->mu = args_info.mu_arg;
-  }
+  options->mu = args_info.mu_arg;
   options->verbose = args_info.verbose_flag;
   /* free allocated memory of command line data structure */
   RNAxplorer_cmdline_parser_free(&args_info);

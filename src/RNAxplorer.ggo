@@ -63,14 +63,14 @@ optional
 option "granularity" -
 "Granularity, i.e. number of samples after which distortion checks are performed"
 int
-default="1"
+default="100"
 optional
 
 
 option "num-samples" n
-"Number of samples per iteration"
+"Number of samples in total. The number of samples per iteration is n/g."
 int
-default="1"
+default="100000"
 optional
 
 
